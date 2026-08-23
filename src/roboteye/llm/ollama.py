@@ -45,19 +45,28 @@ class OllamaClient:
             self._client = httpx.Client(base_url=self._host, timeout=self._timeout)
         return self._client
 
-    def warm_up(self) -> None:
+    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
         """Abre a conexao e deixa o modelo pronto na memoria.
 
         A primeira chamada de uma conexao custa cerca de 2 s a mais que as
         seguintes; pagar isso no arranque evita que a primeira frase do usuario
         seja justamente a mais lenta.
+
+        Mandar junto a persona — e nao so um "oi" — e o que faz diferenca num
+        modelo rodando em CPU. O servidor guarda o prefixo ja processado, e num
+        Raspberry Pi 5 os ~500 tokens da persona custam **10 s** para serem
+        lidos: sem este aquecimento, quem chega perto do robo e faz a primeira
+        pergunta e exatamente quem espera por eles. Medido, na mesma pergunta:
+        12 s na primeira vez, 2 s da segunda em diante.
         """
+        corpo = [message.as_dict() for message in messages]
+        corpo.append({"role": "user", "content": "oi"})
         try:
             self._http().post(
                 "/api/chat",
                 json={
                     "model": self._model,
-                    "messages": [{"role": "user", "content": "oi"}],
+                    "messages": corpo,
                     "stream": False,
                     "think": False,
                     "options": {"num_predict": 1},

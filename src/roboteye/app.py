@@ -112,8 +112,14 @@ class Application:
                 self.bus.publish(ErrorOccurred(message=str(exc), source="speech"))
 
             # O LLM aquece em segundo plano: nao ha razao para segurar a face
-            # esperando o modelo subir na GPU.
-            threading.Thread(target=self.llm.warm_up, name="llm-warmup", daemon=True).start()
+            # esperando o modelo subir na GPU. Vai junto a persona, que e o que
+            # a conversa vai usar de verdade — ver `OllamaClient.warm_up`.
+            threading.Thread(
+                target=self.llm.warm_up,
+                args=(self.assistant.memory.build_prompt(),),
+                name="llm-warmup",
+                daemon=True,
+            ).start()
 
     def shutdown(self) -> None:
         """Encerra tudo na ordem inversa da criacao."""

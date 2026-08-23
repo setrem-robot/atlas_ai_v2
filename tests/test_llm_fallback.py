@@ -22,14 +22,17 @@ class IAFalsa:
         self.name = name
         self.perguntas: list[str] = []
         self.aquecido = False
+        #: Com que mensagens foi aquecido — a persona deve chegar ate aqui.
+        self.aquecido_com: list[ChatMessage] = []
         self.disponivel = True
         self.fechado = False
         #: Em qual pedaco levantar erro (0 = ja no primeiro), ou None para nunca.
         self._falha_em = falha_em
         self._pedacos = pedacos
 
-    def warm_up(self) -> None:
+    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
         self.aquecido = True
+        self.aquecido_com = list(messages)
 
     def close(self) -> None:
         self.fechado = True
@@ -108,6 +111,15 @@ class TestAquecimento:
         montar(rede, local).warm_up()
         assert rede.aquecido and local.aquecido
 
+    def test_a_persona_chega_aos_dois(self) -> None:
+        # E o que faz o modelo local responder em 2 s em vez de 12 na primeira
+        # pergunta: o prefixo ja processado fica guardado no servidor.
+        persona = (ChatMessage(role="system", content="voce e a Atlas"),)
+        rede, local = IAFalsa("rede"), IAFalsa("local")
+        montar(rede, local).warm_up(persona)
+        assert rede.aquecido_com == list(persona)
+        assert local.aquecido_com == list(persona)
+
     def test_nao_espera_por_uma_rede_que_nao_existe(self) -> None:
         # Aquecer o que ja se sabe fora do ar custa o tempo limite inteiro.
         rede, local = IAFalsa("rede"), IAFalsa("local")
@@ -158,5 +170,5 @@ class TestFactory:
         assert isinstance(cliente, OllamaClient)
 
 
-def _explodir() -> None:
+def _explodir(messages: Sequence[ChatMessage] = ()) -> None:
     raise RuntimeError("modelo nao carregou")

@@ -37,7 +37,7 @@ class EchoClient:
     def is_available(self) -> bool:
         return True
 
-    def warm_up(self) -> None:
+    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
         return None
 
     def close(self) -> None:

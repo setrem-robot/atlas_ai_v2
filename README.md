@@ -695,6 +695,18 @@ isso quem vigia a máquina de rede é uma thread de fundo (`ROBOTEYE_LLM_PROBE_I
 queda é a que estava no ar quando ela aconteceu. Quando a rede volta, o robô
 volta para a IA boa sozinho.
 
+Num modelo rodando em CPU, quase todo o tempo da primeira resposta é **ler a
+persona**, não escrever a resposta: num Pi 5, os ~500 tokens dela custam 10 s, e a
+geração em si menos de 1 s. Por isso o aquecimento manda a persona junto — o
+servidor guarda o prefixo já processado, e o custo é pago no arranque em vez de na
+primeira pergunta de quem chegou perto do robô. Medido, com o Wi-Fi cortado no
+meio da conversa:
+
+| Primeira pergunta pela reserva local | Tempo até falar |
+|---|---|
+| aquecendo só a conexão (como era) | 12 s |
+| aquecendo com a persona | **1 s** |
+
 Qual modelo cabe no Pi 5, medido com a face rodando junto:
 
 | Modelo | Velocidade | Português |

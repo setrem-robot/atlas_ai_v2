@@ -86,7 +86,7 @@ class FallbackLLMClient:
             self._on_switch(message)
 
     # -- ciclo de vida -----------------------------------------------------
-    def warm_up(self) -> None:
+    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
         """Descobre quem esta de pe, aquece os dois e comeca a vigiar a rede.
 
         Perguntar primeiro e depois aquecer nao e detalhe de ordem. Aquecer a
@@ -104,7 +104,7 @@ class FallbackLLMClient:
         alvos = [self._backup, self._primary] if self.using_primary else [self._backup]
         for client in alvos:
             try:
-                client.warm_up()
+                client.warm_up(messages)
             except Exception as exc:
                 # Amplo de proposito: um modelo que nao carrega nao pode
                 # impedir o robo de subir com o outro.
