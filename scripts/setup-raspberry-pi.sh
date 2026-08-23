@@ -63,22 +63,46 @@ info "repositório: ${REPO_DIR}"
 # --- 1. dependências de sistema ---------------------------------------------
 step "[1/4] Instalando dependências do sistema"
 sudo apt-get update -qq
-sudo apt-get install -y \
+sudo apt-get install -y --no-install-recommends \
     python3 \
     python3-venv \
     python3-pip \
     python3-dev \
+    build-essential \
+    python3-pygame \
     libportaudio2 \
     libsdl2-2.0-0 \
     libsdl2-ttf-2.0-0 \
+    libegl1 \
+    libgles2 \
+    libgbm1 \
+    libdrm2 \
     alsa-utils \
     git
+
+# Três dessas linhas existem por causa da imagem Lite, e cada uma custou uma
+# falha para ser descoberta:
+#
+#   build-essential  o extra `online` puxa o miniaudio, que não publica wheel
+#                    para aarch64. Sem compilador, a instalação morre aqui.
+#   python3-pygame   a wheel do pygame no PyPI embute um SDL compilado sem
+#                    KMSDRM. Ela funciona em qualquer desktop e falha com
+#                    "kmsdrm not available" exatamente no Pi sem desktop, que é
+#                    o alvo. O pacote do Debian usa o SDL do sistema, que tem.
+#   libegl1/libgles2 o KMSDRM desenha por EGL; sem eles o SDL abre a tela e
+#                    morre com "EGL not initialized".
+#
+# A tela e o teclado do console vêm por estes grupos.
+sudo usermod -aG video,render,input,audio "${USER}" || warn "nao foi possivel ajustar os grupos"
 info "ok"
 
 # --- 2. ambiente virtual ----------------------------------------------------
 step "[2/4] Preparando o ambiente Python"
 if [[ ! -d "${VENV_DIR}" ]]; then
-    python3 -m venv "${VENV_DIR}"
+    # `--system-site-packages` é o que deixa o venv enxergar o python3-pygame do
+    # sistema (ver acima). Sem isso o pip instalaria a wheel do PyPI por cima e
+    # a face voltaria a não abrir no Pi.
+    python3 -m venv --system-site-packages "${VENV_DIR}"
     info "ambiente virtual criado em ${VENV_DIR}"
 else
     info "ambiente virtual já existe"
@@ -167,6 +191,9 @@ Para usar:
     roboteye                    # face + chat
     roboteye run --fullscreen   # tela cheia
     roboteye chat               # sem janela (útil via SSH)
+
+Num Raspberry Pi com a imagem Lite não há desktop, e não precisa haver: a face
+encontra o monitor sozinha e desenha direto na tela do kernel (KMS/DRM).
 
 Para trocar de IA, modelo ou voz depois:
 

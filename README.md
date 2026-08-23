@@ -648,15 +648,68 @@ ninguém na frente do teclado:
 | `--bluetooth` | configura áudio Bluetooth |
 | `--yes` | não pergunta nada |
 
+**Sem desktop, e melhor assim.** A imagem Lite não tem X nem Wayland, e a face
+não precisa de nenhum dos dois: ela procura um monitor no DRM e desenha direto na
+tela do kernel (KMSDRM). Não instale um ambiente gráfico só por causa dela — o
+desktop custaria CPU e memória contínuos para não desenhar nada que a face já não
+desenhe. Medido num Pi 5 com uma tela de 800x480, a face sozinha custa **17% de um
+núcleo e 130 MB**, e o robô sobe em segundos.
+
 Notas de desempenho num Pi:
 
 - O Piper roda confortavelmente num Pi 4/5. Num Pi Zero 2 W espere síntese perto
   do tempo real — aumente `ROBOTEYE_VOICE_LENGTH_SCALE` se picotar.
-- **Não rode o LLM no Pi.** Aponte `ROBOTEYE_OLLAMA_HOST` para um PC da rede.
+- **A IA principal não é para rodar no Pi** — aponte `ROBOTEYE_OLLAMA_HOST` para
+  um PC da rede. Mas vale ter uma pequena aqui como reserva; veja
+  [Quando o Wi-Fi cai](#quando-o-wi-fi-cai).
+- A face cai sozinha para **30 FPS em ARM**. Os movimentos desta face são todos
+  lentos, medidos em décimos de segundo, e a 30 não se distinguem dos de 60 —
+  mas o quadro é gasto contínuo, então o que se economiza é metade de um núcleo,
+  o dia inteiro.
 - Em telas pequenas, use `ROBOTEYE_FACE_FULLSCREEN=true`; a face se redimensiona
   sozinha para qualquer resolução.
 - A reserva offline da voz escolhe sozinha uma voz **leve** em ARM. Cair numa
   voz Kokoro num Pi trocaria "sem internet" por "fala arrastada".
+- O Pi 5 não tem saída de fone: o som sai pelo HDMI. Se o monitor só aceitar
+  44,1/48 kHz — a maioria — o ALSA precisa converter, porque o Piper sintetiza a
+  22050 Hz. Um `/etc/asound.conf` com `type plug` na frente de `hw:0,0` resolve.
+
+### Quando o Wi-Fi cai
+
+Numa apresentação, o robô fica na ponta de um Wi-Fi de faculdade e a IA que
+responde bem está noutra máquina. Quando esse caminho some, o robô não precisa
+emudecer: `ROBOTEYE_LLM_FALLBACK_HOST` aponta para um Ollama no próprio Pi, com um
+modelo pequeno, e ele assume a conversa.
+
+```bash
+ROBOTEYE_OLLAMA_HOST=http://192.168.1.50:11434     # a IA boa, noutra máquina
+ROBOTEYE_LLM_MODEL=qwen3:8b
+ROBOTEYE_LLM_FALLBACK_HOST=http://127.0.0.1:11434  # a reserva, aqui dentro
+ROBOTEYE_LLM_FALLBACK_MODEL=gemma3:1b
+```
+
+Descobrir que a rede caiu custa um tempo limite inteiro, e pagar isso a cada
+pergunta transformaria a queda em segundos de silêncio antes de cada frase. Por
+isso quem vigia a máquina de rede é uma thread de fundo (`ROBOTEYE_LLM_PROBE_INTERVAL`,
+10 s por padrão): a troca em si é imediata, e a única pergunta que paga o preço da
+queda é a que estava no ar quando ela aconteceu. Quando a rede volta, o robô
+volta para a IA boa sozinho.
+
+Qual modelo cabe no Pi 5, medido com a face rodando junto:
+
+| Modelo | Velocidade | Português |
+|---|---|---|
+| `gemma3:1b` | **12,7 tokens/s** | acentua certo |
+| `llama3.2:1b` | 7,5 tokens/s | troca palavras, come acentos |
+| `llama3.2:3b` | 4,9 tokens/s | o melhor dos três, e o mais lento |
+
+O `doctor` mostra as duas IAs em linhas separadas, e uma máquina de rede fora do
+ar é **aviso**, não falha — o robô ainda conversa:
+
+```
+[aviso] IA de rede             inacessivel em http://192.168.1.50:11434
+[ ok ] IA local (reserva)     gemma3:1b em http://127.0.0.1:11434
+```
 
 ### Configurando pelo celular
 

@@ -26,12 +26,12 @@ amostragem, nao na posicao final.
 from __future__ import annotations
 
 import math
-import platform
 from dataclasses import dataclass
 
 import numpy as np
 import pygame
 
+from roboteye.config import is_arm
 from roboteye.face import mask
 from roboteye.face.animator import EyeFrame
 from roboteye.face.layout import EyeLayout
@@ -80,12 +80,8 @@ def quality_for(name: str) -> RenderQuality:
     """
     key = name.strip().lower()
     if key == "auto":
-        return LOW if _is_arm() else MEDIUM
+        return LOW if is_arm() else MEDIUM
     return _QUALITIES.get(key, MEDIUM)
-
-
-def _is_arm() -> bool:
-    return platform.machine().lower().startswith(("arm", "aarch"))
 
 
 class EyeRenderer:

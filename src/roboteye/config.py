@@ -8,6 +8,7 @@ arquivo `.env`) e e materializada em dataclasses imutaveis. Nenhum outro modulo 
 from __future__ import annotations
 
 import os
+import platform
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
@@ -123,6 +124,28 @@ def _get_color(name: str, default: str) -> tuple[int, int, int]:
     return parse_color(_get_str(name, default))
 
 
+def is_arm() -> bool:
+    """Se a maquina e ARM — na pratica, se este e o Raspberry Pi de producao.
+
+    Mora aqui, e nao no renderizador, porque a face nao e a unica coisa cujo
+    padrao muda com o orcamento de CPU do Pi.
+    """
+    return platform.machine().lower().startswith(("arm", "aarch"))
+
+
+def default_fps() -> int:
+    """Quadros por segundo quando ninguem escolheu.
+
+    A face redesenha todo quadro — respiracao, sacadas e piscada nunca param —
+    entao esse numero e gasto continuo de CPU, nao pico. Num Pi 5 a 800x480
+    cada quadro custa poucos milissegundos, mas 60 vezes por segundo isso ja e
+    mais de meio nucleo tirado do Piper e do servidor web. A 30 os movimentos
+    desta face — todos lentos, medidos em decimos de segundo — nao se
+    distinguem dos de 60; num monitor de mesa, onde CPU sobra, fica em 60.
+    """
+    return 30 if is_arm() else 60
+
+
 def _resolve_path(raw: str) -> Path:
     """Resolve caminhos relativos a partir da raiz do projeto, nao do cwd."""
     path = Path(raw).expanduser()
@@ -155,6 +178,14 @@ class LLMSettings:
     #: Nome da persona (arquivo `<nome>.md` dentro de `persona_dir`).
     persona: str = "atlas"
     persona_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "persona")
+    #: Ollama de reserva, no proprio robo, para quando o de `host` nao responder.
+    #: Vazio desliga a reserva e deixa a falha de rede virar erro, como antes.
+    fallback_host: str = ""
+    #: Modelo do reserva. Vazio usa o mesmo `model` — o que so faz sentido se as
+    #: duas maquinas tiverem o mesmo modelo instalado; num Pi ele costuma ser menor.
+    fallback_model: str = ""
+    #: De quanto em quanto tempo perguntar se o `host` voltou.
+    probe_interval: float = 10.0
 
     @classmethod
     def from_env(cls, *, default_language: str = "en") -> LLMSettings:
@@ -174,6 +205,9 @@ class LLMSettings:
             max_tokens=_get_int("LLM_MAX_TOKENS", 120, minimum=16),
             persona=_get_str("PERSONA", "atlas"),
             persona_dir=_resolve_path(_get_str("PERSONA_DIR", "persona")),
+            fallback_host=_get_str("LLM_FALLBACK_HOST", "").rstrip("/"),
+            fallback_model=_get_str("LLM_FALLBACK_MODEL", ""),
+            probe_interval=_get_float("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
         )
 
 
@@ -321,7 +355,8 @@ class FaceSettings:
     fullscreen: bool = False
     width: int = 1280
     height: int = 720
-    fps: int = 60
+    #: Ver `default_fps()`: cai para 30 em ARM, onde o quadro e gasto continuo.
+    fps: int = field(default_factory=default_fps)
     eye_color: tuple[int, int, int] = (4, 201, 253)
     background_color: tuple[int, int, int] = (0, 0, 0)
     idle_animations: bool = True
@@ -343,7 +378,7 @@ class FaceSettings:
             fullscreen=_get_bool("FACE_FULLSCREEN", False),
             width=_get_int("FACE_WIDTH", 1280, minimum=320),
             height=_get_int("FACE_HEIGHT", 720, minimum=240),
-            fps=_get_int("FACE_FPS", 60, minimum=10),
+            fps=_get_int("FACE_FPS", default_fps(), minimum=10),
             eye_color=_get_color("EYE_COLOR", "#04C9FD"),
             background_color=_get_color("BACKGROUND_COLOR", "#000000"),
             idle_animations=_get_bool("IDLE_ANIMATIONS", True),

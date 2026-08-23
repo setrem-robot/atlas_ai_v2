@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import queue
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -91,22 +92,22 @@ class FaceApp:
 
     # -- ciclo de vida -----------------------------------------------------
     def _create_window(self) -> None:
-        if os.environ.get("SDL_VIDEODRIVER") is None and not _has_display():
-            # Evita que o pygame trave procurando um servidor grafico inexistente.
-            os.environ["SDL_VIDEODRIVER"] = "dummy"
-            logger.warning("nenhum display detectado; a face rodara sem janela visivel")
+        if os.environ.get("SDL_VIDEODRIVER") is None:
+            escolhido = _pick_video_driver()
+            if escolhido is not None:
+                os.environ["SDL_VIDEODRIVER"] = escolhido
 
         pygame.init()
         pygame.display.set_caption("RobotEye")
 
-        if self._settings.fullscreen:
+        # Sem desktop nao ha janela: o KMSDRM entrega a tela inteira e ponto. Um
+        # `set_mode` de 1280x720 ali dentro nao daria uma janela menor, daria a
+        # tela toda com a face desenhada num pedaco dela.
+        if self._settings.fullscreen or os.environ.get("SDL_VIDEODRIVER") == "kmsdrm":
             pygame.mouse.set_visible(False)
-            self._screen = pygame.display.set_mode(
-                (0, 0),
-                pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF,
-            )
+            self._screen = _open_screen((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF)
         else:
-            self._screen = pygame.display.set_mode(
+            self._screen = _open_screen(
                 (self._settings.width, self._settings.height),
                 pygame.RESIZABLE | pygame.DOUBLEBUF,
             )
@@ -276,3 +277,52 @@ def _has_display() -> bool:
     if os.name == "nt" or sys.platform == "darwin":
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _has_kms_console() -> bool:
+    """Se ha um monitor ligado direto no kernel, sem desktop no meio.
+
+    O `status` de cada conector do DRM diz se tem cabo do outro lado. Ler isso
+    e barato e nao abre a tela — quem abre e o SDL, depois.
+    """
+    try:
+        return any(
+            conector.read_text().strip() == "connected"
+            for conector in Path("/sys/class/drm").glob("card*-*/status")
+        )
+    except OSError:  # pragma: no cover - sistema sem DRM (Windows, macOS, container)
+        return False
+
+
+def _pick_video_driver() -> str | None:
+    """Escolhe o driver de video quando o ambiente nao escolheu por nos.
+
+    Devolve None para deixar o SDL decidir, que e o certo onde ha desktop.
+
+    O alvo de producao e um Pi rodando a imagem Lite: ali nao ha X nem Wayland,
+    e `DISPLAY` vazio nao significa "sem tela" — significa "sem desktop". A tela
+    existe, e do proprio kernel (KMS/DRM), e o SDL desenha nela direto. Antes
+    desta checagem a face caia no driver `dummy` justamente na maquina para a
+    qual foi feita: o monitor ficava preto e o log nao dizia por que.
+    """
+    if _has_display():
+        return None
+    if _has_kms_console():
+        logger.info("sem desktop, mas ha monitor ligado: desenhando direto no KMS/DRM")
+        return "kmsdrm"
+    logger.warning("nenhum display detectado; a face rodara sem janela visivel")
+    return "dummy"
+
+
+def _open_screen(size: tuple[int, int], flags: int) -> pygame.Surface:
+    """Abre a tela pedindo sincronismo vertical, se o driver souber dar.
+
+    Com vsync o teto de quadros vem do proprio monitor e o rasgo horizontal
+    some, sem custar nada. Nem todo driver aceita — o `dummy` dos testes, por
+    exemplo — e o pygame reclama levantando; ai vale a tela sem ele.
+    """
+    try:
+        return pygame.display.set_mode(size, flags, vsync=1)
+    except pygame.error:
+        logger.debug("driver de video sem vsync; seguindo sem ele")
+        return pygame.display.set_mode(size, flags)

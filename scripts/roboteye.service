@@ -9,28 +9,49 @@
 #   journalctl -u roboteye -f         acompanha os logs
 
 [Unit]
-Description=RobotEye - face robotica com IA e voz local
-After=network-online.target sound.target graphical.target
-Wants=network-online.target
+Description=RobotEye - face robotica com IA e voz
+# Nada de `graphical.target`: no alvo de produção — um Raspberry Pi com a imagem
+# Lite — ele nunca chega, porque não há sessão gráfica nenhuma. A face desenha
+# direto na tela do kernel (KMS/DRM). Esperar por ele era o que fazia o serviço
+# reiniciar de 5 em 5 segundos para sempre.
+# `network.target` e nao `network-online.target`: esperar a rede ficar pronta
+# custava seis segundos de tela preta no arranque, e a face nao precisa dela
+# para viver. O que precisa de rede — a voz online e a IA da outra maquina — ja
+# sabe cair para a reserva local e voltar sozinho quando ela chega.
+After=network.target sound.target
 
 [Service]
 Type=simple
 User=@USER@
 WorkingDirectory=@REPO_DIR@
 
-# A face precisa de uma sessão gráfica ativa no display local.
-Environment=DISPLAY=:0
-# %U é o uid do usuário do serviço. Fixar 1000 aqui quebrava em qualquer Pi cujo
-# usuário não fosse o primeiro criado — que é o caso sempre que alguém adiciona
-# uma conta própria em vez de usar a padrão.
-Environment=XDG_RUNTIME_DIR=/run/user/%U
+# Sem desktop, quem entrega a tela é o próprio kernel. Deixar o SDL adivinhar
+# funcionaria (`face/app.py` sabe procurar um monitor no DRM), mas dizer aqui
+# torna a intenção do serviço explícita e economiza a heurística no arranque.
+Environment=SDL_VIDEODRIVER=kmsdrm
 Environment=ROBOTEYE_FACE_FULLSCREEN=true
+# Sem isto o log do robô só aparece no journal quando o buffer enche — e um
+# serviço que ninguém consegue acompanhar ao vivo é um serviço difícil de
+# consertar.
+Environment=PYTHONUNBUFFERED=1
+
+# /dev/dri (a tela) e o teclado do console vêm por estes grupos. O usuário do
+# robô normalmente já está neles; declarar aqui faz o serviço funcionar mesmo
+# numa conta recém-criada.
+SupplementaryGroups=video render input audio
 
 # Sem terminal para o chat de texto: roda apenas a face.
+# Para conversar, pare o serviço e rode `roboteye run --fullscreen`.
 ExecStart=@REPO_DIR@/.venv/bin/roboteye face --fullscreen
 
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=10
+
+# A animação é o produto: um engasgo nela se vê a olho nu. Quando o Ollama local
+# assume a resposta, ele ocupa os quatro núcleos do Pi — e é esta prioridade que
+# decide quem cede o tempo de CPU nesse momento.
+Nice=-5
 
 # Aperta um pouco a segurança sem atrapalhar o acesso a áudio e vídeo.
 NoNewPrivileges=true
