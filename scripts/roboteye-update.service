@@ -1,0 +1,37 @@
+# Traz a versão publicada do robô e a coloca no ar.
+#
+# Instalado por `./scripts/setup-raspberry-pi.sh --service`, que substitui os
+# marcadores @USER@ e @REPO_DIR@.
+#
+# Dispara de dois lugares:
+#   - no arranque da máquina (WantedBy, abaixo);
+#   - pelo botão "Atualizar" da página do celular, via a regra de sudo que o
+#     mesmo script instala.
+#
+# Manualmente:
+#   sudo systemctl start roboteye-update      atualiza agora
+#   journalctl -u roboteye-update -f          acompanha
+
+[Unit]
+Description=RobotEye - traz a versao publicada e coloca no ar
+# Precisa de rede de verdade: sem GitHub alcançável, o script só desiste. Isto
+# não atrasa a face — ela sobe em paralelo, no seu próprio serviço.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Qual branch o robô segue. O setup grava aqui o que foi escolhido em `--branch`.
+Environment=ROBOTEYE_UPDATE_BRANCH=@BRANCH@
+# Root porque reiniciar o `roboteye.service` exige isso. O `git` e o `pip`, o
+# script roda como o dono do repositório: como root, o git recusa a árvore
+# ("dubious ownership") e deixaria arquivos que o usuário não consegue tocar.
+User=root
+WorkingDirectory=@REPO_DIR@
+ExecStart=@REPO_DIR@/scripts/atualizar.sh
+# O script já espera a Atlas ficar ociosa e ainda dá tempo ao robô para voltar
+# de pé; este teto é a rede de segurança para o caso de algo travar de vez.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

@@ -212,7 +212,13 @@ def _config_page(settings: Settings, app: Any = None):
 
     config = build_web_config(settings)
     if app is not None:
-        config = replace(config, conversa=_conversa_do(app))
+        config = replace(
+            config,
+            conversa=_conversa_do(app),
+            # O atualizador pergunta isto antes de reiniciar o robo: ninguem quer
+            # a face sumindo no meio de uma frase.
+            ocupado=app.assistant.is_busy,
+        )
     server = ConfigServer(config)
     try:
         server.start()

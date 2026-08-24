@@ -141,6 +141,16 @@ PAGE = """<!doctype html>
     </select>
   </fieldset>
 
+  <fieldset id="blocoAtualizar" style="display:none">
+    <legend>Versão</legend>
+    <p class="dica">
+      Traz a versão publicada e reinicia o robô. Se a nova versão não subir, ele
+      volta sozinho para a anterior. Espera a Atlas terminar de falar.
+    </p>
+    <button class="leve" onclick="atualizar()">Atualizar o robô</button>
+    <p class="aviso" id="resAtualizar"></p>
+  </fieldset>
+
   <p class="aviso" id="resSalvar"></p>
   <div class="rodape">
     <button onclick="salvar()">Salvar</button>
@@ -204,6 +214,8 @@ async function carregar() {
     persona.append(o);
   }
   pintarFalas(estado.conversa);
+  $("blocoAtualizar").style.display =
+    estado.atualizacao && estado.atualizacao.disponivel ? "" : "none";
   // O robo pode ser interpelado de mais de um lugar (aqui e pelo SSH); manter a
   // pagina olhando faz ela mostrar tambem o que nao passou por ela.
   if (!window._relogioConversa) {
@@ -253,6 +265,20 @@ async function atualizarConversa() {
     const estado = await api("/api/state");
     pintarFalas(estado.conversa);
   } catch (e) { /* a pagina continua util sem isso */ }
+}
+
+async function atualizar() {
+  if (!confirm("Buscar a versão publicada e reiniciar o robô?")) return;
+  mostrar("resAtualizar", "procurando...", "");
+  try {
+    await api("/api/atualizar", {});
+    // A resposta é só o aceite: quem reinicia o robô é o systemd, e este mesmo
+    // processo vai embora junto. A página fica sem resposta por alguns segundos
+    // e volta — dizer isso evita que pareça travada.
+    mostrar("resAtualizar", "atualizando… a página volta em instantes", "");
+  } catch (e) {
+    mostrar("resAtualizar", e.message, "erro");
+  }
 }
 
 async function testarIA() {

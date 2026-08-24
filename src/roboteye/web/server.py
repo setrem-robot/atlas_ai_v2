@@ -27,8 +27,10 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -80,6 +82,9 @@ class WebConfig:
     #: Presente quando ha um robo vivo do outro lado para conversar. Ausente
     #: quando a pagina sobe sozinha (`roboteye web`), onde nao ha com quem falar.
     conversa: ConversaWeb | None = None
+    #: Diz se a Atlas esta no meio de uma resposta. Quem pergunta e o script de
+    #: atualizacao, para nao reiniciar o robo com ela falando.
+    ocupado: Callable[[], bool] | None = None
 
 
 class _Gatekeeper:
@@ -181,6 +186,7 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
                 "/api/test/voice": _test_voice,
                 "/api/restart": _restart,
                 "/api/conversar": lambda body: _conversar(config, body),
+                "/api/atualizar": _atualizar,
             }
             handler = rotas.get(path)
             if handler is None:
@@ -249,7 +255,61 @@ def _state(config: WebConfig) -> dict[str, Any]:
             "disponivel": config.conversa is not None,
             "falas": config.conversa.falas() if config.conversa else [],
         },
+        "ocupado": bool(config.ocupado and config.ocupado()),
+        "atualizacao": {"disponivel": _atualizacao_instalada()},
     }
+
+
+#: Unidade systemd que traz a versao publicada. Ver `scripts/atualizar.sh`.
+UPDATE_UNIT = "roboteye-update.service"
+
+
+def _atualizacao_instalada() -> bool:
+    """Se ha um robo instalado como servico, com o atualizador junto.
+
+    Rodando da arvore de desenvolvimento nao ha unidade nenhuma, e o botao nao
+    deve aparecer prometendo o que nao pode cumprir.
+    """
+    try:
+        return (
+            subprocess.run(
+                ["systemctl", "cat", UPDATE_UNIT],
+                capture_output=True,
+                timeout=5,
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _atualizar(_: dict[str, Any]) -> dict[str, Any]:
+    """Dispara a busca pela versao publicada e volta na hora.
+
+    Nao espera o resultado de proposito: a atualizacao reinicia justamente o
+    processo que esta respondendo esta requisicao, entao esperar seria esperar a
+    propria morte. O `--no-block` entrega ao systemd e devolve; quem quiser
+    acompanhar le `journalctl -u roboteye-update`.
+    """
+    if not _atualizacao_instalada():
+        return {"erro": f"{UPDATE_UNIT} nao esta instalado (rode o setup com --service)"}
+
+    try:
+        # `sudo -n`: a regra instalada pelo setup permite exatamente este
+        # comando, sem senha. Falhar aqui quer dizer que a regra nao esta la.
+        pronto = subprocess.run(
+            ["sudo", "-n", "systemctl", "start", "--no-block", UPDATE_UNIT],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"erro": f"nao consegui disparar a atualizacao: {exc}"}
+
+    if pronto.returncode != 0:
+        detalhe = (pronto.stderr or pronto.stdout).strip()[:200]
+        return {"erro": f"nao consegui disparar a atualizacao: {detalhe}"}
+    return {"disparado": True}
 
 
 def _conversar(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
