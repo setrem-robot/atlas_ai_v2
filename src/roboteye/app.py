@@ -149,8 +149,16 @@ class Application:
             self.shutdown()
 
     def run_face(self) -> None:
-        """Somente a face animada, sem entrada de texto."""
-        self.start(warm_up=False)
+        """A face animada, sem chat no terminal.
+
+        Aquece assim mesmo. Antes nao aquecia — sem entrada de texto nao havia
+        conversa a preparar —, mas hoje ha: a pagina do celular conversa, e e
+        justamente por ela que alguem fala com o robo instalado. Sem aquecer, a
+        primeira pergunta feita ali pagaria os segundos de carregar o modelo e
+        ler a persona (ver `OllamaClient.warm_up`), que e o custo que este
+        projeto passou a pagar no arranque de proposito.
+        """
+        self.start()
         face = FaceApp(self.settings.face, self.bus, envelope=self.envelope)
         try:
             face.run()

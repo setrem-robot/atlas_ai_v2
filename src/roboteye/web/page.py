@@ -57,7 +57,10 @@ PAGE = """<!doctype html>
   .rodape { position: sticky; bottom: 0; padding: 12px 0 0;
             background: linear-gradient(transparent, var(--fundo) 30%); }
   .rodape button { width: 100%; }
-  .dica { font-size: 12px; color: var(--fraco); margin-top: 6px; }
+  .falas{max-height:190px;overflow-y:auto;margin-bottom:10px}
+.falas p{margin:0 0 6px;line-height:1.35}
+.falas .quem{opacity:.6;font-size:.8em;text-transform:uppercase;letter-spacing:.04em}
+.dica { font-size: 12px; color: var(--fraco); margin-top: 6px; }
   #entrada { max-width: 320px; margin: 60px auto; text-align: center; }
 </style>
 </head>
@@ -110,6 +113,17 @@ PAGE = """<!doctype html>
       <button class="leve" onclick="testarVoz()">Falar uma frase</button>
     </div>
     <p class="aviso" id="resVoz"></p>
+  </fieldset>
+
+  <fieldset id="blocoConversa" style="display:none">
+    <legend>Conversar</legend>
+    <div id="falas" class="falas"></div>
+    <input id="msg" placeholder="Digite e a Atlas responde falando"
+           onkeydown="if(event.key==='Enter') conversar()">
+    <div style="margin-top:12px">
+      <button class="leve" onclick="conversar()">Enviar</button>
+    </div>
+    <p class="aviso" id="resConversa"></p>
   </fieldset>
 
   <fieldset>
@@ -189,9 +203,56 @@ async function carregar() {
     o.value = p; o.textContent = p;
     persona.append(o);
   }
+  pintarFalas(estado.conversa);
+  // O robo pode ser interpelado de mais de um lugar (aqui e pelo SSH); manter a
+  // pagina olhando faz ela mostrar tambem o que nao passou por ela.
+  if (!window._relogioConversa) {
+    window._relogioConversa = setInterval(atualizarConversa, 4000);
+  }
   for (const campo of CAMPOS) {
     if (estado.config[campo]) $(campo).value = estado.config[campo];
   }
+}
+
+function pintarFalas(conversa) {
+  $("blocoConversa").style.display = conversa && conversa.disponivel ? "" : "none";
+  if (!conversa || !conversa.disponivel) return;
+  const alvo = $("falas");
+  alvo.innerHTML = "";
+  for (const fala of conversa.falas) {
+    const p = document.createElement("p");
+    const quem = document.createElement("span");
+    quem.className = "quem";
+    quem.textContent = fala.quem + " ";
+    p.appendChild(quem);
+    p.appendChild(document.createTextNode(fala.texto));
+    alvo.appendChild(p);
+  }
+  alvo.scrollTop = alvo.scrollHeight;
+}
+
+async function conversar() {
+  const campo = $("msg");
+  const texto = campo.value.trim();
+  if (!texto) return;
+  mostrar("resConversa", "enviando...", "");
+  try {
+    await api("/api/conversar", {texto});
+    campo.value = "";
+    mostrar("resConversa", "", "");
+    // A resposta sai pela voz; a pagina so mostra o que ja foi dito. Uma espera
+    // curta e o suficiente para a primeira frase ja aparecer junto.
+    setTimeout(atualizarConversa, 1200);
+  } catch (e) {
+    mostrar("resConversa", e.message, "erro");
+  }
+}
+
+async function atualizarConversa() {
+  try {
+    const estado = await api("/api/state");
+    pintarFalas(estado.conversa);
+  } catch (e) { /* a pagina continua util sem isso */ }
 }
 
 async function testarIA() {

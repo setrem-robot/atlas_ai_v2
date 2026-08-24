@@ -753,6 +753,26 @@ Endereço da máquina com a IA:  [192.168.1.50:11434]  [Testar]
   respondeu em 42 ms — 3 modelo(s)
 ```
 
+E dá para **conversar por ela**. Essa é a única entrada de texto que o robô
+instalado tem: o serviço sobe sem terminal, e até aqui falar com a Atlas exigia
+parar o robô e rodar `roboteye run` por SSH — ou seja, apagar a face na frente de
+quem veio ver o robô funcionar.
+
+```
+Conversar
+  você  quanto é três mais três?
+  atlas Três mais três é seis.
+```
+
+A resposta desta chamada é só o aceite: o que ela responde sai pela voz e pela
+face — é um robô, não um chat — e aparece na página na leitura seguinte. Como a
+página fica olhando, ela mostra também as conversas que não passaram por ela.
+
+Isso é também o que faz o aquecimento valer sempre. `roboteye face` não aquecia o
+modelo, porque sem entrada de texto não havia conversa a preparar; agora há,
+então a primeira pergunta feita do celular não paga mais os segundos de carregar
+o modelo e ler a persona.
+
 Esse botão existe porque o endereço vem por VPN e muda de lugar. Sem ele,
 descobrir que o IP está errado exigiria salvar, reiniciar e esperar o robô
 falhar falando. Quando falha, a mensagem diz o que houve em vez de despejar a

@@ -11,6 +11,7 @@ import pytest
 
 from roboteye.config import ConfigError
 from roboteye.web import ConfigServer, WebConfig, envfile, generate_pin
+from roboteye.web.conversa import ConversaWeb
 from roboteye.web.server import validate
 
 EXEMPLO = """\
@@ -204,3 +205,114 @@ class TestServidor:
 def test_pin_tem_seis_digitos() -> None:
     pin = generate_pin()
     assert len(pin) == 6 and pin.isdigit()
+
+
+class TestConversa:
+    """A conversa pela pagina — a unica entrada de texto do robo instalado."""
+
+    def test_entrega_o_que_foi_digitado(self) -> None:
+        entregues: list[str] = []
+        conversa = ConversaWeb(entregues.append)
+        conversa.enviar("  oi, tudo bem?  ")
+        assert entregues == ["oi, tudo bem?"]
+
+    def test_texto_vazio_nao_incomoda_o_robo(self) -> None:
+        entregues: list[str] = []
+        conversa = ConversaWeb(entregues.append)
+        conversa.enviar("   ")
+        assert entregues == []
+        assert conversa.falas() == []
+
+    def test_guarda_os_dois_lados_da_conversa(self) -> None:
+        conversa = ConversaWeb(lambda _: None)
+        conversa.enviar("quem e voce?")
+        conversa.anotar("atlas", "Sou a Atlas.")
+        assert conversa.falas() == [
+            {"quem": "voce", "texto": "quem e voce?"},
+            {"quem": "atlas", "texto": "Sou a Atlas."},
+        ]
+
+    def test_nao_cresce_sem_limite(self) -> None:
+        # O processo fica ligado o dia inteiro; guardar tudo seria vazamento.
+        conversa = ConversaWeb(lambda _: None)
+        for i in range(ConversaWeb.LIMITE * 3):
+            conversa.anotar("voce", f"mensagem {i}")
+        falas = conversa.falas()
+        assert len(falas) == ConversaWeb.LIMITE
+        assert falas[-1]["texto"] == f"mensagem {ConversaWeb.LIMITE * 3 - 1}"
+
+    def test_falas_e_uma_copia(self) -> None:
+        # Quem le nao pode mexer no historico de quem escreve.
+        conversa = ConversaWeb(lambda _: None)
+        conversa.anotar("voce", "oi")
+        conversa.falas().clear()
+        assert len(conversa.falas()) == 1
+
+
+class TestRotaDeConversa:
+    @pytest.fixture
+    def entregues(self) -> list[str]:
+        return []
+
+    @pytest.fixture
+    def servidor_com_robo(self, env: Path, entregues: list[str]):
+        config = WebConfig(
+            host="127.0.0.1",
+            port=0,
+            pin="123456",
+            env_path=env,
+            conversa=ConversaWeb(entregues.append),
+        )
+        server = ConfigServer(config)
+        server.start()
+        yield f"http://127.0.0.1:{server.port}"
+        server.stop()
+
+    @pytest.fixture
+    def servidor_sozinho(self, env: Path):
+        # `roboteye web` sem robo rodando: nao ha com quem conversar.
+        config = WebConfig(host="127.0.0.1", port=0, pin="123456", env_path=env)
+        server = ConfigServer(config)
+        server.start()
+        yield f"http://127.0.0.1:{server.port}"
+        server.stop()
+
+    def _pedir(self, base: str, rota: str, corpo=None, pin: str = "123456"):
+        req = urllib.request.Request(base + rota, method="GET" if corpo is None else "POST")
+        req.add_header("X-Pin", pin)
+        dados = None
+        if corpo is not None:
+            req.add_header("Content-Type", "application/json")
+            dados = json.dumps(corpo).encode()
+        try:
+            with urllib.request.urlopen(req, dados) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read())
+
+    def test_mensagem_chega_ao_robo(self, servidor_com_robo: str, entregues: list[str]) -> None:
+        status, corpo = self._pedir(servidor_com_robo, "/api/conversar", {"texto": "ola"})
+        assert status == 200
+        assert corpo == {"enviado": "ola"}
+        assert entregues == ["ola"]
+
+    def test_o_estado_mostra_a_conversa(self, servidor_com_robo: str) -> None:
+        self._pedir(servidor_com_robo, "/api/conversar", {"texto": "ola"})
+        _, corpo = self._pedir(servidor_com_robo, "/api/state")
+        assert corpo["conversa"]["disponivel"] is True
+        assert corpo["conversa"]["falas"] == [{"quem": "voce", "texto": "ola"}]
+
+    def test_sem_robo_a_pagina_diz_isso(self, servidor_sozinho: str) -> None:
+        _, corpo = self._pedir(servidor_sozinho, "/api/conversar", {"texto": "ola"})
+        assert "erro" in corpo
+
+    def test_sem_robo_o_estado_esconde_a_conversa(self, servidor_sozinho: str) -> None:
+        _, corpo = self._pedir(servidor_sozinho, "/api/state")
+        assert corpo["conversa"]["disponivel"] is False
+
+    def test_conversa_tambem_exige_o_PIN(
+        self, servidor_com_robo: str, entregues: list[str]
+    ) -> None:
+        status, _ = self._pedir(servidor_com_robo, "/api/conversar", {"texto": "ola"}, pin="000000")
+        assert status == 401
+        assert entregues == []

@@ -19,7 +19,9 @@ import os
 import sys
 import threading
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from roboteye import __version__, voice_catalog
 from roboteye.config import ConfigError, Settings
@@ -187,13 +189,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 # Comandos
 # ---------------------------------------------------------------------------
 @contextlib.contextmanager
-def _config_page(settings: Settings):
+def _config_page(settings: Settings, app: Any = None):
     """Sobe a pagina de configuracao junto com o robo.
 
     E o modo como ela sera usada de verdade: o robo liga sozinho no arranque, de
     tela cheia e sem teclado, e a unica forma de mexer nele passa a ser o
     navegador do celular. Subir a pagina separado exigiria lembrar de faze-lo —
     exatamente na hora em que ninguem consegue digitar nada no robo.
+
+    Com um `app`, a pagina tambem conversa: e a unica entrada de texto que o robo
+    instalado tem, ja que o servico sobe sem terminal. Sem ele — `roboteye web`
+    rodando sozinho —, a pagina segue servindo para configurar.
 
     Falhar aqui nao pode derrubar o robo: uma porta ocupada e um aborrecimento,
     nao um motivo para a face nao acender.
@@ -205,6 +211,8 @@ def _config_page(settings: Settings):
     from roboteye.web import ConfigServer
 
     config = build_web_config(settings)
+    if app is not None:
+        config = replace(config, conversa=_conversa_do(app))
     server = ConfigServer(config)
     try:
         server.start()
@@ -220,11 +228,29 @@ def _config_page(settings: Settings):
         server.stop()
 
 
+def _conversa_do(app: Any):
+    """Liga a pagina ao robo: ela entrega o texto, ele devolve o que respondeu.
+
+    A ligacao mora aqui, e nao dentro da pagina, pela mesma razao de sempre
+    neste projeto: quem monta as pecas e quem as conhece. `ConversaWeb` nao sabe
+    o que e um `Assistant`, e o `Assistant` nao sabe que existe uma pagina.
+    """
+    from roboteye.core.events import AssistantReply, ErrorOccurred
+    from roboteye.web.conversa import ConversaWeb
+
+    conversa = ConversaWeb(app.assistant.submit)
+    app.bus.subscribe(lambda e: conversa.anotar("atlas", e.text), event_type=AssistantReply)
+    app.bus.subscribe(lambda e: conversa.anotar("erro", e.message), event_type=ErrorOccurred)
+    return conversa
+
+
+# A pagina precisa do robo montado para conversar com ele, entao o `Application`
+# vem primeiro nos `with` — ao contrario da ordem que estes comandos tinham.
 def _command_run(args: argparse.Namespace, settings: Settings) -> int:
     from roboteye.app import Application
 
     settings = _apply_face_overrides(args, settings)
-    with _config_page(settings), Application.build(settings) as app:
+    with Application.build(settings) as app, _config_page(settings, app):
         app.run_interactive()
     return EXIT_OK
 
@@ -232,7 +258,7 @@ def _command_run(args: argparse.Namespace, settings: Settings) -> int:
 def _command_chat(_: argparse.Namespace, settings: Settings) -> int:
     from roboteye.app import Application
 
-    with _config_page(settings), Application.build(settings) as app:
+    with Application.build(settings) as app, _config_page(settings, app):
         app.run_chat()
     return EXIT_OK
 
@@ -241,7 +267,7 @@ def _command_face(args: argparse.Namespace, settings: Settings) -> int:
     from roboteye.app import Application
 
     settings = _apply_face_overrides(args, settings)
-    with _config_page(settings), Application.build(settings) as app:
+    with Application.build(settings) as app, _config_page(settings, app):
         app.run_face()
     return EXIT_OK
 
