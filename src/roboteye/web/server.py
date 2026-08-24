@@ -38,6 +38,7 @@ from urllib.parse import urlparse
 from roboteye.config import PROJECT_ROOT, Settings
 from roboteye.logging_setup import get_logger
 from roboteye.web import envfile
+from roboteye.web.conversa import ConversaWeb
 from roboteye.web.page import PAGE
 
 logger = get_logger(__name__)
@@ -76,6 +77,9 @@ class WebConfig:
     port: int = DEFAULT_PORT
     pin: str = ""
     env_path: Path = PROJECT_ROOT / ".env"
+    #: Presente quando ha um robo vivo do outro lado para conversar. Ausente
+    #: quando a pagina sobe sozinha (`roboteye web`), onde nao ha com quem falar.
+    conversa: ConversaWeb | None = None
 
 
 class _Gatekeeper:
@@ -176,6 +180,7 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
                 "/api/test/llm": _test_llm,
                 "/api/test/voice": _test_voice,
                 "/api/restart": _restart,
+                "/api/conversar": lambda body: _conversar(config, body),
             }
             handler = rotas.get(path)
             if handler is None:
@@ -240,7 +245,28 @@ def _state(config: WebConfig) -> dict[str, Any]:
         "config": {chave: valores.get(chave, "") for chave in EDITABLE},
         "vozes": vozes,
         "personas": personas,
+        "conversa": {
+            "disponivel": config.conversa is not None,
+            "falas": config.conversa.falas() if config.conversa else [],
+        },
     }
+
+
+def _conversar(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
+    """Entrega ao robo o que foi digitado no celular.
+
+    A resposta desta chamada e so o aceite. O que a Atlas responde sai pela voz
+    e pela face — e um robo, nao um chat — e aparece na pagina na proxima
+    leitura do estado, que e como ela ja se atualiza.
+    """
+    if config.conversa is None:
+        return {"erro": "nao ha robo rodando para conversar (a pagina subiu sozinha)"}
+
+    texto = str(body.get("texto") or "").strip()
+    if not texto:
+        return {"erro": "texto vazio"}
+    config.conversa.enviar(texto)
+    return {"enviado": texto}
 
 
 def _save(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:

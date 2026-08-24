@@ -20,15 +20,70 @@ Atlas> Sou a Atlas, um robô construído aqui na Setrem. Ainda estou aprendendo.
 
 ## Índice
 
+- [O robô hoje](#o-robô-hoje)
 - [Como funciona](#como-funciona)
 - [Instalação](#instalação)
 - [Uso](#uso)
 - [Configuração](#configuração)
 - [Arquitetura](#arquitetura)
 - [Raspberry Pi](#raspberry-pi)
+- [O que falta](#o-que-falta)
 - [Desenvolvimento](#desenvolvimento)
 - [Solução de problemas](#solução-de-problemas)
 - [Créditos](#créditos)
+
+---
+
+## O robô hoje
+
+A Atlas está montada e rodando num **Raspberry Pi 5 de 8 GB**, com Raspberry Pi
+OS Lite (Debian 13, sem ambiente gráfico), numa tela de 800x480. Ela liga
+sozinha na tomada e não precisa de teclado, mouse nem monitor de serviço.
+
+**O que acontece quando você liga:** em cerca de sete segundos o sistema sobe, o
+serviço `roboteye` arranca e os olhos aparecem na tela. Não há desktop no
+caminho: a face desenha direto no vídeo do kernel (KMS/DRM). Ao mesmo tempo, a
+página de configuração começa a servir na porta 8080 e os modelos de linguagem
+são aquecidos em segundo plano, para que a primeira pergunta não seja a mais
+lenta.
+
+**Para falar com ela**, abra `http://<ip-do-robo>:8080` no celular, digite o PIN
+e use o campo *Conversar*. Ela responde falando, e os olhos acompanham a voz. Não
+é preciso parar o robô nem entrar por SSH.
+
+**A inteligência é dupla.** Enquanto houver rede, quem responde é um modelo
+grande numa máquina de mesa (`qwen3:8b` numa placa de vídeo, ~1 s até começar a
+falar). Se essa máquina sumir — Wi-Fi caiu, PC desligou —, um modelo pequeno no
+próprio Pi (`gemma3:1b`) assume a conversa sem que ela pare. Quando a rede volta,
+o robô volta ao modelo grande sozinho. Veja [Quando o Wi-Fi cai](#quando-o-wi-fi-cai).
+
+**A voz também tem reserva.** A voz padrão é online (Microsoft Edge, a mais
+natural em português do Brasil); sem internet, uma voz local em Piper assume, e
+ficar offline vira uma troca de timbre em vez de silêncio.
+
+O que isso custa, medido no próprio Pi 5:
+
+| | |
+|---|---|
+| Arranque até a face na tela | **6,9 s** |
+| CPU da face (contínuo, 30 FPS, 800x480) | **17–21% de um núcleo** |
+| Memória da face | 130–145 MB |
+| Custo de um quadro | 3,4 ms mediana / 3,9 ms p95 |
+| Resposta pela IA de rede (modelo quente) | **1–3 s** |
+| Resposta pela IA local, depois do aquecimento | ~1 s |
+| Temperatura em repouso / sob carga de IA | 50 °C / **78,5 °C** |
+
+O número que merece atenção é o último: **não há ventoinha**, e trinta segundos
+de modelo local levam o Pi de 56 °C a quase 80 °C. Conversas longas pela IA local
+vão reduzir a frequência do processador. Um cooler oficial resolve.
+
+### O que ainda não está ligado
+
+Este repositório é só a **cabeça** do robô — face, voz e conversa. O corpo
+(motores, GPS, Wi-Fi) vive em [`orquestrador`](https://github.com/setrem-robot/orquestrador),
+e o controle no celular em [`aplicativo`](https://github.com/setrem-robot/aplicativo).
+As três partes compartilham a marca "Atlas" e **nada mais**: este repositório não
+fala MQTT, serial nem GPIO. Veja [O que falta](#o-que-falta).
 
 ---
 
@@ -648,15 +703,195 @@ ninguém na frente do teclado:
 | `--bluetooth` | configura áudio Bluetooth |
 | `--yes` | não pergunta nada |
 
+> **Se a tela ficar preta com o robô rodando**, o mais provável é faltar
+> `libGL.so.1` — instale `libgl1 libopengl0 libglx-mesa0` (o
+> `setup-raspberry-pi.sh` já faz). Sem ela o SDL não avisa nada: cria os
+> framebuffers, aceita todo `flip` e não desenha. O sintoma que denuncia é a taxa
+> de quadros — se um teste marcar 2000 quadros/s numa tela de 60 Hz, o SDL está
+> desenhando para lugar nenhum. O erro real só aparece com
+> `SDL_LOGGING="video=verbose"`.
+
+### Do cartão em branco ao robô ligando sozinho
+
+O caminho completo, na ordem, para um Pi 5 com Raspberry Pi OS **Lite** (sem
+ambiente gráfico). Foi assim que o robô de produção foi montado.
+
+**1. Grave o cartão e ligue o Pi.** Use o Raspberry Pi Imager, ative SSH e
+defina o usuário nas configurações avançadas dele.
+
+**2. Confira se o cartão inteiro está sendo usado.**
+
+```bash
+df -h /
+```
+
+Se a raiz tiver poucos gigabytes num cartão grande, o sistema não expandiu a
+partição — e você vai bater no limite antes de instalar qualquer coisa. Veja
+[o cartão de 32 GB que tinha 2](#o-sistema-diz-que-está-sem-espaço-num-cartão-grande)
+para o conserto.
+
+**3. Instale o robô.**
+
+```bash
+git clone https://github.com/setrem-robot/atlas_ai_v2.git
+cd atlas_ai_v2
+./scripts/setup-raspberry-pi.sh --service --ollama 192.168.1.50:11434
+```
+
+O script instala as dependências de sistema, cria o ambiente virtual, chama o
+[assistente de configuração](#o-assistente-de-configuração), baixa o que a voz
+escolhida precisa e instala o serviço systemd. **Reinicie depois**: a instalação
+adiciona o usuário aos grupos `video`, `render` e `input`, e isso só passa a
+valer numa sessão nova.
+
+**4. Diga por onde sai o som.** No Pi 5 não há saída de fone: o som vai pelo
+HDMI, e o monitor normalmente só aceita 44100 ou 48000 Hz enquanto o Piper
+sintetiza a 22050. O `plug` do ALSA converte no meio do caminho:
+
+```bash
+sudo tee /etc/asound.conf >/dev/null <<'EOF'
+pcm.!default {
+    type plug
+    slave.pcm "hw:0,0"
+}
+ctl.!default {
+    type hw
+    card 0
+}
+EOF
+```
+
+Confira qual placa é a sua com `aplay -l` e se o monitor aceita áudio com
+`cat /proc/asound/card0/eld#0`. Teste com `speaker-test -D default -c 2 -t sine -l 1`.
+
+**5. Se quiser a IA de reserva rodando no próprio Pi:**
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull gemma3:1b
+```
+
+E aponte a reserva no `.env` — veja [Quando o Wi-Fi cai](#quando-o-wi-fi-cai).
+Vale manter o modelo residente e fazer o Ollama ceder CPU para a face:
+
+```bash
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+sudo tee /etc/systemd/system/ollama.service.d/override.conf >/dev/null <<'EOF'
+[Service]
+Environment="OLLAMA_KEEP_ALIVE=-1"
+Environment="OLLAMA_MAX_LOADED_MODELS=1"
+Environment="OLLAMA_NUM_PARALLEL=1"
+Nice=5
+EOF
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+`OLLAMA_KEEP_ALIVE=-1` mantém o modelo na memória para sempre. São ~815 MB de uma
+máquina com 8 GB, e o que se compra com eles é a queda do Wi-Fi não custar também
+o tempo de ler o modelo do cartão SD — que é onde o Pi é mais lento. Sem isso, o
+Ollama o descarrega depois de cinco minutos parado, que é exatamente o estado em
+que ele vai estar quando for preciso.
+
+**6. Confira e ligue.**
+
+```bash
+roboteye doctor
+sudo systemctl start roboteye
+```
+
+### Deixando o arranque mais leve
+
+Opcionais, todos reversíveis. No robô de produção derrubaram o arranque de
+**23 s para 6,9 s**:
+
+```bash
+# O cloud-init já fez o trabalho dele (a primeira configuração do cartão);
+# daqui para frente são ~10 s de arranque por nada.
+sudo touch /etc/cloud/cloud-init.disabled
+
+# Sem caixa Bluetooth (o som sai pelo HDMI): rádio ligado e memória por nada.
+sudo systemctl disable --now bluetooth udisks2
+
+# Um robô em apresentação não pode parar para atualizar pacotes sozinho.
+sudo systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
+```
+
+Não desabilite o `avahi-daemon`: é ele que faz `nome-do-robo.local` funcionar.
+
+**Sem desktop, e melhor assim.** A imagem Lite não tem X nem Wayland, e a face
+não precisa de nenhum dos dois: ela procura um monitor no DRM e desenha direto na
+tela do kernel (KMSDRM). Não instale um ambiente gráfico só por causa dela — o
+desktop custaria CPU e memória contínuos para não desenhar nada que a face já não
+desenhe. Medido num Pi 5 com uma tela de 800x480, a face sozinha custa **17% de um
+núcleo e 130 MB**, e o robô sobe em segundos.
+
 Notas de desempenho num Pi:
 
 - O Piper roda confortavelmente num Pi 4/5. Num Pi Zero 2 W espere síntese perto
   do tempo real — aumente `ROBOTEYE_VOICE_LENGTH_SCALE` se picotar.
-- **Não rode o LLM no Pi.** Aponte `ROBOTEYE_OLLAMA_HOST` para um PC da rede.
+- **A IA principal não é para rodar no Pi** — aponte `ROBOTEYE_OLLAMA_HOST` para
+  um PC da rede. Mas vale ter uma pequena aqui como reserva; veja
+  [Quando o Wi-Fi cai](#quando-o-wi-fi-cai).
+- A face cai sozinha para **30 FPS em ARM**. Os movimentos desta face são todos
+  lentos, medidos em décimos de segundo, e a 30 não se distinguem dos de 60 —
+  mas o quadro é gasto contínuo, então o que se economiza é metade de um núcleo,
+  o dia inteiro.
 - Em telas pequenas, use `ROBOTEYE_FACE_FULLSCREEN=true`; a face se redimensiona
   sozinha para qualquer resolução.
 - A reserva offline da voz escolhe sozinha uma voz **leve** em ARM. Cair numa
   voz Kokoro num Pi trocaria "sem internet" por "fala arrastada".
+- O Pi 5 não tem saída de fone: o som sai pelo HDMI. Se o monitor só aceitar
+  44,1/48 kHz — a maioria — o ALSA precisa converter, porque o Piper sintetiza a
+  22050 Hz. Um `/etc/asound.conf` com `type plug` na frente de `hw:0,0` resolve.
+
+### Quando o Wi-Fi cai
+
+Numa apresentação, o robô fica na ponta de um Wi-Fi de faculdade e a IA que
+responde bem está noutra máquina. Quando esse caminho some, o robô não precisa
+emudecer: `ROBOTEYE_LLM_FALLBACK_HOST` aponta para um Ollama no próprio Pi, com um
+modelo pequeno, e ele assume a conversa.
+
+```bash
+ROBOTEYE_OLLAMA_HOST=http://192.168.1.50:11434     # a IA boa, noutra máquina
+ROBOTEYE_LLM_MODEL=qwen3:8b
+ROBOTEYE_LLM_FALLBACK_HOST=http://127.0.0.1:11434  # a reserva, aqui dentro
+ROBOTEYE_LLM_FALLBACK_MODEL=gemma3:1b
+```
+
+Descobrir que a rede caiu custa um tempo limite inteiro, e pagar isso a cada
+pergunta transformaria a queda em segundos de silêncio antes de cada frase. Por
+isso quem vigia a máquina de rede é uma thread de fundo (`ROBOTEYE_LLM_PROBE_INTERVAL`,
+10 s por padrão): a troca em si é imediata, e a única pergunta que paga o preço da
+queda é a que estava no ar quando ela aconteceu. Quando a rede volta, o robô
+volta para a IA boa sozinho.
+
+Num modelo rodando em CPU, quase todo o tempo da primeira resposta é **ler a
+persona**, não escrever a resposta: num Pi 5, os ~500 tokens dela custam 10 s, e a
+geração em si menos de 1 s. Por isso o aquecimento manda a persona junto — o
+servidor guarda o prefixo já processado, e o custo é pago no arranque em vez de na
+primeira pergunta de quem chegou perto do robô. Medido, com o Wi-Fi cortado no
+meio da conversa:
+
+| Primeira pergunta pela reserva local | Tempo até falar |
+|---|---|
+| aquecendo só a conexão (como era) | 12 s |
+| aquecendo com a persona | **1 s** |
+
+Qual modelo cabe no Pi 5, medido com a face rodando junto:
+
+| Modelo | Velocidade | Português |
+|---|---|---|
+| `gemma3:1b` | **12,7 tokens/s** | acentua certo |
+| `llama3.2:1b` | 7,5 tokens/s | troca palavras, come acentos |
+| `llama3.2:3b` | 4,9 tokens/s | o melhor dos três, e o mais lento |
+
+O `doctor` mostra as duas IAs em linhas separadas, e uma máquina de rede fora do
+ar é **aviso**, não falha — o robô ainda conversa:
+
+```
+[aviso] IA de rede             inacessivel em http://192.168.1.50:11434
+[ ok ] IA local (reserva)     gemma3:1b em http://127.0.0.1:11434
+```
 
 ### Configurando pelo celular
 
@@ -680,6 +915,26 @@ Endereço da máquina com a IA:  [192.168.1.50:11434]  [Testar]
   respondeu em 42 ms — 3 modelo(s)
 ```
 
+E dá para **conversar por ela**. Essa é a única entrada de texto que o robô
+instalado tem: o serviço sobe sem terminal, e até aqui falar com a Atlas exigia
+parar o robô e rodar `roboteye run` por SSH — ou seja, apagar a face na frente de
+quem veio ver o robô funcionar.
+
+```
+Conversar
+  você  quanto é três mais três?
+  atlas Três mais três é seis.
+```
+
+A resposta desta chamada é só o aceite: o que ela responde sai pela voz e pela
+face — é um robô, não um chat — e aparece na página na leitura seguinte. Como a
+página fica olhando, ela mostra também as conversas que não passaram por ela.
+
+Isso é também o que faz o aquecimento valer sempre. `roboteye face` não aquecia o
+modelo, porque sem entrada de texto não havia conversa a preparar; agora há,
+então a primeira pergunta feita do celular não paga mais os segundos de carregar
+o modelo e ler a persona.
+
 Esse botão existe porque o endereço vem por VPN e muda de lugar. Sem ele,
 descobrir que o IP está errado exigiria salvar, reiniciar e esperar o robô
 falhar falando. Quando falha, a mensagem diz o que houve em vez de despejar a
@@ -695,6 +950,57 @@ não reescreve o arquivo.
 > cinco erros. Ele impede que alguém que descubra a porta mexa no robô — não
 > substitui pôr o robô numa rede separada. Para fechar totalmente, use
 > `ROBOTEYE_WEB_HOST=127.0.0.1` ou `ROBOTEYE_WEB_ENABLED=false`.
+
+---
+
+## O que falta
+
+Lista honesta do que **não** está pronto, para quem for continuar o projeto. Nada
+aqui é bug esquecido — é trabalho que ainda não foi feito.
+
+### A Atlas não fala o que o app manda
+
+O `orquestrador` já publica em `robo/voz/falar` quando alguém pede para o robô
+falar pelo celular. **Ninguém consome esse tópico.** Este repositório não fala
+MQTT: os dois lados do contrato existem, e os fios nunca foram ligados.
+
+O lugar natural para isso é um assinante MQTT que publique no `EventBus` daqui —
+sem que `core/assistant.py` ou a face saibam que MQTT existe, do mesmo jeito que
+a página web conversa hoje sem conhecer o `Assistant`. Enquanto isso não existir,
+a Atlas só responde a quem digita nela.
+
+### A Atlas não sabe nada sobre o próprio corpo
+
+Ela não recebe telemetria: não sabe o nível da bateria, onde está, se os motores
+estão andando. Reagir a isso — mudar de expressão com a bateria baixa, comentar
+que está se movendo — é o tipo de coisa que faria o robô parecer vivo, e depende
+do mesmo assinante MQTT acima.
+
+### Ela ouve, mas não escuta
+
+Não há reconhecimento de fala. Toda entrada é texto, digitado no celular ou por
+SSH. Um robô que responde à voz é o próximo passo óbvio, e o mais caro: em CPU no
+Pi, e em cuidado para não competir com a face pelos mesmos quatro núcleos.
+
+### O Pi esquenta
+
+Sem ventoinha, a IA local leva o Pi a quase 80 °C em trinta segundos e o
+processador começa a reduzir a frequência. Enquanto não houver cooler, prefira a
+IA de rede para conversas longas.
+
+### O áudio é exclusivo
+
+Com o serviço rodando, nenhum outro processo consegue abrir a placa de som — nem
+`roboteye say`, nem `roboteye doctor`. É preciso parar o serviço para testar a
+voz. Resolver de verdade exigiria um servidor de áudio (PipeWire) rodando o dia
+todo, o que foi considerado caro demais para o que resolve. Veja
+[Solução de problemas](#solução-de-problemas).
+
+### Falta uma segunda voz de licença limpa
+
+A reserva offline em português é a `dii`, cuja licença **não é declarada** pelo
+autor. Para uso além da sala de aula, confirme antes — ou troque para a `faber`
+(CC0, masculina), única voz Piper em pt-BR do catálogo com licença sem dúvida.
 
 ---
 
@@ -717,26 +1023,294 @@ verdade, com o driver `dummy` do SDL.
 
 ## Solução de problemas
 
-**`roboteye doctor` acusa o LLM como inacessível**
-O Ollama só aceita conexões locais por padrão. Para expô-lo na rede, no servidor:
-`OLLAMA_HOST=0.0.0.0 ollama serve`.
+A primeira coisa a rodar é sempre o diagnóstico:
 
-**Não sai som, mas nada dá erro**
-Rode `roboteye doctor` e veja a linha `saida de audio`. No Linux, instale o
-PortAudio: `sudo apt install libportaudio2`. Se ainda assim falhar, o projeto cai
+```bash
+roboteye doctor
+```
+
+Ele confere Python, pygame, voz, saída de áudio e **as duas IAs** em linhas
+separadas. Uma máquina de rede fora do ar aparece como *aviso*, não falha — o
+robô continua conversando pela reserva local.
+
+A maior parte desta seção veio de uma instalação real num Pi 5 com a imagem Lite.
+Vários destes problemas **não dão mensagem de erro**: o robô parece funcionar, e
+o que falha é exatamente o que você foi ver.
+
+### A tela
+
+#### A tela fica preta, mas tudo indica que está funcionando
+
+O sintoma mais traiçoeiro do projeto. O serviço fica `active`, o log diz
+`face iniciada em 800x480`, o kernel mostra o vídeo apontando para a face — e o
+monitor não acende. O console aparece normalmente, então o cabo e a tela estão
+bons.
+
+Falta a biblioteca **`libGL.so.1`**. O SDL não trata isso como erro: registra a
+falha apenas em log de depuração, cria os buffers de vídeo, aceita todo pedido de
+desenho — e não desenha nada.
+
+```bash
+sudo apt install -y libgl1 libopengl0 libglx-mesa0
+```
+
+O que denuncia é a **taxa de quadros**. Se um teste marcar milhares de quadros
+por segundo numa tela de 60 Hz, o SDL está desenhando para lugar nenhum:
+
+```bash
+# 2143 quadros/s = quebrado.  827 quadros/s = desenhando de verdade.
+SDL_LOGGING="video=verbose" python -c "
+import os, time, pygame
+os.environ['SDL_VIDEODRIVER'] = 'kmsdrm'
+pygame.display.init()
+tela = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+n, fim = 0, time.monotonic() + 5
+while time.monotonic() < fim:
+    tela.fill((255, 0, 0)); pygame.display.flip(); n += 1
+print(n / 5, 'quadros por segundo')
+"
+```
+
+Com `SDL_LOGGING` ligado, a linha que importa é
+`Could not initialize OpenGL / GLES library`.
+
+#### `pygame.error: kmsdrm not available`
+
+Duas causas, e vale checar nesta ordem.
+
+**Outro processo está com a tela.** Só um cliente pode ser dono do vídeo por vez.
+Um teste esquecido rodando, ou o próprio serviço, faz o próximo processo falhar —
+e como o serviço tenta reiniciar, ele entra em laço.
+
+```bash
+sudo cat /sys/kernel/debug/dri/1/clients   # quem está com a tela
+sudo systemctl stop roboteye               # libere antes de testar
+```
+
+**O pygame do PyPI não fala KMSDRM.** A roda distribuída no PyPI embute um SDL
+compilado sem esse suporte: funciona em qualquer desktop e falha exatamente no Pi
+sem desktop. Use o pacote do Debian, que usa o SDL do sistema:
+
+```bash
+sudo apt install -y python3-pygame
+sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
+.venv/bin/pip uninstall -y pygame
+```
+
+Para conferir de que lado está o problema:
+
+```bash
+strings /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0 | grep -c KMSDRM   # do sistema: > 0
+strings .venv/lib/python*/site-packages/pygame.libs/libSDL2*.so* | grep -c -i kmsdrm  # da roda: 0
+```
+
+#### `pygame.error: EGL not initialized`
+
+O KMSDRM desenha por EGL, e a imagem Lite não traz essas bibliotecas:
+
+```bash
+sudo apt install -y libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri
+```
+
+#### O erro fala do mouse, não do vídeo
+
+`pygame.error: video system not initialized` apontando para
+`pygame.mouse.set_visible` significa que a **tela não abriu** — a chamada do
+mouse foi só a primeira a reclamar depois. Procure a causa real acima; foi
+corrigido para que o traceback aponte para o lugar certo.
+
+#### O serviço reinicia de 5 em 5 segundos, para sempre
+
+Versões antigas do `roboteye.service` esperavam por `graphical.target` e
+`DISPLAY=:0`. Num Pi Lite esse alvo nunca chega. Reinstale o serviço com
+`./scripts/setup-raspberry-pi.sh --service`.
+
+#### A janela não abre pelo SSH
+
+Se **há** monitor ligado no Pi, a face vai para ele — é o esperado, e o SSH é só
+quem deu a partida. Se não há monitor nenhum, use `roboteye chat`.
+
+### O áudio
+
+#### `doctor` diz que não há dispositivo de saída, mas há
+
+Quase sempre é **o próprio robô**. A saída HDMI é exclusiva: com o serviço
+tocando, nenhum outro processo abre a placa.
+
+```bash
+sudo systemctl stop roboteye
+roboteye doctor
+```
+
+Um servidor de áudio (PipeWire) permitiria os dois ao mesmo tempo, mas é um
+processo rodando o dia todo para resolver um caso que só aparece em teste.
+O `dmix` do ALSA seria a alternativa barata — **e não funciona aqui**: o
+PortAudio não consegue abri-lo neste hardware, falhando com
+`Sample format not supported`.
+
+#### Não sai som, e nada dá erro
+
+Confira a linha `saida de audio` do `doctor`. No Linux, instale o PortAudio:
+`sudo apt install libportaudio2`. Se ainda assim falhar, o projeto cai
 automaticamente para o `aplay`.
 
-**A voz sai picotada**
+No Pi 5 **não existe saída de fone**: o som sai pelo HDMI, e depende de o monitor
+ter alto-falante. Confira o que ele aceita:
+
+```bash
+aplay -l                            # quais placas existem
+cat /proc/asound/card0/eld#0        # o que o monitor declara aceitar
+```
+
+Se ali não aparecer `22050` — e normalmente não aparece —, o ALSA precisa
+converter, porque é nessa taxa que o Piper sintetiza. Sem isso a primeira frase
+falha. Veja o `/etc/asound.conf` no [guia de instalação](#do-cartão-em-branco-ao-robô-ligando-sozinho).
+
+#### A voz sai picotada
+
 A máquina não está sintetizando rápido o bastante. Aumente
 `ROBOTEYE_VOICE_LENGTH_SCALE` para `1.1`–`1.2`, ou use um modelo de voz menor.
 
-**As respostas são longas demais**
+#### A voz reserva ficou arrastada, e baixou centenas de megabytes
+
+Você escolheu uma voz **Kokoro** como reserva (`dora`, `alex`, `heart`). Elas
+soam melhor, mas sintetizam a ~0,25× do tempo real: num Pi, isso troca "sem
+internet" por "fala arrastada", além de 338 MB de modelo.
+
+Deixe `ROBOTEYE_VOICE_FALLBACK` **vazio**: o catálogo escolhe sozinho uma voz
+leve em ARM (`dii`, do Piper, 61 MB e oito vezes mais rápida).
+
+### A inteligência
+
+#### `doctor` acusa a IA de rede como inacessível
+
+O Ollama só aceita conexões locais por padrão. Na máquina que roda a IA, exponha
+na rede com `OLLAMA_HOST=0.0.0.0`. No Windows, isso é uma variável de ambiente do
+usuário **e o Ollama precisa ser reiniciado** para lê-la — confira com
+`Get-NetTCPConnection -LocalPort 11434 -State Listen`: se aparecer `127.0.0.1`,
+ele ainda está fechado.
+
+Lembre também da regra de firewall. E prefira restringi-la ao IP do robô, em vez
+de abrir a porta para a rede inteira.
+
+Enquanto isso não estiver resolvido, o robô continua conversando pela IA local —
+o `doctor` marca a de rede como *aviso*, não como falha.
+
+#### A primeira resposta demora 10 a 30 segundos
+
+Normal, e há duas causas diferentes:
+
+- **na IA de rede**, é o modelo subindo na placa de vídeo (~30 s para um modelo
+  de 8B). Acontece depois de reiniciar o Ollama ou de horas sem uso;
+- **na IA local**, é a persona sendo lida: num Pi, os ~500 tokens dela custam
+  10 s, contra menos de 1 s para escrever a resposta.
+
+As duas são pagas no arranque do robô, de propósito. Se você perguntou nos
+primeiros segundos, esperou junto. Da segunda pergunta em diante são 1–3 s.
+
+#### As respostas são longas demais
+
 Modelos pequenos como o `llama3.2:1b` ignoram instruções de tamanho com alguma
 frequência. Um modelo de 3B para cima obedece bem melhor ao prompt.
 
-**A janela não abre no Raspberry Pi via SSH**
-Não há display. Use `roboteye chat`, ou exporte `DISPLAY=:0` se houver uma sessão
-gráfica ativa na tela do Pi.
+#### O robô ficou "menos esperto" de repente
+
+Provavelmente a IA de rede caiu e a reserva local assumiu — ela é bem menor. O
+robô avisa no log, e o `doctor` mostra qual das duas está de pé.
+
+### O sistema
+
+#### O sistema diz que está sem espaço num cartão grande
+
+O cartão está inteiro lá; o que não foi expandido é a partição. Num cartão de
+32 GB, é comum a raiz ficar com 2 GB e o resto virar uma partição vazia, marcada
+com um tipo qualquer, que ninguém usa.
+
+```bash
+df -h /                  # raiz pequena?
+lsblk                    # e uma partição grande sem ponto de montagem?
+```
+
+Antes de mexer, **confirme que a partição sobrando está vazia** — sem sistema de
+arquivos, fora do `/etc/fstab` e não montada:
+
+```bash
+sudo blkid /dev/mmcblk0p3
+sudo dd if=/dev/mmcblk0p3 bs=512 count=1 2>/dev/null | hexdump -C | head -3
+cat /etc/fstab
+```
+
+Se confirmado, guarde a tabela de partições e expanda a raiz:
+
+```bash
+sudo sfdisk -d /dev/mmcblk0 | sudo tee /boot/firmware/particoes-backup.sfdisk
+sudo sfdisk --delete /dev/mmcblk0 3
+echo ", +" | sudo sfdisk -N 2 --force /dev/mmcblk0
+sudo partx -u /dev/mmcblk0
+sudo resize2fs /dev/mmcblk0p2
+```
+
+Isso mexe na tabela de partições do disco de boot — leia duas vezes antes de
+rodar. `raspi-config` não resolve neste caso, porque ele assume que a raiz é a
+última partição, e aqui não é.
+
+#### `resize2fs: command not found` (e outros comandos que existem)
+
+Um comando por SSH não interativo não recebe `/usr/sbin` no caminho. Não é que o
+programa falte:
+
+```bash
+export PATH=/usr/sbin:/sbin:$PATH
+```
+
+#### A instalação falha compilando algo
+
+O extra `online` traz o `miniaudio`, que não publica pacote pronto para ARM e
+precisa ser compilado. A imagem Lite não tem compilador:
+
+```bash
+sudo apt install -y build-essential python3-dev
+```
+
+#### `sudo` pede senha no meio de um script
+
+O `sudo` guarda a autorização por alguns minutos e depois esquece. Em scripts
+longos ou automação, passe a senha pela entrada padrão (`sudo -S`) ou configure
+`NOPASSWD` conscientemente.
+
+#### O robô esquenta e fica lento
+
+Sem ventoinha, o Pi 5 chega a ~80 °C com a IA local e reduz a frequência:
+
+```bash
+vcgencmd measure_temp
+vcgencmd get_throttled     # 0x0 = nunca limitou
+```
+
+Qualquer bit ligado no segundo comando indica que já houve limitação. A solução é
+física: instale o cooler oficial.
+
+#### `atlas.local` não resolve
+
+Do WSL, o mDNS do Windows não é enxergado — use o IP. No Pi, confira que o
+`avahi-daemon` está rodando; ele é quem responde por esse nome.
+
+### Cuidados ao mexer no robô remotamente
+
+Dois erros de operação que valem aviso, porque não geram mensagem nenhuma:
+
+**`rsync` sem exclusões apaga o que você não queria.** Sincronizar a pasta do
+projeto sem excluir `.venv`, `.git` e `.env` sobrescreve o ambiente virtual do Pi
+(que é ARM) com o da sua máquina, e apaga a configuração do robô. Sempre:
+
+```bash
+rsync -az --exclude '.venv' --exclude '.git' --exclude '.env' \
+      --exclude '__pycache__' --exclude 'models' ./ robo:~/atlas_ai_v2/
+```
+
+**Processos de teste ficam vivos e seguram a tela.** Antes de investigar vídeo,
+confira `sudo cat /sys/kernel/debug/dri/1/clients` — um teste esquecido faz o
+próximo processo falhar e manda você atrás da pista errada.
 
 ---
 

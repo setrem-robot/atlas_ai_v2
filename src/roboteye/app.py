@@ -112,8 +112,14 @@ class Application:
                 self.bus.publish(ErrorOccurred(message=str(exc), source="speech"))
 
             # O LLM aquece em segundo plano: nao ha razao para segurar a face
-            # esperando o modelo subir na GPU.
-            threading.Thread(target=self.llm.warm_up, name="llm-warmup", daemon=True).start()
+            # esperando o modelo subir na GPU. Vai junto a persona, que e o que
+            # a conversa vai usar de verdade — ver `OllamaClient.warm_up`.
+            threading.Thread(
+                target=self.llm.warm_up,
+                args=(self.assistant.memory.build_prompt(),),
+                name="llm-warmup",
+                daemon=True,
+            ).start()
 
     def shutdown(self) -> None:
         """Encerra tudo na ordem inversa da criacao."""
@@ -143,8 +149,16 @@ class Application:
             self.shutdown()
 
     def run_face(self) -> None:
-        """Somente a face animada, sem entrada de texto."""
-        self.start(warm_up=False)
+        """A face animada, sem chat no terminal.
+
+        Aquece assim mesmo. Antes nao aquecia — sem entrada de texto nao havia
+        conversa a preparar —, mas hoje ha: a pagina do celular conversa, e e
+        justamente por ela que alguem fala com o robo instalado. Sem aquecer, a
+        primeira pergunta feita ali pagaria os segundos de carregar o modelo e
+        ler a persona (ver `OllamaClient.warm_up`), que e o custo que este
+        projeto passou a pagar no arranque de proposito.
+        """
+        self.start()
         face = FaceApp(self.settings.face, self.bus, envelope=self.envelope)
         try:
             face.run()

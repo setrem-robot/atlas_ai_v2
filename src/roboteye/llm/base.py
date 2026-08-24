@@ -38,8 +38,13 @@ class LLMClient(Protocol):
         """Indica se o backend esta acessivel (usado pelo comando `doctor`)."""
         ...
 
-    def warm_up(self) -> None:
-        """Prepara conexao e modelo. Deve ser idempotente e nunca levantar."""
+    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
+        """Prepara conexao e modelo. Deve ser idempotente e nunca levantar.
+
+        `messages` sao as mensagens que a conversa vai usar de verdade — na
+        pratica, a persona. Quem consegue reaproveitar o prefixo ja processado
+        deve fazer isso aqui, no arranque, e nao na primeira pergunta.
+        """
         ...
 
     def close(self) -> None:

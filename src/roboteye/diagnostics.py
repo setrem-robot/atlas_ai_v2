@@ -62,7 +62,7 @@ def run_diagnostics(settings: Settings) -> Report:
     report.checks.append(_check_pygame())
     report.checks.extend(_check_voice(settings))
     report.checks.append(_check_audio_output(settings))
-    report.checks.append(_check_llm(settings))
+    report.checks.extend(_check_llm(settings))
     return report
 
 
@@ -235,6 +235,12 @@ def _importable(name: str) -> bool:
 
 
 def _check_audio_output(settings: Settings) -> Check:
+    # Com a voz desligada nao ha o que tocar, e abrir a placa so para dizer que
+    # ela existe torna o diagnostico — e a suite de testes, que roda com
+    # `backend=null` — dependente do hardware da maquina.
+    if settings.voice.engine == "null":
+        return Check("saida de audio", Status.WARN, "nao verificada (voz desativada)")
+
     try:
         import sounddevice as sd
     except (ImportError, OSError) as exc:
@@ -252,39 +258,76 @@ def _check_audio_output(settings: Settings) -> Check:
             "saida de audio",
             Status.FAIL,
             f"nenhum dispositivo de saida ({exc})",
-            "verifique se ha placa de som ativa e se o usuario esta no grupo audio",
+            # A primeira suspeita nao e a placa faltando, e a placa ocupada:
+            # onde a saida e exclusiva (um `hw:` direto no ALSA, sem dmix), o
+            # proprio robo rodando ja e o que impede este comando de abri-la.
+            "se o robo estiver rodando, pare o servico antes (sudo systemctl "
+            "stop roboteye); senao, verifique a placa e o grupo audio",
         )
 
     name = device["name"] if isinstance(device, dict) else str(device)
     return Check("saida de audio", Status.OK, name.strip())
 
 
-def _check_llm(settings: Settings) -> Check:
+def _check_llm(settings: Settings) -> list[Check]:
+    """Verifica a IA — e, se houver reserva local, verifica as duas.
+
+    Uma linha so nao serve quando ha duas maquinas: a que fica de pe esconde a
+    que caiu, e o robo responderia pelo modelo pequeno sem ninguem entender por
+    que ficou menos esperto.
+    """
     from roboteye.llm.factory import create_llm_client
+
+    if settings.llm.backend != "ollama":
+        client = create_llm_client(settings.llm)
+        try:
+            return [Check("LLM", Status.OK, f"backend {client.name}")]
+        finally:
+            client.close()
+
+    fallback = settings.llm.fallback_host and settings.llm.fallback_host != settings.llm.host
+    if not fallback:
+        return [_check_ollama("LLM", settings.llm.host, settings.llm.model, critico=True)]
+
+    principal = _check_ollama("IA de rede", settings.llm.host, settings.llm.model, critico=False)
+    reserva = _check_ollama(
+        "IA local (reserva)",
+        settings.llm.fallback_host,
+        settings.llm.fallback_model or settings.llm.model,
+        # A reserva e a ultima linha: se ela tambem nao esta de pe, uma queda de
+        # rede deixa o robo sem resposta nenhuma, e isso e falha de verdade.
+        critico=principal.status is not Status.OK,
+    )
+    return [principal, reserva]
+
+
+def _check_ollama(nome: str, host: str, modelo: str, *, critico: bool) -> Check:
+    """Um servidor Ollama: esta de pe, e tem o modelo pedido?"""
+    from dataclasses import replace
+
+    from roboteye.config import LLMSettings
     from roboteye.llm.ollama import OllamaClient
 
-    client = create_llm_client(settings.llm)
+    ruim = Status.FAIL if critico else Status.WARN
+    client = OllamaClient(replace(LLMSettings(), host=host, model=modelo))
     try:
         if not client.is_available():
             return Check(
-                "LLM",
-                Status.FAIL,
-                f"{settings.llm.backend} inacessivel em {settings.llm.host}",
+                nome,
+                ruim,
+                f"inacessivel em {host}",
                 "inicie o Ollama (ollama serve) ou use ROBOTEYE_LLM_BACKEND=echo",
             )
 
-        if not isinstance(client, OllamaClient):
-            return Check("LLM", Status.OK, f"backend {client.name}")
-
         models = client.list_models()
-        if settings.llm.model not in models:
+        if modelo not in models:
             available = ", ".join(models[:5]) or "nenhum"
             return Check(
-                "LLM",
-                Status.FAIL,
-                f"modelo {settings.llm.model!r} ausente (ha: {available})",
-                f"ollama pull {settings.llm.model}",
+                nome,
+                ruim,
+                f"modelo {modelo!r} ausente em {host} (ha: {available})",
+                f"ollama pull {modelo}",
             )
-        return Check("LLM", Status.OK, f"{settings.llm.model} em {settings.llm.host}")
+        return Check(nome, Status.OK, f"{modelo} em {host}")
     finally:
         client.close()
