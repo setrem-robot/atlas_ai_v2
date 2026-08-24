@@ -65,15 +65,22 @@ if ! como_dono git fetch --quiet origin "${BRANCH}" 2>/dev/null; then
     fail "não consegui falar com o GitHub (sem rede?)"
 fi
 
-ATUAL="$(git rev-parse HEAD)"
-PUBLICADO="$(git rev-parse "origin/${BRANCH}")"
+ATUAL="$(como_dono git rev-parse HEAD)"
+PUBLICADO="$(como_dono git rev-parse "origin/${BRANCH}")"
+
+# Dois vazios são iguais, e foi assim que a primeira versão deste script
+# anunciou "já estamos na versão publicada" sem ter conseguido ler commit nenhum
+# — um robô que nunca atualiza, dizendo que está em dia.
+if [[ -z "${ATUAL}" || -z "${PUBLICADO}" ]]; then
+    fail "não consegui ler os commits (o git falhou; rode com --help e veja o log acima)"
+fi
 
 if [[ "${ATUAL}" == "${PUBLICADO}" ]] && [[ "${FORCAR}" == false ]]; then
-    log "já estamos na versão publicada ($(git log -1 --format=%s | cut -c1-60))"
+    log "já estamos na versão publicada ($(como_dono git log -1 --format=%s | cut -c1-60))"
     exit 0
 fi
 
-log "versão publicada: $(git log -1 --format='%h %s' "origin/${BRANCH}" | cut -c1-70)"
+log "versão publicada: $(como_dono git log -1 --format='%h %s' "origin/${BRANCH}" | cut -c1-70)"
 
 # --- 2. a Atlas pode ser interrompida? --------------------------------------
 # Quem sabe se ela está no meio de uma frase é o próprio robô, e ele responde
@@ -113,7 +120,7 @@ aplicar() {
 
     # Só reinstala quando as dependências mudaram: `pip install -e` num Pi custa
     # minutos, e a maior parte das atualizações não mexe no pyproject.
-    if ! git diff --quiet "${ATUAL}" "${alvo}" -- pyproject.toml 2>/dev/null; then
+    if ! como_dono git diff --quiet "${ATUAL}" "${alvo}" -- pyproject.toml 2>/dev/null; then
         log "as dependências mudaram; reinstalando (isso demora)"
         como_dono "${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[tts,online]" || return 1
     fi
@@ -144,7 +151,7 @@ saudavel() {
 
 log "aplicando..."
 if aplicar "${PUBLICADO}" && saudavel; then
-    log "no ar: $(git log -1 --format='%h %s' | cut -c1-70)"
+    log "no ar: $(como_dono git log -1 --format='%h %s' | cut -c1-70)"
     exit 0
 fi
 
