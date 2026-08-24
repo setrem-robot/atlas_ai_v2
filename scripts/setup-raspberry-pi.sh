@@ -6,6 +6,7 @@
 #   ./scripts/setup-raspberry-pi.sh                     instalação padrão (pergunta o que falta)
 #   ./scripts/setup-raspberry-pi.sh --bluetooth         também configura áudio Bluetooth
 #   ./scripts/setup-raspberry-pi.sh --service           também instala o serviço systemd
+#   ./scripts/setup-raspberry-pi.sh --branch NOME      branch que o robô segue (padrão: producao)
 #   ./scripts/setup-raspberry-pi.sh --voice dora        usa outra voz
 #   ./scripts/setup-raspberry-pi.sh --ollama IP:PORTA   endereço da máquina com a IA
 #   ./scripts/setup-raspberry-pi.sh --model qwen3:8b    modelo de linguagem
@@ -26,6 +27,9 @@ NO_LLM=false
 ASSUME_YES=false
 WITH_BLUETOOTH=false
 WITH_SERVICE=false
+#: Branch que o robô segue. Deliberadamente NÃO é o `main`: é o que separa
+#: "estou mexendo" de "está no robô".
+UPDATE_BRANCH="producao"
 
 # --- aparência --------------------------------------------------------------
 BOLD=$(tput bold 2>/dev/null || true)
@@ -41,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --bluetooth) WITH_BLUETOOTH=true; shift ;;
         --service)   WITH_SERVICE=true; shift ;;
+        --branch)    UPDATE_BRANCH="${2:?--branch exige um nome}"; shift 2 ;;
         --voice)     VOICE="${2:?--voice exige um nome}"; shift 2 ;;
         --model)     MODEL="${2:?--model exige um nome}"; shift 2 ;;
         --ollama)    OLLAMA_HOST="${2:?--ollama exige um endereço}"; shift 2 ;;
@@ -179,9 +184,40 @@ if [[ "${WITH_SERVICE}" == true ]]; then
     info "instalando serviço systemd..."
     sed -e "s|@USER@|${USER}|g" -e "s|@REPO_DIR@|${REPO_DIR}|g" \
         "${REPO_DIR}/scripts/roboteye.service" | sudo tee "${SERVICE_FILE}" >/dev/null
+
+    # --- atualizador ---------------------------------------------------------
+    # Traz a versão publicada no arranque e quando alguém aperta o botão na
+    # página do celular. Ver `scripts/atualizar.sh`.
+    UPDATE_FILE=/etc/systemd/system/roboteye-update.service
+    sed -e "s|@USER@|${USER}|g" -e "s|@REPO_DIR@|${REPO_DIR}|g" \
+        -e "s|@BRANCH@|${UPDATE_BRANCH}|g" \
+        "${REPO_DIR}/scripts/roboteye-update.service" | sudo tee "${UPDATE_FILE}" >/dev/null
+
+    # O botão da página roda como o usuário do robô, e disparar uma unidade do
+    # systemd exige privilégio. A regra abaixo dá exatamente esse comando, e só
+    # ele: nada de NOPASSWD geral, que transformaria o botão numa porta aberta
+    # para qualquer coisa. `visudo -c` recusa arquivo malformado — sem essa
+    # conferência, um erro de digitação aqui quebraria o `sudo` da máquina
+    # inteira, inclusive o de quem foi consertar.
+    SUDOERS_TMP="$(mktemp)"
+    cat > "${SUDOERS_TMP}" <<SUDO
+# Deixa a página de configuração do RobotEye disparar a atualização.
+${USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block roboteye-update.service
+${USER} ALL=(root) NOPASSWD: /bin/systemctl start --no-block roboteye-update.service
+SUDO
+    if sudo visudo -c -f "${SUDOERS_TMP}" >/dev/null 2>&1; then
+        sudo install -m 0440 -o root -g root "${SUDOERS_TMP}" /etc/sudoers.d/roboteye-update
+        info "botão de atualizar liberado na página"
+    else
+        warn "regra de sudo recusada; o botão de atualizar vai pedir para rodar à mão"
+    fi
+    rm -f "${SUDOERS_TMP}"
+
     sudo systemctl daemon-reload
     sudo systemctl enable roboteye.service
+    sudo systemctl enable roboteye-update.service
     info "serviço instalado. Inicie com: sudo systemctl start roboteye"
+    info "o robô passa a buscar a versão publicada de origin/${UPDATE_BRANCH} no arranque"
 else
     info "serviço systemd não instalado (use --service para o robô subir no boot)"
 fi

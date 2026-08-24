@@ -21,6 +21,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+# Qual branch o robô segue. O setup grava aqui o que foi escolhido em `--branch`.
+Environment=ROBOTEYE_UPDATE_BRANCH=@BRANCH@
 # Root porque reiniciar o `roboteye.service` exige isso. O `git` e o `pip`, o
 # script roda como o dono do repositório: como root, o git recusa a árvore
 # ("dubious ownership") e deixaria arquivos que o usuário não consegue tocar.
