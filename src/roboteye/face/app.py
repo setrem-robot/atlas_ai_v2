@@ -104,8 +104,11 @@ class FaceApp:
         # `set_mode` de 1280x720 ali dentro nao daria uma janela menor, daria a
         # tela toda com a face desenhada num pedaco dela.
         if self._settings.fullscreen or os.environ.get("SDL_VIDEODRIVER") == "kmsdrm":
-            pygame.mouse.set_visible(False)
             self._screen = _open_screen((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF)
+            # Depois do `set_mode`, e nao antes: sem tela aberta esta chamada
+            # levanta "video system not initialized", e o traceback passa a
+            # acusar o mouse quando o problema real e o video que nao subiu.
+            pygame.mouse.set_visible(False)
         else:
             self._screen = _open_screen(
                 (self._settings.width, self._settings.height),
@@ -317,9 +320,11 @@ def _pick_video_driver() -> str | None:
 def _open_screen(size: tuple[int, int], flags: int) -> pygame.Surface:
     """Abre a tela pedindo sincronismo vertical, se o driver souber dar.
 
-    Com vsync o teto de quadros vem do proprio monitor e o rasgo horizontal
-    some, sem custar nada. Nem todo driver aceita — o `dummy` dos testes, por
-    exemplo — e o pygame reclama levantando; ai vale a tela sem ele.
+    Onde funciona, o vsync remove o rasgo horizontal sem custar nada. Nem todo
+    driver aceita: o `dummy` dos testes reclama levantando, e o KMSDRM do Pi
+    aceita sem honrar (medido: 827 quadros/s com e sem, numa tela de 60 Hz).
+    Por isso quem limita a taxa continua sendo o `Clock.tick` — o vsync aqui e
+    um bonus onde houver, nao a garantia.
     """
     try:
         return pygame.display.set_mode(size, flags, vsync=1)

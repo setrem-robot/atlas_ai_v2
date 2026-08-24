@@ -648,6 +648,14 @@ ninguém na frente do teclado:
 | `--bluetooth` | configura áudio Bluetooth |
 | `--yes` | não pergunta nada |
 
+> **Se a tela ficar preta com o robô rodando**, o mais provável é faltar
+> `libGL.so.1` — instale `libgl1 libopengl0 libglx-mesa0` (o
+> `setup-raspberry-pi.sh` já faz). Sem ela o SDL não avisa nada: cria os
+> framebuffers, aceita todo `flip` e não desenha. O sintoma que denuncia é a taxa
+> de quadros — se um teste marcar 2000 quadros/s numa tela de 60 Hz, o SDL está
+> desenhando para lugar nenhum. O erro real só aparece com
+> `SDL_LOGGING="video=verbose"`.
+
 **Sem desktop, e melhor assim.** A imagem Lite não tem X nem Wayland, e a face
 não precisa de nenhum dos dois: ela procura um monitor no DRM e desenha direto na
 tela do kernel (KMSDRM). Não instale um ambiente gráfico só por causa dela — o

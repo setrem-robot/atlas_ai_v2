@@ -235,6 +235,12 @@ def _importable(name: str) -> bool:
 
 
 def _check_audio_output(settings: Settings) -> Check:
+    # Com a voz desligada nao ha o que tocar, e abrir a placa so para dizer que
+    # ela existe torna o diagnostico — e a suite de testes, que roda com
+    # `backend=null` — dependente do hardware da maquina.
+    if settings.voice.engine == "null":
+        return Check("saida de audio", Status.WARN, "nao verificada (voz desativada)")
+
     try:
         import sounddevice as sd
     except (ImportError, OSError) as exc:
@@ -252,7 +258,11 @@ def _check_audio_output(settings: Settings) -> Check:
             "saida de audio",
             Status.FAIL,
             f"nenhum dispositivo de saida ({exc})",
-            "verifique se ha placa de som ativa e se o usuario esta no grupo audio",
+            # A primeira suspeita nao e a placa faltando, e a placa ocupada:
+            # onde a saida e exclusiva (um `hw:` direto no ALSA, sem dmix), o
+            # proprio robo rodando ja e o que impede este comando de abri-la.
+            "se o robo estiver rodando, pare o servico antes (sudo systemctl "
+            "stop roboteye); senao, verifique a placa e o grupo audio",
         )
 
     name = device["name"] if isinstance(device, dict) else str(device)

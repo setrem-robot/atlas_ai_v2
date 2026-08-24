@@ -75,6 +75,9 @@ sudo apt-get install -y --no-install-recommends \
     libsdl2-ttf-2.0-0 \
     libegl1 \
     libgles2 \
+    libgl1 \
+    libopengl0 \
+    libglx-mesa0 \
     libgbm1 \
     libdrm2 \
     alsa-utils \
@@ -91,6 +94,14 @@ sudo apt-get install -y --no-install-recommends \
 #                    o alvo. O pacote do Debian usa o SDL do sistema, que tem.
 #   libegl1/libgles2 o KMSDRM desenha por EGL; sem eles o SDL abre a tela e
 #                    morre com "EGL not initialized".
+#   libgl1/libopengl0  esta foi a mais cara de achar, porque não dá erro
+#                    nenhum: sem libGL.so.1 o SDL registra "Could not
+#                    initialize OpenGL / GLES library" só no log de depuração,
+#                    cria os framebuffers, aceita todo `flip` — e não desenha
+#                    nada. O monitor fica preto com o robô rodando e o kernel
+#                    jurando que está tudo certo. O sintoma que denuncia é a
+#                    taxa de quadros: 2143/s numa tela de 60 Hz é o SDL
+#                    "desenhando" para lugar nenhum.
 #
 # A tela e o teclado do console vêm por estes grupos.
 sudo usermod -aG video,render,input,audio "${USER}" || warn "nao foi possivel ajustar os grupos"
