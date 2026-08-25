@@ -97,6 +97,7 @@ class EdgeEngine:
             text,
             self._speaker,
             rate=self._rate(),
+            pitch=self._pitch(),
             connect_timeout=CONNECT_TIMEOUT,
             receive_timeout=RECEIVE_TIMEOUT,
         )
@@ -119,6 +120,15 @@ class EdgeEngine:
         scale = max(0.1, self._settings.length_scale)
         percent = round((1.0 / scale - 1.0) * 100.0)
         return f"{percent:+d}%"
+
+    def _pitch(self) -> str:
+        """Tom, no formato de Hz por semitom que a API espera.
+
+        Descer o tom e o que mais deixa a voz macia — mais que falar devagar,
+        que soa arrastado. A API fala em Hz; um semitom vale cerca de 12 Hz na
+        faixa de uma voz feminina, que e a aproximacao que ela mesma usa.
+        """
+        return f"{round(self._settings.pitch * 12):+d}Hz"
 
 
 def _imports() -> tuple[Any, Any]:

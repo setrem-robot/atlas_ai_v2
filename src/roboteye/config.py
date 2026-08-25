@@ -250,6 +250,10 @@ class VoiceSettings:
     #: Nome da voz dentro do pacote — so o Kokoro usa.
     speaker: str | None = None
     length_scale: float = 1.0
+    #: Tom da voz online, em semitons. Negativo desce a voz e a deixa mais
+    #: macia; a velocidade quem controla e o `length_scale`. So a voz de rede
+    #: entende isto — o Piper nao expoe controle de tom.
+    pitch: float = 0.0
     noise_scale: float = 0.667
     noise_w: float = 0.8
     #: Placa de som. "auto" procura uma USB antes de aceitar o padrao do
@@ -293,6 +297,7 @@ class VoiceSettings:
             config_path=config_path,
             speaker=_get_optional_str("VOICE_SPEAKER") or spec.speaker,
             length_scale=_get_float("VOICE_LENGTH_SCALE", 1.0, minimum=0.1),
+            pitch=_get_float("VOICE_PITCH", 0.0),
             noise_scale=_get_float("VOICE_NOISE_SCALE", 0.667, minimum=0.0),
             noise_w=_get_float("VOICE_NOISE_W", 0.8, minimum=0.0),
             audio_device=_get_str("AUDIO_DEVICE", "auto"),
@@ -423,6 +428,12 @@ class HearingSettings:
     #: Segundos que a Atlas continua ouvindo depois de ser chamada, aceitando a
     #: pergunta seguinte sem o nome. 0 exige o nome em toda frase.
     janela_s: float = 8.0
+    #: O que ela diz quando chamam o nome e a pergunta nao vem. Sem isso, chamar
+    #: a Atlas e nao ser respondido parece robo quebrado — e quem chamou repete
+    #: o nome em vez de perguntar. Vazio faz ela so esperar, calada.
+    resposta_ao_chamado: str = "Oi?"
+    #: Quanto esperar a pergunta antes de dizer aquilo.
+    espera_do_chamado_s: float = 3.0
 
     @classmethod
     def from_env(cls) -> HearingSettings:
@@ -435,6 +446,8 @@ class HearingSettings:
             device=_get_str("HEARING_DEVICE", "auto"),
             wake_word=_get_str("WAKE_WORD", "atlas"),
             janela_s=_get_float("WAKE_JANELA", 8.0, minimum=0.0),
+            resposta_ao_chamado=_get_str("WAKE_RESPOSTA", "Oi?"),
+            espera_do_chamado_s=_get_float("WAKE_ESPERA", 3.0, minimum=0.5),
         )
 
 

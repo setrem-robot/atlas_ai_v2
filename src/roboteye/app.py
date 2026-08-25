@@ -58,6 +58,8 @@ class Application:
     #: None quando a escuta esta desligada, que e o padrao.
     ears: Ouvido | None = None
     _ouvindo: threading.Thread | None = None
+    #: Relogio do "Oi?" — armado ao ser chamada, cancelado quando a pergunta vem.
+    _chamado: threading.Timer | None = None
 
     # -- construcao --------------------------------------------------------
     @classmethod
@@ -191,9 +193,12 @@ class Application:
                     # Chamada sem pergunta ("Atlas!") abre a janela: a face
                     # mostra que esta esperando, que e o unico jeito de quem
                     # falou saber que foi ouvido antes de fazer a pergunta.
-                    self.bus.publish(ListeningChanged(active=conversa.aberta()))
+                    if conversa.aberta():
+                        self.bus.publish(ListeningChanged(active=True))
+                        self._perguntar_se_ficou_no_ar()
                     continue
                 logger.info("ouvi: %s", pergunta)
+                self._cancelar_pergunta()
                 self.bus.publish(ListeningChanged(active=False))
                 self.assistant.submit(pergunta)
         except HearingError as exc:
@@ -202,9 +207,45 @@ class Application:
         except Exception:
             logger.exception("a escuta parou")
 
+    def _perguntar_se_ficou_no_ar(self) -> None:
+        """Diz "Oi?" se chamarem o nome e a pergunta nao vier.
+
+        Ser chamada e nao responder nada parece robo quebrado — e quem chamou
+        repete o nome, em vez de perguntar. Um "Oi?" fecha esse silencio.
+        """
+        frase = self.settings.hearing.resposta_ao_chamado.strip()
+        if not frase:
+            return
+
+        self._cancelar_pergunta()
+        timer = threading.Timer(
+            self.settings.hearing.espera_do_chamado_s,
+            self._dizer_oi,
+            args=(frase,),
+        )
+        timer.daemon = True
+        self._chamado = timer
+        timer.start()
+
+    def _cancelar_pergunta(self) -> None:
+        if self._chamado is not None:
+            self._chamado.cancel()
+            self._chamado = None
+
+    def _dizer_oi(self, frase: str) -> None:
+        # A pergunta pode ter chegado enquanto o relogio corria; responder
+        # "Oi?" por cima dela seria falar junto com quem perguntou.
+        if self.assistant.is_busy:
+            return
+        try:
+            self.assistant.say_directly(frase)
+        except Exception as exc:
+            logger.debug("nao consegui responder ao chamado: %s", exc)
+
     def shutdown(self) -> None:
         """Encerra tudo na ordem inversa da criacao."""
         logger.debug("encerrando aplicacao")
+        self._cancelar_pergunta()
         if self.ears is not None:
             self.ears.close()
         self.assistant.close()
