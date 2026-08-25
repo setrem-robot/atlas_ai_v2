@@ -27,6 +27,7 @@ Atlas> Sou a Atlas, um robô construído aqui na Setrem. Ainda estou aprendendo.
 - [Configuração](#configuração)
 - [Arquitetura](#arquitetura)
 - [Raspberry Pi](#raspberry-pi)
+- [Publicando no robô](#publicando-no-robô)
 - [Falando com ela](#falando-com-ela)
 - [O que falta](#o-que-falta)
 - [Desenvolvimento](#desenvolvimento)
@@ -959,6 +960,46 @@ não reescreve o arquivo.
 > cinco erros. Ele impede que alguém que descubra a porta mexa no robô — não
 > substitui pôr o robô numa rede separada. Para fechar totalmente, use
 > `ROBOTEYE_WEB_HOST=127.0.0.1` ou `ROBOTEYE_WEB_ENABLED=false`.
+
+---
+
+## Publicando no robô
+
+O robô se atualiza sozinho, e **não** segue o `main`. Ele segue um branch de
+publicação, `producao`, e a diferença entre os dois é o que separa "estou
+mexendo" de "está no robô":
+
+```bash
+git push origin main                # trabalha à vontade, quebra, conserta
+git push origin main:producao       # ← só isto chega no robô
+```
+
+Publicado, o robô traz a versão nova **no próximo arranque** ou quando alguém
+apertar **Atualizar** na página do celular. Não há verificação periódica de
+propósito: um robô que se reinicia sozinho no meio de uma apresentação é pior que
+um robô desatualizado.
+
+Quem procura o GitHub é o Pi, nunca o contrário — então isso funciona atrás de
+qualquer firewall de faculdade, sem porta aberta, sem túnel e sem runner.
+
+**Se a versão nova não subir, ele volta sozinho para a anterior.** Não basta o
+systemd dizer `active`: um serviço reiniciando em laço também passa por isso
+entre as tentativas, então a prova é a página respondendo, duas vezes com folga.
+Falhando, o robô volta ao commit anterior, reinstala o que precisar e reinicia.
+
+Antes de reiniciar, ele pergunta a si mesmo se está no meio de uma resposta e
+espera até 45 s — ninguém quer a face sumindo no meio de uma frase.
+
+Para acompanhar:
+
+```bash
+journalctl -u roboteye-update -f
+```
+
+O `.env`, os modelos de voz e de escuta e o ambiente Python ficam de fora do
+processo. Mas atenção: o repositório no robô é um **espelho** do publicado, não um
+lugar de trabalho — a atualização descarta qualquer alteração local que você
+tenha feito lá.
 
 ---
 
