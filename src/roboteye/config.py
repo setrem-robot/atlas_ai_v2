@@ -161,6 +161,8 @@ LLM_BACKENDS: Final = frozenset({"ollama", "echo"})
 TTS_BACKENDS: Final = frozenset({"auto", "piper", "kokoro", "edge", "null"})
 #: Niveis de esforco do desenho da face.
 FACE_QUALITIES: Final = frozenset({"auto", "low", "medium", "high"})
+#: Motores de reconhecimento de fala.
+HEARING_BACKENDS: Final = frozenset({"whisper", "vosk", "null"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,6 +393,42 @@ class FaceSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class HearingSettings:
+    """Microfone e reconhecimento de fala."""
+
+    #: Desligada por padrao: um microfone aberto e uma decisao de quem monta o
+    #: robo, nao algo que se liga sozinho ao instalar.
+    enabled: bool = False
+    #: "whisper" entende muito melhor que "vosk" — e a diferenca decide quando
+    #: quem fala com o robo sao criancas. Ver `hearing/whisper_ears.py`.
+    backend: str = "whisper"
+    #: Tamanho do modelo Whisper: "tiny" (mais rapido) ou "base" (melhor). Num
+    #: Pi 5, medidos a 0,35x e 0,59x do tempo real.
+    model: str = "base"
+    #: Onde os modelos ficam. O Whisper baixa o seu na primeira vez.
+    model_path: Path = field(default_factory=lambda: MODELS_DIR / "escuta")
+    #: Nucleos para transcrever. Um fica de fora para a face nao engasgar.
+    cpu_threads: int = 3
+    #: Microfone. "auto" procura uma placa USB; ver `speech/devices.py`.
+    device: str = "auto"
+    #: Nome que acorda o robo. Vazio faz ele responder a tudo que ouvir — util
+    #: para testar, ruim numa sala com gente conversando.
+    wake_word: str = "atlas"
+
+    @classmethod
+    def from_env(cls) -> HearingSettings:
+        return cls(
+            enabled=_get_bool("HEARING_ENABLED", False),
+            backend=_get_choice("HEARING_BACKEND", "whisper", HEARING_BACKENDS),
+            model=_get_str("HEARING_MODEL_SIZE", "base"),
+            model_path=_resolve_path(_get_str("HEARING_MODEL_DIR", "models/escuta")),
+            cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),
+            device=_get_str("HEARING_DEVICE", "auto"),
+            wake_word=_get_str("WAKE_WORD", "atlas"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class WebSettings:
     """Pagina de configuracao servida pelo robo."""
 
@@ -418,6 +456,7 @@ class Settings:
     llm: LLMSettings = field(default_factory=LLMSettings)
     voice: VoiceSettings = field(default_factory=VoiceSettings)
     face: FaceSettings = field(default_factory=FaceSettings)
+    hearing: HearingSettings = field(default_factory=HearingSettings)
     web: WebSettings = field(default_factory=WebSettings)
     log_level: str = "INFO"
 
@@ -439,6 +478,7 @@ class Settings:
             llm=LLMSettings.from_env(default_language=voice.language),
             voice=voice,
             face=FaceSettings.from_env(),
+            hearing=HearingSettings.from_env(),
             web=WebSettings.from_env(),
             log_level=_get_str("LOG_LEVEL", "INFO").upper(),
         )

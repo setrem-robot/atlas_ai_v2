@@ -13,8 +13,17 @@ from types import TracebackType
 
 from roboteye.config import Settings
 from roboteye.core.assistant import Assistant
-from roboteye.core.events import ErrorOccurred, Event, EventBus, Notice, Shutdown
+from roboteye.core.events import (
+    ErrorOccurred,
+    Event,
+    EventBus,
+    Notice,
+    Shutdown,
+    SpeechFinished,
+    SpeechStarted,
+)
 from roboteye.face.app import FaceApp
+from roboteye.hearing import HearingError, Ouvido, create_ears, dirigido_ao_robo
 from roboteye.llm.base import LLMClient
 from roboteye.llm.factory import create_llm_client
 from roboteye.llm.memory import ConversationMemory
@@ -44,6 +53,9 @@ class Application:
     #: Ponte entre o audio que toca e a face que o anima. O locutor escreve,
     #: a face le; e por isso que ele nasce aqui, e nao dentro de um dos dois.
     envelope: SpeechEnvelope
+    #: None quando a escuta esta desligada, que e o padrao.
+    ears: Ouvido | None = None
+    _ouvindo: threading.Thread | None = None
 
     # -- construcao --------------------------------------------------------
     @classmethod
@@ -96,6 +108,7 @@ class Application:
             speaker=speaker,
             assistant=assistant,
             envelope=envelope,
+            ears=create_ears(settings.hearing),
         )
 
     # -- ciclo de vida -----------------------------------------------------
@@ -121,9 +134,45 @@ class Application:
                 daemon=True,
             ).start()
 
+        self._abrir_ouvidos()
+
+    def _abrir_ouvidos(self) -> None:
+        """Poe o robo para escutar, se houver microfone configurado."""
+        if self.ears is None or self._ouvindo is not None:
+            return
+
+        # A Atlas nao pode se ouvir: o microfone esta a centimetros da caixinha,
+        # e sem isto ela transcreve a propria voz e responde a si mesma, em laco.
+        # Os eventos de fala ja existem — so faltava alguem escutar por eles.
+        ouvido = self.ears
+        self.bus.subscribe(lambda _e: ouvido.pausar(), event_type=SpeechStarted)
+        self.bus.subscribe(lambda _e: ouvido.retomar(), event_type=SpeechFinished)
+
+        self._ouvindo = threading.Thread(target=self._escutar, name="ouvidos", daemon=True)
+        self._ouvindo.start()
+
+    def _escutar(self) -> None:
+        """Roda a escuta e entrega ao assistente o que foi dirigido ao robo."""
+        assert self.ears is not None
+        try:
+            for ouvido in self.ears.escutar():
+                pergunta = dirigido_ao_robo(ouvido, self.settings.hearing.wake_word)
+                if pergunta is None:
+                    logger.debug("ouvi %r, mas nao era comigo", ouvido)
+                    continue
+                logger.info("ouvi: %s", pergunta)
+                self.assistant.submit(pergunta)
+        except HearingError as exc:
+            logger.warning("escuta indisponivel: %s", exc)
+            self.bus.publish(ErrorOccurred(message=str(exc), source="hearing"))
+        except Exception:
+            logger.exception("a escuta parou")
+
     def shutdown(self) -> None:
         """Encerra tudo na ordem inversa da criacao."""
         logger.debug("encerrando aplicacao")
+        if self.ears is not None:
+            self.ears.close()
         self.assistant.close()
         self.speaker.close()
 

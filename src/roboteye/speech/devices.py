@@ -105,13 +105,70 @@ def _primeira_placa_usb(taxa: int) -> int | None:
     return None
 
 
-def _aceita(indice: int, taxa: int) -> bool:
+def _aceita(indice: int, taxa: int, *, entrada: bool = False) -> bool:
+    """Se da para abrir esta placa nesta taxa.
+
+    Abre de verdade, em vez de perguntar ao `check_*_settings`: no microfone
+    deste robo o `check` aprova 16000 Hz e a abertura falha com
+    `Invalid sample rate` — e quem descobre isso e o robo, no arranque, quando
+    ninguem esta olhando. Abrir e fechar custa milissegundos e acontece uma vez.
+    """
     try:
         import sounddevice as sd
 
-        sd.check_output_settings(device=indice, samplerate=taxa)
+        classe = sd.RawInputStream if entrada else sd.RawOutputStream
+        with classe(samplerate=taxa, device=indice, dtype="int16", channels=1):
+            pass
     except Exception:
         # Qualquer recusa — taxa, canais, dispositivo sumido — significa a mesma
         # coisa aqui: esta placa nao serve, procure outra.
         return False
     return True
+
+
+#: Taxa que o reconhecimento de fala pede. Como na saida, placas USB baratas
+#: costumam recusa-la — gravam so a 44100/48000.
+TAXA_DE_ESCUTA = 16000
+
+
+def resolver_entrada(preferencia: str | None, *, taxa: int = TAXA_DE_ESCUTA) -> str | int | None:
+    """O mesmo que `resolver_saida`, para o microfone.
+
+    A mesma armadilha vale aqui, e custou um `Invalid sample rate` para ser
+    lembrada: a C-Media deste robo grava a 44100 e 48000, e o reconhecimento
+    pede 16000. Falar com a placa direto significa gravar nada; pelo padrao do
+    sistema, o `plug` do ALSA converte e o microfone funciona.
+    """
+    if preferencia is None or not preferencia.strip():
+        return None
+
+    escolha = preferencia.strip()
+    if escolha.isdigit():
+        return int(escolha)
+    if escolha.lower() != AUTO:
+        return escolha
+
+    try:
+        dispositivos = _listar()
+    except Exception as exc:
+        logger.debug("nao consegui listar dispositivos de audio: %s", exc)
+        return None
+
+    for indice, dispositivo in enumerate(dispositivos):
+        nome = str(dispositivo.get("name", ""))
+        if dispositivo.get("max_input_channels", 0) <= 0:
+            continue
+        if any(apelido in nome.lower() for apelido in _APELIDOS):
+            continue
+        if "usb" not in nome.lower():
+            continue
+        if not _aceita(indice, taxa, entrada=True):
+            logger.info(
+                "%s nao grava a %d Hz; deixando o ALSA converter pelo padrao do sistema",
+                nome,
+                taxa,
+            )
+            continue
+        logger.info("microfone escolhido: %s", nome)
+        return indice
+    return None

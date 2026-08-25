@@ -62,6 +62,7 @@ def run_diagnostics(settings: Settings) -> Report:
     report.checks.append(_check_pygame())
     report.checks.extend(_check_voice(settings))
     report.checks.append(_check_audio_output(settings))
+    report.checks.append(_check_hearing(settings))
     report.checks.extend(_check_llm(settings))
     return report
 
@@ -296,6 +297,49 @@ def _para_onde(nome: str) -> str:
     except OSError:
         etiqueta = f"card {placa}"
     return f" -> {etiqueta} (hw:{placa})"
+
+
+def _check_hearing(settings: Settings) -> Check:
+    """A escuta: ligada? modelo baixado? o pacote instalado?"""
+    ouvidos = settings.hearing
+    if not ouvidos.enabled:
+        return Check("escuta", Status.WARN, "desligada (ROBOTEYE_HEARING_ENABLED)")
+
+    pacote, dica = (
+        ("faster_whisper", "faster-whisper")
+        if ouvidos.backend == "whisper"
+        else ("vosk", "vosk")
+    )
+    try:
+        __import__(pacote)
+    except ImportError:
+        return Check(
+            "escuta",
+            Status.FAIL,
+            f"o pacote {dica} nao esta instalado",
+            'pip install -e ".[stt]"',
+        )
+
+    if ouvidos.backend == "vosk" and not _tem_modelo_vosk(ouvidos.model_path / "vosk-pt"):
+        # `final.mdl` e o coracao do modelo: uma pasta sem ele e um download
+        # interrompido, que so falharia no primeiro "oi" de alguem. Fica na raiz
+        # nos modelos pequenos e dentro de `am/` nos grandes.
+        return Check(
+            "escuta",
+            Status.FAIL,
+            f"modelo ausente em {ouvidos.model_path / 'vosk-pt'}",
+            "./scripts/baixar-modelo-escuta.sh --vosk",
+        )
+
+    gatilho = ouvidos.wake_word or "(responde a tudo que ouvir)"
+    detalhe = ouvidos.backend
+    if ouvidos.backend == "whisper":
+        detalhe = f"whisper {ouvidos.model}"
+    return Check("escuta", Status.OK, f"{detalhe}, acorda com: {gatilho}")
+
+
+def _tem_modelo_vosk(pasta) -> bool:
+    return (pasta / "final.mdl").is_file() or (pasta / "am" / "final.mdl").is_file()
 
 
 def _check_llm(settings: Settings) -> list[Check]:

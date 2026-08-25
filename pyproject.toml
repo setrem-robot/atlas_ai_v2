@@ -50,6 +50,12 @@ online = [
     "miniaudio>=1.59",
     "sounddevice>=0.4.6",
 ]
+# Reconhecimento de fala offline, em portugues. Wheel para aarch64 existe, e o
+# modelo (52 MB) vem a parte: `./scripts/baixar-modelo-escuta.sh`.
+stt = [
+    "vosk>=0.3.45",
+    "sounddevice>=0.4.6",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
