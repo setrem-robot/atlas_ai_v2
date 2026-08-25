@@ -177,6 +177,11 @@ class LLMSettings:
     reply_language: str = "en"
     #: Teto de tokens por resposta. O robo fala, nao redige.
     max_tokens: int = 120
+    #: Primeira coisa que o robo diz ao ligar. Serve de prova de vida: se sair
+    #: som, a caixinha, o volume e o motor de voz estao todos de pe — e quem
+    #: montou o robo descobre isso na hora, nao na frente da plateia. Vazio
+    #: desliga a saudacao.
+    saudacao: str = "Oi oi, acordei!"
     #: Nome da persona (arquivo `<nome>.md` dentro de `persona_dir`).
     persona: str = "atlas"
     persona_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "persona")
@@ -205,6 +210,7 @@ class LLMSettings:
             history_messages=_get_int("LLM_HISTORY", 8, minimum=0),
             reply_language=_get_str("REPLY_LANGUAGE", default_language).lower(),
             max_tokens=_get_int("LLM_MAX_TOKENS", 120, minimum=16),
+            saudacao=_get_str("SAUDACAO", "Oi oi, acordei!"),
             persona=_get_str("PERSONA", "atlas"),
             persona_dir=_resolve_path(_get_str("PERSONA_DIR", "persona")),
             fallback_host=_get_str("LLM_FALLBACK_HOST", "").rstrip("/"),

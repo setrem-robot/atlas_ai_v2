@@ -41,6 +41,18 @@ class UserMessage(Event):
 
 
 @dataclass(frozen=True, slots=True)
+class ListeningChanged(Event):
+    """O robo passou a ouvir alguem, ou parou.
+
+    Existe para a face mostrar isso. Sem sinal nenhum, quem fala com o robo nao
+    tem como saber se foi ouvido — e a duvida faz a pessoa repetir a pergunta
+    por cima da resposta que ja estava vindo.
+    """
+
+    active: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ThinkingStarted(Event):
     """O LLM comecou a processar uma mensagem."""
 

@@ -20,6 +20,21 @@ Três detalhes decidem se isso funciona ou irrita:
 - **o ruído da sala não pode virar pergunta.** Trechos curtos demais são
   descartados sem chegar ao reconhecimento.
 
+**O zumbido precisa sair antes de medir qualquer coisa.** Medido no robô: a
+energia entre 20 e 150 Hz chegava a ser 40 vezes maior que a da banda da voz —
+zumbido da rede elétrica e do próprio dongle USB, não som da sala. Ele domina o
+RMS, e o efeito prático é que fala e silêncio medem exatamente igual (1,00x de
+separação): nenhum limiar consegue distinguir os dois, e o robô fica surdo com o
+microfone funcionando. Um passa-alta simples resolve, e de quebra limpa o que vai
+para o reconhecimento — nada abaixo de 150 Hz é voz.
+
+**A placa manda na taxa.** O reconhecimento pede 16 kHz, e nem toda placa grava
+nessa taxa: a C-Media deste robô só faz 44,1 e 48 kHz. Normalmente o `plug` do
+ALSA converteria, mas com `dsnoop` no caminho — necessário para a caixinha e o
+microfone dividirem a mesma placa — ele deixa de anunciar 16 kHz, e a abertura
+morre com `Invalid sample rate`. Em vez de depender da configuração do sistema
+acertar isso, o microfone abre na taxa que a placa aceitar e converte no código.
+
 **O limiar não pode ser um número fixo.** Foi, e não funcionou: o ruído de fundo
 medido no robô de produção (0,042) era o dobro do limiar escolhido no escritório
 (0,02), então o silêncio da sala contava como fala. O robô gravava trechos de 15
@@ -32,6 +47,7 @@ from __future__ import annotations
 
 import contextlib
 import queue
+import time
 from collections import deque
 from collections.abc import Iterator
 
@@ -48,6 +64,45 @@ TAXA = 16000
 #: Tamanho do bloco lido do microfone: 30 ms. É a resolução com que o silêncio é
 #: medido, e o que define quão fino dá para cortar.
 BLOCO = 480
+
+#: Abaixo disto não há voz — só zumbido de rede, vibração de mesa e ruído do
+#: próprio conversor USB. A voz humana começa perto de 85 Hz nos graves, mas o
+#: que carrega a inteligibilidade (e o que o reconhecimento usa) mora acima de
+#: 300; cortar em 150 tira o zumbido inteiro sem tocar na fala.
+CORTE_GRAVES_HZ = 150.0
+
+
+class PassaAlta:
+    """Filtro de primeira ordem, aplicado bloco a bloco.
+
+    Guarda o estado entre blocos porque o áudio chega em pedaços: reiniciar o
+    filtro a cada bloco produziria um degrau de 30 em 30 ms, que é exatamente o
+    tipo de coisa que o detector de fala leria como alguém falando.
+    """
+
+    def __init__(self, corte_hz: float, taxa: int) -> None:
+        rc = 1.0 / (2.0 * np.pi * corte_hz)
+        dt = 1.0 / taxa
+        self._a = rc / (rc + dt)
+        self._x_anterior = 0.0
+        self._y_anterior = 0.0
+
+    def aplicar(self, bloco: np.ndarray) -> np.ndarray:
+        # y[n] = a * (y[n-1] + x[n] - x[n-1]) — a forma padrão do passa-alta RC
+        # discreto. Em Python puro seria lento demais para 16 000 amostras por
+        # segundo; o `lfilter` do numpy não existe, então a recorrência vai num
+        # laço sobre o bloco, que a 480 amostras é barato.
+        a = self._a
+        saida = np.empty_like(bloco)
+        y = self._y_anterior
+        x_ant = self._x_anterior
+        for i, x in enumerate(bloco):
+            y = a * (y + x - x_ant)
+            x_ant = x
+            saida[i] = y
+        self._y_anterior = float(y)
+        self._x_anterior = float(x_ant)
+        return saida
 
 
 class Microfone:
@@ -76,6 +131,7 @@ class Microfone:
         #: O que veio antes de o som subir. 300 ms bastam para a primeira sílaba.
         self._antes: deque[np.ndarray] = deque(maxlen=10)
 
+        self._filtro = PassaAlta(CORTE_GRAVES_HZ, TAXA)
         self._blocos: queue.Queue[np.ndarray | None] = queue.Queue(maxsize=200)
         self._pausado = False
         self._fechado = False
@@ -104,12 +160,23 @@ class Microfone:
             # Enquanto a Atlas fala, tudo o que chega é a própria voz dela.
             if self._pausado:
                 return
+            bloco = entrada[:, 0]
+            if fator > 1:
+                # Média de cada grupo, não descarte de amostras: descartar
+                # rebate as frequências altas para dentro da fala e o
+                # reconhecimento piora justamente nas vozes agudas — as das
+                # crianças, que são quem vai falar com este robô.
+                n = (len(bloco) // fator) * fator
+                bloco = bloco[:n].reshape(-1, fator).mean(axis=1)
+            # O filtro entra aqui, antes de tudo: o mesmo áudio limpo é o que
+            # alimenta a medição de energia e o reconhecimento.
             with contextlib.suppress(queue.Full):
-                self._blocos.put_nowait(entrada[:, 0].copy())
+                self._blocos.put_nowait(self._filtro.aplicar(bloco))
 
+        taxa, fator = self._negociar_taxa(sd)
         with sd.InputStream(
-            samplerate=TAXA,
-            blocksize=BLOCO,
+            samplerate=taxa,
+            blocksize=BLOCO * fator,
             device=self._device,
             dtype="float32",
             channels=1,
@@ -120,6 +187,32 @@ class Microfone:
             logger.info("escutando pelo microfone (limiar %.4f)", self._limiar)
             yield from self._cortar_em_frases()
 
+    def _negociar_taxa(self, sd) -> tuple[int, int]:
+        """Descobre em que taxa dá para gravar, e de quanto é a conversão.
+
+        Só taxas múltiplas de 16 kHz entram na lista: a conversão vira uma média
+        de N amostras, exata e barata. Uma taxa qualquer exigiria reamostragem
+        de verdade, e nenhuma placa comum obriga a isso.
+        """
+        for taxa in (TAXA, 32000, 48000):
+            fator = taxa // TAXA
+            try:
+                with sd.InputStream(
+                    samplerate=taxa,
+                    blocksize=BLOCO * fator,
+                    device=self._device,
+                    dtype="float32",
+                    channels=1,
+                ):
+                    pass
+            except Exception:
+                continue
+            if fator > 1:
+                logger.info("o microfone grava a %d Hz; convertendo para %d", taxa, TAXA)
+            return taxa, fator
+
+        raise HearingError("o microfone nao grava em nenhuma taxa util (16000, 32000 ou 48000 Hz)")
+
     def _medir_a_sala(self) -> None:
         """Escolhe o limiar a partir do ruído que esta sala realmente tem.
 
@@ -128,6 +221,22 @@ class Microfone:
         falando a um metro passar. O piso existe para uma sala anecoica não
         deixar o limiar em zero, onde qualquer estalo acordaria o robô.
         """
+        # A saudacao de arranque fala justamente agora, e falar pausa a escuta —
+        # entao os primeiros segundos nao tem bloco nenhum para medir. Esperar
+        # ela terminar e a diferenca entre calibrar com a sala e cair no valor
+        # de emergencia, que e baixo demais e faz o robo gravar o proprio
+        # silencio o dia inteiro.
+        esperou = 0.0
+        while self._pausado and esperou < 20.0 and not self._fechado:
+            time.sleep(0.2)
+            esperou += 0.2
+        if esperou:
+            logger.debug("esperei %.1fs a Atlas terminar de falar para medir a sala", esperou)
+        # O que entrou na fila enquanto ela falava nao serve de amostra.
+        with contextlib.suppress(queue.Empty):
+            while True:
+                self._blocos.get_nowait()
+
         amostras: list[float] = []
         while len(amostras) < 30:
             try:

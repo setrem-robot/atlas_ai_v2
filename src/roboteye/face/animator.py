@@ -269,6 +269,8 @@ class EyeAnimator:
             self._begin_thinking()
         elif activity is Expression.SPEAKING:
             self._begin_speaking()
+        elif activity is Expression.LISTENING:
+            self._begin_listening()
         elif previous is not None:
             # Voltou ao repouso: o olhar desce de volta ao centro.
             self._look_at(0.0, 0.0, duration=0.22)
@@ -320,6 +322,11 @@ class EyeAnimator:
     @property
     def is_sleeping(self) -> bool:
         return self._sleeping
+
+    @property
+    def activity(self) -> Expression | None:
+        """A atividade imposta agora (pensar, falar, ouvir), ou None."""
+        return self._activity
 
     @property
     def current_expression(self) -> Expression:
@@ -596,6 +603,11 @@ class EyeAnimator:
         self._look_at(self._gaze_x.value, THINKING_ANTICIPATION, THINKING_ANTICIPATION_DURATION)
         self._gaze_clock = 0.0
         self._next_gaze = THINKING_ANTICIPATION_DURATION
+
+    def _begin_listening(self) -> None:
+        """Olha para frente e para de vaguear: o robo esta prestando atencao."""
+        self._look_at(0.0, 0.0, 0.16)
+        self._gaze_clock = 0.0
 
     def _begin_speaking(self) -> None:
         """Um pequeno salto de escala no instante em que a voz comeca."""

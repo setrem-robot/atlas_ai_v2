@@ -5,6 +5,9 @@
 # Existe porque duas coisas do áudio no Raspberry Pi não têm padrão bom:
 #
 #   - a saída padrão é o HDMI, que só toca se a tela tiver alto-falante;
+#   - o NÚMERO da placa muda entre reinicializações (o dongle USB deste robô já
+#     foi card 2 e virou card 0 num reboot), então gravar o número numa
+#     configuração é gravar algo que vai apontar para a placa errada um dia;
 #   - placas USB baratas chegam com o volume em ~30% e o ganho do microfone em
 #     zero, o que faz o robô parecer mudo e surdo mesmo com tudo instalado.
 #
@@ -74,6 +77,19 @@ else
     log "usando a placa ${CARD}: $(aplay -l 2>/dev/null | grep -E "^card ${CARD}" | head -1 | sed -E 's/.*\[([^]]+)\].*/\1/')"
 fi
 
+# O número da placa é do boot atual; o nome é da placa. Escrever o nome é o que
+# faz esta configuração sobreviver a uma reinicialização que renumere as placas
+# — coisa que já aconteceu neste robô, e que se manifesta como "o som sumiu
+# sozinho" na manhã seguinte.
+NOME_PLACA="$(sed -nE "s/^ *${CARD} \[([^ ]+) *\].*/\1/p" /proc/asound/cards | head -1)"
+if [[ -n "${NOME_PLACA}" ]]; then
+    ALVO="hw:CARD=${NOME_PLACA},DEV=0"
+    log "identificada pelo nome (${NOME_PLACA}), imune a renumeração"
+else
+    ALVO="hw:${CARD},0"
+    warn "não achei o nome da placa; usando o número, que pode mudar no reboot"
+fi
+
 # --- escrever o padrão do sistema -------------------------------------------
 # Três camadas, e cada uma resolve um problema que já quebrou este robô:
 #
@@ -106,7 +122,7 @@ pcm.roboteye_dmix {
     ipc_key 3021
     ipc_perm 0666
     slave {
-        pcm "hw:${CARD},0"
+        pcm "${ALVO}"
         rate 48000
         channels 2
         period_size 1024
@@ -124,7 +140,7 @@ pcm.roboteye_dsnoop {
     ipc_key 3022
     ipc_perm 0666
     slave {
-        pcm "hw:${CARD},0"
+        pcm "${ALVO}"
         rate 48000
         channels 1
         period_size 1024
@@ -137,7 +153,7 @@ ctl.!default {
     card ${CARD}
 }
 EOF
-log "${ALSA_CONF}: saída e microfone compartilhados em hw:${CARD},0"
+log "${ALSA_CONF}: saída e microfone compartilhados em ${ALVO}"
 
 # --- volumes ----------------------------------------------------------------
 # Nomes de controle variam entre placas; tentar vários e ignorar o que não

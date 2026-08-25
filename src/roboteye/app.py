@@ -17,6 +17,7 @@ from roboteye.core.events import (
     ErrorOccurred,
     Event,
     EventBus,
+    ListeningChanged,
     Notice,
     Shutdown,
     SpeechFinished,
@@ -136,6 +137,28 @@ class Application:
             ).start()
 
         self._abrir_ouvidos()
+        self._dar_bom_dia()
+
+    def _dar_bom_dia(self) -> None:
+        """Fala a primeira frase, se houver uma configurada.
+
+        Numa thread porque a sintese da primeira frase carrega o motor de voz, e
+        segurar o arranque nela deixaria a tela preta por segundos.
+        """
+        frase = self.settings.llm.saudacao.strip()
+        if not frase:
+            return
+
+        def falar() -> None:
+            try:
+                self.assistant.say_directly(frase)
+            except Exception as exc:
+                # Sem passar pelo LLM: e uma frase fixa, e ela precisa sair
+                # mesmo com a IA fora do ar. Falhando, o robo sobe calado — o
+                # que ja e a informacao que a saudacao existe para dar.
+                logger.warning("nao consegui dar bom dia: %s", exc)
+
+        threading.Thread(target=falar, name="saudacao", daemon=True).start()
 
     def _abrir_ouvidos(self) -> None:
         """Poe o robo para escutar, se houver microfone configurado."""
@@ -165,8 +188,13 @@ class Application:
                 )
                 if pergunta is None:
                     logger.debug("ouvi %r, mas nao era comigo", ouvido)
+                    # Chamada sem pergunta ("Atlas!") abre a janela: a face
+                    # mostra que esta esperando, que e o unico jeito de quem
+                    # falou saber que foi ouvido antes de fazer a pergunta.
+                    self.bus.publish(ListeningChanged(active=conversa.aberta()))
                     continue
                 logger.info("ouvi: %s", pergunta)
+                self.bus.publish(ListeningChanged(active=False))
                 self.assistant.submit(pergunta)
         except HearingError as exc:
             logger.warning("escuta indisponivel: %s", exc)

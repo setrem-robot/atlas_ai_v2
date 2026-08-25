@@ -24,6 +24,7 @@ class Expression(Enum):
     SLEEP = "sleep"
     THINKING = "thinking"
     SPEAKING = "speaking"
+    LISTENING = "listening"
 
     @property
     def is_mood(self) -> bool:
@@ -52,7 +53,7 @@ _MOODS = frozenset(
     }
 )
 
-_ACTIVITIES = frozenset({Expression.THINKING, Expression.SPEAKING})
+_ACTIVITIES = frozenset({Expression.THINKING, Expression.SPEAKING, Expression.LISTENING})
 
 _TRANSIENT = frozenset({Expression.LAUGH, Expression.DIZZY})
 

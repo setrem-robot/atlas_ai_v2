@@ -131,6 +131,11 @@ THINKING = EyeShape(top_lid=0.14, width=0.97)
 #: Falar parte do neutro; a vida vem da modulacao no animador.
 SPEAKING = EyeShape()
 
+#: Ouvindo: olhos bem abertos e atentos. Precisa ser distinguivel do neutro a
+#: distancia — e o unico sinal de que o robo entendeu que falaram com ele, e
+#: quem esta na frente decide se repete a pergunta olhando para isto.
+LISTENING = EyeShape(top_lid=0.0, bottom_lid=0.0, height=1.12, width=1.06)
+
 #: Rir e um sorriso mais forte, sacudido na vertical pelo animador.
 LAUGH = EyeShape(bottom_lid=0.62, height=0.94)
 
@@ -146,6 +151,7 @@ _PRESETS: dict[Expression, EyeShape] = {
     Expression.SLEEP: SLEEP,
     Expression.THINKING: THINKING,
     Expression.SPEAKING: SPEAKING,
+    Expression.LISTENING: LISTENING,
     Expression.LAUGH: LAUGH,
     Expression.DIZZY: DIZZY,
 }

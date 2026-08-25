@@ -20,6 +20,7 @@ from roboteye.core.events import (
     ErrorOccurred,
     Event,
     EventBus,
+    ListeningChanged,
     Notice,
     Shutdown,
     SpeechFinished,
@@ -207,6 +208,13 @@ class FaceApp:
                 self._animator.wake()
                 self._set_caption("")
 
+            case ListeningChanged(active=True):
+                self._animator.set_activity(Expression.LISTENING)
+            case ListeningChanged(active=False):
+                # So volta ao repouso se ainda estiver ouvindo: pensar ou falar
+                # ja tomaram a face, e apaga-los aqui piscaria a expressao.
+                if self._animator.activity is Expression.LISTENING:
+                    self._animator.set_activity(None)
             case ThinkingStarted():
                 self._animator.set_activity(Expression.THINKING)
 
