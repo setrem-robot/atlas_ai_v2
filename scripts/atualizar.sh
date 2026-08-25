@@ -122,7 +122,15 @@ aplicar() {
     # minutos, e a maior parte das atualizações não mexe no pyproject.
     if ! como_dono git diff --quiet "${ATUAL}" "${alvo}" -- pyproject.toml 2>/dev/null; then
         log "as dependências mudaram; reinstalando (isso demora)"
-        como_dono "${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[tts,online]" || return 1
+        # Os extras precisam bater com o que este robô usa. Reinstalar sem o
+        # `stt` num robô que escuta deixaria o microfone mudo na primeira
+        # atualização que mexesse no pyproject — sem erro nenhum até alguém
+        # falar com ele.
+        local extras="tts,online"
+        if grep -qE '^ROBOTEYE_HEARING_ENABLED=(true|1|yes|on)' "${REPO_DIR}/.env" 2>/dev/null; then
+            extras="${extras},stt"
+        fi
+        como_dono "${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[${extras}]" || return 1
     fi
 
     systemctl restart "${SERVICO}" || return 1
