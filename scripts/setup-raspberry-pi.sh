@@ -7,6 +7,7 @@
 #   ./scripts/setup-raspberry-pi.sh --bluetooth         também configura áudio Bluetooth
 #   ./scripts/setup-raspberry-pi.sh --service           também instala o serviço systemd
 #   ./scripts/setup-raspberry-pi.sh --branch NOME      branch que o robô segue (padrão: producao)
+#   ./scripts/setup-raspberry-pi.sh --escuta           também instala o microfone (STT)
 #   ./scripts/setup-raspberry-pi.sh --voice dora        usa outra voz
 #   ./scripts/setup-raspberry-pi.sh --ollama IP:PORTA   endereço da máquina com a IA
 #   ./scripts/setup-raspberry-pi.sh --model qwen3:8b    modelo de linguagem
@@ -27,6 +28,7 @@ NO_LLM=false
 ASSUME_YES=false
 WITH_BLUETOOTH=false
 WITH_SERVICE=false
+WITH_HEARING=false
 #: Branch que o robô segue. Deliberadamente NÃO é o `main`: é o que separa
 #: "estou mexendo" de "está no robô".
 UPDATE_BRANCH="producao"
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --bluetooth) WITH_BLUETOOTH=true; shift ;;
         --service)   WITH_SERVICE=true; shift ;;
+        --escuta)    WITH_HEARING=true; shift ;;
         --branch)    UPDATE_BRANCH="${2:?--branch exige um nome}"; shift 2 ;;
         --voice)     VOICE="${2:?--voice exige um nome}"; shift 2 ;;
         --model)     MODEL="${2:?--model exige um nome}"; shift 2 ;;
@@ -127,8 +130,12 @@ fi
 "${VENV_DIR}/bin/pip" install --quiet --upgrade pip
 # `online` traz as vozes da nuvem; `tts` traz a voz local que assume quando a
 # rede cai. As duas juntas são o que faz o robô continuar falando de qualquer jeito.
-"${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[tts,online]"
-info "pacote instalado (voz local + voz na nuvem)"
+EXTRAS="tts,online"
+if [[ "${WITH_HEARING}" == true ]]; then
+    EXTRAS="${EXTRAS},stt"
+fi
+"${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[${EXTRAS}]"
+info "pacote instalado (extras: ${EXTRAS})"
 
 # --- 3. configuração --------------------------------------------------------
 # Quem responde "onde roda a IA, qual modelo, qual voz" é o assistente do
@@ -174,6 +181,18 @@ if sudo "${REPO_DIR}/scripts/configurar-audio.sh"; then
     info "ok"
 else
     warn "não consegui configurar o áudio; rode ./scripts/configurar-audio.sh --mostrar"
+fi
+
+# --- 3.6 escuta -------------------------------------------------------------
+if [[ "${WITH_HEARING}" == true ]]; then
+    step "Baixando o modelo de reconhecimento de fala"
+    "${REPO_DIR}/scripts/baixar-modelo-escuta.sh" || warn "modelo de escuta não baixado"
+    if grep -q "^ROBOTEYE_HEARING_ENABLED=" "${REPO_DIR}/.env"; then
+        sed -i "s|^ROBOTEYE_HEARING_ENABLED=.*|ROBOTEYE_HEARING_ENABLED=true|" "${REPO_DIR}/.env"
+    else
+        printf 'ROBOTEYE_HEARING_ENABLED=true\n' >> "${REPO_DIR}/.env"
+    fi
+    info "escuta ligada; o robô acorda com a palavra \"atlas\""
 fi
 
 # --- 4. extras opcionais ----------------------------------------------------

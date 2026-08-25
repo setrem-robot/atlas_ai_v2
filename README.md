@@ -27,6 +27,7 @@ Atlas> Sou a Atlas, um robô construído aqui na Setrem. Ainda estou aprendendo.
 - [Configuração](#configuração)
 - [Arquitetura](#arquitetura)
 - [Raspberry Pi](#raspberry-pi)
+- [Falando com ela](#falando-com-ela)
 - [O que falta](#o-que-falta)
 - [Desenvolvimento](#desenvolvimento)
 - [Solução de problemas](#solução-de-problemas)
@@ -961,6 +962,64 @@ não reescreve o arquivo.
 
 ---
 
+## Falando com ela
+
+Um microfone plugado no robô, e a Atlas passa a ouvir. É opcional e vem
+desligado: microfone aberto é decisão de quem monta o robô.
+
+```bash
+./scripts/setup-raspberry-pi.sh --escuta      # na instalação
+# ou, depois:
+pip install -e ".[stt]" && ./scripts/baixar-modelo-escuta.sh
+```
+
+O modelo (142 MB) é baixado na instalação, e não na primeira pergunta de alguém —
+num robô que pode estar sem rede na hora da apresentação, isso é a diferença
+entre ouvir e não ouvir.
+
+Ligue com `ROBOTEYE_HEARING_ENABLED=true` e fale:
+
+```
+você:  "Atlas, quantos alunos tem o curso?"
+Atlas: (responde falando, e os olhos acompanham a voz)
+```
+
+**O nome dela é o gatilho.** Um microfone aberto numa sala escuta a sala inteira:
+sem filtro, ela responderia à conversa alheia, ao professor explicando outra
+coisa e à própria apresentação sobre ela. Com `ROBOTEYE_WAKE_WORD=atlas` (o
+padrão), só as frases que contêm o nome viram pergunta — e o que vem antes do
+nome é descartado, porque costuma ser o fim de outra frase. Deixe vazio para ela
+responder a tudo que ouvir, o que serve para testar e atrapalha numa sala cheia.
+
+**Ela não se ouve.** O microfone fica a centímetros da caixinha; sem cuidado, ela
+transcreveria a própria voz e responderia a si mesma, em laço. A escuta é pausada
+enquanto a Atlas fala, usando os eventos de voz que já existiam.
+
+### Qual motor de reconhecimento
+
+Medido no Pi 5, com a mesma frase gravada no mesmo microfone:
+
+| Motor | Velocidade | O que entendeu |
+|---|---|---|
+| Vosk (modelo pequeno, 52 MB) | rápido | *"quanto os alunos pena"* |
+| **Whisper `tiny`** | 0,35× tempo real | *"Atlas, quantos alunos tem o curso de engenharia de computação?"* |
+| **Whisper `base`** (padrão) | 0,59× tempo real | igual, com a pontuação certa |
+
+O Whisper ganha por uma margem grande, e o custo cabe no robô: `base` transcreve
+4 s de fala em 2,5 s. Por isso ele é o padrão, pelo `faster-whisper` — que tem
+pacote pronto para ARM e roda quantizado em `int8`, sem PyTorch.
+
+**Essa diferença importa mais do que parece quando quem fala são crianças**: voz
+aguda, dicção variável, frases quebradas. É exatamente onde um modelo pequeno
+erra mais — e errar aqui significa a Atlas responder outra coisa.
+
+O Vosk continua disponível (`ROBOTEYE_HEARING_BACKEND=vosk`) para quem precisar
+de latência mínima ou de um hardware mais fraco. Um núcleo fica fora da
+transcrição de propósito: a face desenha o tempo todo, e uma transcrição que toma
+a máquina inteira faz a animação engasgar bem quando alguém espera resposta.
+
+---
+
 ## O que falta
 
 Lista honesta do que **não** está pronto, para quem for continuar o projeto. Nada
@@ -984,11 +1043,13 @@ estão andando. Reagir a isso — mudar de expressão com a bateria baixa, comen
 que está se movendo — é o tipo de coisa que faria o robô parecer vivo, e depende
 do mesmo assinante MQTT acima.
 
-### Ela ouve, mas não escuta
+### A escuta não tem reserva de rede
 
-Não há reconhecimento de fala. Toda entrada é texto, digitado no celular ou por
-SSH. Um robô que responde à voz é o próximo passo óbvio, e o mais caro: em CPU no
-Pi, e em cuidado para não competir com a face pelos mesmos quatro núcleos.
+A IA e a voz já sabem usar uma máquina da rede quando ela existe e cair para o
+local quando não. A escuta não: transcreve sempre no próprio Pi. Um Whisper
+`medium` rodando no PC daria transcrição melhor ainda, com o modelo local como
+reserva — é a mesma ideia já aplicada duas vezes no projeto, e ainda não feita
+aqui.
 
 ### O Pi esquenta
 
