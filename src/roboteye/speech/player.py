@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from roboteye.logging_setup import get_logger
 from roboteye.speech.base import AudioFormat, SpeechError
+from roboteye.speech.devices import AUTO, resolver_saida
 
 if TYPE_CHECKING:
     from roboteye.config import VoiceSettings
@@ -215,9 +216,7 @@ def create_audio_sink(settings: VoiceSettings) -> AudioSink:
     if settings.engine == "null":
         return NullSink()
 
-    device: str | int | None = settings.audio_device
-    if isinstance(device, str) and device.isdigit():
-        device = int(device)
+    device = resolver_saida(settings.audio_device)
 
     try:
         import sounddevice  # noqa: F401
@@ -228,7 +227,11 @@ def create_audio_sink(settings: VoiceSettings) -> AudioSink:
 
     if sys.platform.startswith("linux") and shutil.which("aplay"):
         logger.info("usando aplay como saida de audio")
-        return AplaySink(settings.audio_device)
+        # O `aplay` fala em nome de dispositivo ALSA (`plughw:2,0`), nao no
+        # indice que o sounddevice usa; um numero aqui nao significaria nada
+        # para ele, entao so o que veio escrito na configuracao serve.
+        pedido = settings.audio_device
+        return AplaySink(None if pedido == AUTO else pedido)
 
     logger.warning("nenhuma saida de audio disponivel; a voz sera silenciosa")
     return NullSink()

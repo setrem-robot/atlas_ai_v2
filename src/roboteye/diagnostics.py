@@ -265,8 +265,37 @@ def _check_audio_output(settings: Settings) -> Check:
             "stop roboteye); senao, verifique a placa e o grupo audio",
         )
 
-    name = device["name"] if isinstance(device, dict) else str(device)
-    return Check("saida de audio", Status.OK, name.strip())
+    name = str(device["name"] if isinstance(device, dict) else device).strip()
+    return Check("saida de audio", Status.OK, f"{name}{_para_onde(name)}")
+
+
+def _para_onde(nome: str) -> str:
+    """Diz que placa esta por tras de um apelido como "default".
+
+    "default" nao informa nada a quem esta sem som, e essa e exatamente a hora
+    em que alguem le esta linha. A placa de verdade esta no `/etc/asound.conf`,
+    escrito por `scripts/configurar-audio.sh`.
+    """
+    import re
+    from pathlib import Path
+
+    if nome.lower() not in {"default", "sysdefault"}:
+        return ""
+    try:
+        conf = Path("/etc/asound.conf").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+    achado = re.search(r"hw:(\d+)", conf)
+    if achado is None:
+        return ""
+
+    placa = achado.group(1)
+    try:
+        etiqueta = Path(f"/proc/asound/card{placa}/id").read_text(encoding="utf-8").strip()
+    except OSError:
+        etiqueta = f"card {placa}"
+    return f" -> {etiqueta} (hw:{placa})"
 
 
 def _check_llm(settings: Settings) -> list[Check]:

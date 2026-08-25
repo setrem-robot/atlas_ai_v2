@@ -165,6 +165,17 @@ if ! grep -q "^ROBOTEYE_WEB_PIN=..*" "${REPO_DIR}/.env"; then
     info "PIN da página de configuração: ${PIN}"
 fi
 
+# --- 3.5 audio --------------------------------------------------------------
+# O padrão do Raspberry Pi é o HDMI, que só toca se a tela tiver alto-falante; e
+# placas USB baratas chegam com o volume em ~30% e o microfone mudo. Sem este
+# passo, o robô parece instalado e não fala.
+step "Configurando a saída de som"
+if sudo "${REPO_DIR}/scripts/configurar-audio.sh"; then
+    info "ok"
+else
+    warn "não consegui configurar o áudio; rode ./scripts/configurar-audio.sh --mostrar"
+fi
+
 # --- 4. extras opcionais ----------------------------------------------------
 step "[4/4] Extras"
 

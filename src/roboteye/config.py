@@ -244,7 +244,10 @@ class VoiceSettings:
     length_scale: float = 1.0
     noise_scale: float = 0.667
     noise_w: float = 0.8
-    audio_device: str | None = None
+    #: Placa de som. "auto" procura uma USB antes de aceitar o padrao do
+    #: sistema — num robo, quem plugou uma caixinha quer ouvir por ela, e o
+    #: HDMI depende de a tela ter alto-falante. Ver `speech/devices.py`.
+    audio_device: str | None = "auto"
     #: Reserva offline de uma voz online: "auto", "off" ou o nome de uma voz.
     #: "auto" escolhe pelo idioma e pela maquina — num Raspberry Pi cai numa voz
     #: leve, porque cair numa pesada trocaria "sem internet" por "fala arrastada".
@@ -284,7 +287,7 @@ class VoiceSettings:
             length_scale=_get_float("VOICE_LENGTH_SCALE", 1.0, minimum=0.1),
             noise_scale=_get_float("VOICE_NOISE_SCALE", 0.667, minimum=0.0),
             noise_w=_get_float("VOICE_NOISE_W", 0.8, minimum=0.0),
-            audio_device=_get_optional_str("AUDIO_DEVICE"),
+            audio_device=_get_str("AUDIO_DEVICE", "auto"),
             fallback=_get_str("VOICE_FALLBACK", "auto").lower(),
             gain=_get_float("VOICE_GAIN", 1.0, minimum=0.0),
         )
