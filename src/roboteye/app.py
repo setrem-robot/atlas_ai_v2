@@ -24,6 +24,7 @@ from roboteye.core.events import (
 )
 from roboteye.face.app import FaceApp
 from roboteye.hearing import HearingError, Ouvido, create_ears, dirigido_ao_robo
+from roboteye.hearing.gatilho import Conversa
 from roboteye.llm.base import LLMClient
 from roboteye.llm.factory import create_llm_client
 from roboteye.llm.memory import ConversationMemory
@@ -154,9 +155,14 @@ class Application:
     def _escutar(self) -> None:
         """Roda a escuta e entrega ao assistente o que foi dirigido ao robo."""
         assert self.ears is not None
+        # Chamar o nome abre uma janela em que a frase seguinte e aceita sem
+        # ele — que e como as pessoas falam: "Atlas!" ... "quanto e dois mais dois?"
+        conversa = Conversa(self.settings.hearing.janela_s)
         try:
             for ouvido in self.ears.escutar():
-                pergunta = dirigido_ao_robo(ouvido, self.settings.hearing.wake_word)
+                pergunta = dirigido_ao_robo(
+                    ouvido, self.settings.hearing.wake_word, conversa=conversa
+                )
                 if pergunta is None:
                     logger.debug("ouvi %r, mas nao era comigo", ouvido)
                     continue

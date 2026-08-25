@@ -75,18 +75,61 @@ else
 fi
 
 # --- escrever o padrão do sistema -------------------------------------------
-# `plug` na frente porque o Piper sintetiza a 22050 Hz e boa parte das placas
-# não aceita essa taxa: sem a conversão no meio, a primeira frase falha.
+# Três camadas, e cada uma resolve um problema que já quebrou este robô:
 #
-# Sem `dmix` de propósito: ele deixaria dois processos tocarem juntos, mas o
-# PortAudio não consegue abri-lo em algumas placas do Pi ("Sample format not
-# supported"), e o preço de contornar isso seria um servidor de áudio inteiro
-# rodando o dia todo. Na prática: pare o serviço antes de testar a voz à mão.
+#   plug     o Piper sintetiza a 22050 Hz e boa parte das placas não aceita essa
+#            taxa; sem a conversão no meio, a primeira frase falha com
+#            "Invalid sample rate";
+#   dmix     um dongle USB é UMA placa para a caixinha e o microfone, e o ALSA a
+#            entrega em modo exclusivo. Com a escuta segurando o microfone, a
+#            Atlas ouvia, pensava, respondia — e não conseguia emitir som:
+#            "Device unavailable". O dmix deixa a saída ser compartilhada;
+#   dsnoop   o mesmo, do lado da entrada: sem ele, o `doctor` e qualquer teste
+#            de microfone falham enquanto o robô está escutando.
+#
+# `asym` é o que junta os dois lados num único dispositivo padrão.
 cat > "${ALSA_CONF}" <<EOF
 # Escrito por scripts/configurar-audio.sh — rode-o de novo para mudar.
 pcm.!default {
+    type asym
+    playback.pcm "roboteye_saida"
+    capture.pcm "roboteye_entrada"
+}
+
+pcm.roboteye_saida {
     type plug
-    slave.pcm "hw:${CARD},0"
+    slave.pcm "roboteye_dmix"
+}
+
+pcm.roboteye_dmix {
+    type dmix
+    ipc_key 3021
+    ipc_perm 0666
+    slave {
+        pcm "hw:${CARD},0"
+        rate 48000
+        channels 2
+        period_size 1024
+        buffer_size 8192
+    }
+}
+
+pcm.roboteye_entrada {
+    type plug
+    slave.pcm "roboteye_dsnoop"
+}
+
+pcm.roboteye_dsnoop {
+    type dsnoop
+    ipc_key 3022
+    ipc_perm 0666
+    slave {
+        pcm "hw:${CARD},0"
+        rate 48000
+        channels 1
+        period_size 1024
+        buffer_size 8192
+    }
 }
 
 ctl.!default {
@@ -94,7 +137,7 @@ ctl.!default {
     card ${CARD}
 }
 EOF
-log "${ALSA_CONF} aponta para hw:${CARD},0"
+log "${ALSA_CONF}: saída e microfone compartilhados em hw:${CARD},0"
 
 # --- volumes ----------------------------------------------------------------
 # Nomes de controle variam entre placas; tentar vários e ignorar o que não

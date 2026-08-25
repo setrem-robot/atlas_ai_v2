@@ -33,8 +33,9 @@ def escutar(microfone: Microfone, entrada: list[np.ndarray]) -> list[np.ndarray]
 
 @pytest.fixture
 def mic() -> Microfone:
-    # silencio_s=0.3 e minimo_s=0.15 mantem os testes curtos sem mudar a regra.
-    return Microfone(silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+    # `limiar` explicito: sem ele o microfone mede a sala no arranque, e aqui
+    # nao ha sala — os blocos vem da fila, na mao.
+    return Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
 
 
 class TestUmaFrase:
@@ -71,9 +72,7 @@ class TestRuido:
 
 
 class TestTetoDeSeguranca:
-    def test_som_continuo_e_cortado_em_vez_de_crescer_para_sempre(
-        self, mic: Microfone
-    ) -> None:
+    def test_som_continuo_e_cortado_em_vez_de_crescer_para_sempre(self, mic: Microfone) -> None:
         # Um ventilador que liga nao pode gravar ate a memoria acabar.
         frases = escutar(mic, voz(120))
         assert frases

@@ -414,6 +414,9 @@ class HearingSettings:
     #: Nome que acorda o robo. Vazio faz ele responder a tudo que ouvir — util
     #: para testar, ruim numa sala com gente conversando.
     wake_word: str = "atlas"
+    #: Segundos que a Atlas continua ouvindo depois de ser chamada, aceitando a
+    #: pergunta seguinte sem o nome. 0 exige o nome em toda frase.
+    janela_s: float = 8.0
 
     @classmethod
     def from_env(cls) -> HearingSettings:
@@ -425,6 +428,7 @@ class HearingSettings:
             cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),
             device=_get_str("HEARING_DEVICE", "auto"),
             wake_word=_get_str("WAKE_WORD", "atlas"),
+            janela_s=_get_float("WAKE_JANELA", 8.0, minimum=0.0),
         )
 
 

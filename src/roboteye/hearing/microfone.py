@@ -19,6 +19,13 @@ Três detalhes decidem se isso funciona ou irrita:
   sílaba já passou — por isso um pedaço do que veio antes é guardado e vai junto;
 - **o ruído da sala não pode virar pergunta.** Trechos curtos demais são
   descartados sem chegar ao reconhecimento.
+
+**O limiar não pode ser um número fixo.** Foi, e não funcionou: o ruído de fundo
+medido no robô de produção (0,042) era o dobro do limiar escolhido no escritório
+(0,02), então o silêncio da sala contava como fala. O robô gravava trechos de 15
+segundos sem ninguém falando, transcrevia nada e ocupava a CPU o tempo todo. Cada
+sala tem um ruído, cada microfone tem um ganho — então o limiar é medido no
+arranque, a partir do próprio ambiente.
 """
 
 from __future__ import annotations
@@ -50,15 +57,15 @@ class Microfone:
         self,
         *,
         device: str | int | None = None,
-        limiar: float = 0.02,
+        limiar: float | None = None,
         silencio_s: float = 0.8,
         minimo_s: float = 0.4,
         maximo_s: float = 15.0,
     ) -> None:
         self._device = device
-        #: Acima disto conta como fala. 0.02 (de 0 a 1) fica acima do ruído de
-        #: uma sala normal e abaixo de uma voz falando a um metro.
-        self._limiar = limiar
+        #: Acima disto conta como fala. None faz medir a sala no arranque.
+        self._limiar = limiar if limiar is not None else 0.0
+        self._calibrar = limiar is None
         #: Silêncio que fecha a frase. Ver o comentário sobre a vírgula.
         self._silencio = int(silencio_s * TAXA / BLOCO)
         #: Curto demais é ruído — uma porta, uma cadeira, uma tosse.
@@ -108,8 +115,37 @@ class Microfone:
             channels=1,
             callback=receber,
         ):
-            logger.info("escutando pelo microfone")
+            if self._calibrar:
+                self._medir_a_sala()
+            logger.info("escutando pelo microfone (limiar %.4f)", self._limiar)
             yield from self._cortar_em_frases()
+
+    def _medir_a_sala(self) -> None:
+        """Escolhe o limiar a partir do ruído que esta sala realmente tem.
+
+        Fica no dobro e meio do ruído medido: alto o bastante para o ar
+        condicionado não virar pergunta, baixo o bastante para uma criança
+        falando a um metro passar. O piso existe para uma sala anecoica não
+        deixar o limiar em zero, onde qualquer estalo acordaria o robô.
+        """
+        amostras: list[float] = []
+        while len(amostras) < 30:
+            try:
+                bloco = self._blocos.get(timeout=2.0)
+            except queue.Empty:
+                break
+            if bloco is None:
+                break
+            amostras.append(float(np.sqrt(np.mean(bloco**2))))
+
+        if not amostras:
+            self._limiar = 0.02
+            logger.warning("nao consegui medir o ruido da sala; usando 0.02")
+            return
+
+        ruido = float(np.percentile(amostras, 95))
+        self._limiar = max(0.015, ruido * 2.5)
+        logger.info("ruido da sala %.4f; falar comeca em %.4f", ruido, self._limiar)
 
     def _cortar_em_frases(self) -> Iterator[np.ndarray]:
         falando: list[np.ndarray] = []

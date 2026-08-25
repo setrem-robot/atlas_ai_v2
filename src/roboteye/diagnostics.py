@@ -306,9 +306,7 @@ def _check_hearing(settings: Settings) -> Check:
         return Check("escuta", Status.WARN, "desligada (ROBOTEYE_HEARING_ENABLED)")
 
     pacote, dica = (
-        ("faster_whisper", "faster-whisper")
-        if ouvidos.backend == "whisper"
-        else ("vosk", "vosk")
+        ("faster_whisper", "faster-whisper") if ouvidos.backend == "whisper" else ("vosk", "vosk")
     )
     try:
         __import__(pacote)
