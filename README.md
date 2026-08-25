@@ -744,25 +744,33 @@ escolhida precisa e instala o serviço systemd. **Reinicie depois**: a instalaç
 adiciona o usuário aos grupos `video`, `render` e `input`, e isso só passa a
 valer numa sessão nova.
 
-**4. Diga por onde sai o som.** No Pi 5 não há saída de fone: o som vai pelo
-HDMI, e o monitor normalmente só aceita 44100 ou 48000 Hz enquanto o Piper
-sintetiza a 22050. O `plug` do ALSA converte no meio do caminho:
+**4. Diga por onde sai o som.** O `setup` já faz isso, mas se você plugou a
+caixinha depois:
 
 ```bash
-sudo tee /etc/asound.conf >/dev/null <<'EOF'
-pcm.!default {
-    type plug
-    slave.pcm "hw:0,0"
-}
-ctl.!default {
-    type hw
-    card 0
-}
-EOF
+sudo ./scripts/configurar-audio.sh
 ```
 
-Confira qual placa é a sua com `aplay -l` e se o monitor aceita áudio com
-`cat /proc/asound/card0/eld#0`. Teste com `speaker-test -D default -c 2 -t sine -l 1`.
+Ele encontra a placa (preferindo uma **USB** sobre o HDMI), aponta o sistema para
+ela, sobe o volume e o ganho do microfone, e guarda os níveis para o próximo
+arranque. `--mostrar` lista o que existe sem mudar nada; `--card N` força uma
+placa; `--hdmi` insiste no HDMI.
+
+Três coisas que ele resolve e que custam horas quando feitas à mão:
+
+- **no Pi 5 não há saída de fone**, e o padrão é o HDMI — que só toca se a tela
+  tiver alto-falante (a telinha de 5" costuma não ter);
+- **placas USB baratas chegam com o volume em ~30% e o microfone em zero**, o que
+  faz o robô parecer mudo e surdo mesmo com tudo instalado corretamente;
+- **elas quase sempre recusam 22050 Hz**, que é a taxa do Piper. O `plug` do ALSA
+  converte; sem ele, a primeira frase morre com `Invalid sample rate`.
+
+Teste com `speaker-test -D default -c 2 -t sine -f 660 -l 1`, e confira para onde
+o som está indo com `roboteye doctor`:
+
+```
+[ ok ] saida de audio         default -> Device (hw:2)
+```
 
 **5. Se quiser a IA de reserva rodando no próprio Pi:**
 
