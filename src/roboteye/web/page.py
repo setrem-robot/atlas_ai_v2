@@ -18,36 +18,68 @@ PAGE = """<!doctype html>
 <title>RobotEye</title>
 <style>
   :root {
-    --fundo: #0e1116; --cartao: #171b22; --borda: #262c36;
-    --texto: #e6e9ef; --fraco: #9aa4b2; --olho: #04c9fd;
+    /* O ciano e a cor dos olhos da Atlas; o fundo puxa levemente para ele, em
+       vez de um cinza neutro qualquer. */
+    --fundo: #090d13; --cartao: #131923; --cartao-alto: #1a212d;
+    --borda: #232c3a; --borda-forte: #33405280;
+    --texto: #e8edf5; --fraco: #93a1b5; --apagado: #66748a;
+    --olho: #04c9fd; --olho-fundo: #04c9fd14;
     --ok: #3ddc84; --erro: #ff6b6b; --aviso: #ffc857;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 16px 14px 48px;
-    background: var(--fundo); color: var(--texto);
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 0 0 56px;
+    background:
+      radial-gradient(90rem 40rem at 50% -18rem, #0c2130 0%, transparent 65%),
+      var(--fundo);
+    color: var(--texto);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  h1 { font-size: 20px; margin: 0 0 2px; }
+  main, #entrada { max-width: 34rem; margin: 0 auto; padding: 0 14px; }
+
+  /* --- cabecalho: os olhos da Atlas --- */
+  .capa { padding: 26px 0 20px; display: flex; align-items: center; gap: 13px; }
+  .olhos { display: flex; gap: 7px; flex: none; }
+  .olhos i {
+    width: 15px; height: 21px; border-radius: 5px; background: var(--olho);
+    box-shadow: 0 0 16px #04c9fd66;
+    animation: piscar 5.5s infinite;
+  }
+  .olhos i:last-child { animation-delay: .07s; }
+  @keyframes piscar {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(.12); }
+  }
+  @media (prefers-reduced-motion: reduce) { .olhos i { animation: none; } }
+
+  h1 { font-size: 21px; margin: 0; letter-spacing: -.02em; font-weight: 650; }
   h1 span { color: var(--olho); }
-  .sub { color: var(--fraco); font-size: 13px; margin-bottom: 20px; }
+  .sub { color: var(--fraco); font-size: 13px; margin: 1px 0 0; }
+
   fieldset {
-    border: 1px solid var(--borda); border-radius: 12px;
-    background: var(--cartao); padding: 14px; margin: 0 0 14px;
+    border: 1px solid var(--borda); border-radius: 14px;
+    background: linear-gradient(var(--cartao-alto), var(--cartao));
+    padding: 15px 15px 17px; margin: 0 0 13px;
   }
-  legend { padding: 0 6px; font-size: 13px; color: var(--fraco); text-transform: uppercase;
-           letter-spacing: .06em; }
+  legend {
+    padding: 0 7px; font-size: 11px; color: var(--apagado); text-transform: uppercase;
+    letter-spacing: .11em; font-weight: 600;
+  }
   label { display: block; margin: 12px 0 4px; font-size: 13px; color: var(--fraco); }
   input, select {
     width: 100%; padding: 11px 12px; font-size: 16px;
-    background: #0e1116; color: var(--texto);
-    border: 1px solid var(--borda); border-radius: 8px;
+    background: #0a0f16; color: var(--texto);
+    border: 1px solid var(--borda); border-radius: 9px;
   }
-  input:focus, select:focus { outline: 2px solid var(--olho); outline-offset: -1px; }
+  input:focus, select:focus, button:focus-visible {
+    outline: 2px solid var(--olho); outline-offset: -1px;
+  }
   button {
-    padding: 11px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
-    background: var(--olho); color: #04121a; border: 0; border-radius: 8px;
+    padding: 11px 17px; font-size: 15px; font-weight: 600; cursor: pointer;
+    background: var(--olho); color: #04121a; border: 0; border-radius: 9px;
   }
+  button:active { transform: translateY(1px); }
   button.leve { background: transparent; color: var(--texto); border: 1px solid var(--borda); }
   button:disabled { opacity: .5; cursor: progress; }
   .linha { display: flex; gap: 8px; align-items: center; }
@@ -57,19 +89,43 @@ PAGE = """<!doctype html>
   .rodape { position: sticky; bottom: 0; padding: 12px 0 0;
             background: linear-gradient(transparent, var(--fundo) 30%); }
   .rodape button { width: 100%; }
-  .painel{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:8px}
-.medida{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);
-        border-radius:8px;padding:8px 10px}
-.medida .rot{display:block;font-size:.68rem;letter-spacing:.08em;
-             text-transform:uppercase;opacity:.55}
-.medida .val{font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}
-.medida .sub{font-size:.75rem;opacity:.6}
-.medida.alerta{border-color:#c2703a}
-.medida.alerta .val{color:#e0a959}
-.medida.bom .val{color:#35d48c}
-.falas{max-height:190px;overflow-y:auto;margin-bottom:10px}
-.falas p{margin:0 0 6px;line-height:1.35}
-.falas .quem{opacity:.6;font-size:.8em;text-transform:uppercase;letter-spacing:.04em}
+  .painel {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(8.4rem, 1fr)); gap: 9px;
+  }
+  .medida {
+    background: #0a0f16; border: 1px solid var(--borda); border-radius: 10px;
+    padding: 10px 11px; position: relative; overflow: hidden;
+  }
+  /* Uma faixa fina na borda de cima carrega o estado; a cor do numero sozinha
+     e dificil de ver de relance, que e como este painel e lido. */
+  .medida::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+    background: var(--borda-forte);
+  }
+  .medida.bom::before { background: var(--ok); }
+  .medida.alerta::before { background: var(--aviso); }
+  .medida .rot {
+    display: block; font-size: 10.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--apagado); font-weight: 600;
+  }
+  .medida .val {
+    font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em; margin-top: 2px;
+  }
+  .medida .sub { font-size: 11.5px; color: var(--fraco); }
+  .medida.alerta .val { color: var(--aviso); }
+  .medida.bom .val { color: var(--ok); }
+  .falas { max-height: 200px; overflow-y: auto; margin-bottom: 11px;
+           display: flex; flex-direction: column; gap: 7px; }
+  .falas p {
+    margin: 0; line-height: 1.4; font-size: 14.5px;
+    background: #0a0f16; border: 1px solid var(--borda);
+    border-radius: 10px; padding: 7px 10px;
+  }
+  .falas .quem {
+    display: block; color: var(--apagado); font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .09em; margin-bottom: 1px;
+  }
 .dica { font-size: 12px; color: var(--fraco); margin-top: 6px; }
   #entrada { max-width: 320px; margin: 60px auto; text-align: center; }
 </style>
@@ -77,17 +133,22 @@ PAGE = """<!doctype html>
 <body>
 
 <div id="entrada">
-  <h1>Robot<span>Eye</span></h1>
-  <p class="sub">Informe o PIN mostrado no terminal do robô.</p>
+  <div class="capa" style="justify-content:center">
+    <div class="olhos"><i></i><i></i></div>
+    <div><h1>Atlas</h1><p class="sub">painel do robô</p></div>
+  </div>
+  <p class="sub" style="margin-bottom:14px">Informe o PIN mostrado no terminal do robô.</p>
   <input id="pin" type="tel" inputmode="numeric" maxlength="6" placeholder="000000"
          style="text-align:center; font-size:26px; letter-spacing:.3em">
   <p class="aviso" id="erroPin"></p>
   <button style="margin-top:12px; width:100%" onclick="entrar()">Entrar</button>
 </div>
 
-<main id="painel" hidden>
-  <h1>Robot<span>Eye</span></h1>
-  <p class="sub">Configuração do robô</p>
+<main id="conteudo" hidden>
+  <div class="capa">
+    <div class="olhos"><i></i><i></i></div>
+    <div><h1>Atlas</h1><p class="sub">painel do robô</p></div>
+  </div>
 
   <fieldset>
     <legend>Inteligência</legend>
@@ -127,7 +188,7 @@ PAGE = """<!doctype html>
 
   <fieldset>
     <legend>O robô agora</legend>
-    <div id="painel" class="painel">carregando…</div>
+    <div id="estadoRobo" class="painel">carregando…</div>
     <p class="dica" id="versaoRobo"></p>
   </fieldset>
 
@@ -205,7 +266,7 @@ async function entrar() {
   try {
     await carregar();
     $("entrada").hidden = true;
-    $("painel").hidden = false;
+    $("conteudo").hidden = false;
   } catch (e) {
     mostrar("erroPin", e.message, "ruim");
   }
@@ -333,7 +394,7 @@ async function atualizarPainel() {
       vivo ? "de pé" : estado, "", vivo ? "bom" : "alerta"));
   }
 
-  $("painel").innerHTML = partes.join("");
+  $("estadoRobo").innerHTML = partes.join("");
   $("versaoRobo").textContent = r.versao
     ? `versão: ${r.versao.commit} — ${r.versao.titulo} (${r.versao.quando})` : "";
 }

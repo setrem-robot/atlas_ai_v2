@@ -82,12 +82,12 @@ def anunciar_pelo_kernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
             ["btmgmt", *args], capture_output=True, text=True, input="", timeout=15
         )
 
-    # O `advertising` do controlador aparece em `supported settings` e **nao**
-    # em `current settings` ate alguem liga-lo. Enquanto esteve assim, o radio
-    # nao transmitiu nada — com o registro do anuncio dando certo e o celular
-    # sem ver o robo, que e o pior tipo de falha para diagnosticar.
-    btmgmt("advertising", "on")
-
+    # Nada de `advertising on` aqui, por mais tentador que pareca. Esse comando
+    # liga o anuncio **legado**, gerido pelo kernel com dados proprios, e ele
+    # sobrescreve a instancia que registramos logo abaixo — o radio passa a
+    # transmitir, o `current settings` passa a mostrar `advertising`, tudo
+    # parece certo, e o celular nao acha o robo porque o UUID do servico nao
+    # esta mais no ar. Os dois modos se excluem; o nosso e o gerenciado.
     btmgmt("rm-adv", "1")
     pronto = btmgmt(
         "add-adv",
