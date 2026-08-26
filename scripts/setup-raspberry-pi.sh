@@ -83,6 +83,7 @@ sudo apt-get install -y --no-install-recommends \
     build-essential \
     python3-pygame \
     libportaudio2 \
+    libasound2-plugins \
     libsdl2-2.0-0 \
     libsdl2-ttf-2.0-0 \
     libegl1 \

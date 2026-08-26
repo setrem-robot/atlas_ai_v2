@@ -1290,6 +1290,60 @@ internet" por "fala arrastada", além de 338 MB de modelo.
 Deixe `ROBOTEYE_VOICE_FALLBACK` **vazio**: o catálogo escolhe sozinho uma voz
 leve em ARM (`dii`, do Piper, 61 MB e oito vezes mais rápida).
 
+#### A voz está abafada, e não parece a que eu escolhi
+
+Provavelmente **não é** a que você escolheu. Confira antes de mexer em qualquer
+outra coisa:
+
+```bash
+journalctl -u roboteye -b | grep -i "reserva\|de volta"
+```
+
+Se aparecer `falando pela voz reserva (piper): edge indisponivel`, o robô caiu
+para a voz local e ficou nela. As duas têm quase a mesma **altura** — medindo a
+mesma frase, 214 Hz na Thalita contra 207 Hz na `dii` —, então não soa "mais
+grave": soa **surda**. O que as separa é o brilho, a energia acima de 6 kHz, que
+é onde moram o sopro e o "s":
+
+| | Thalita (rede) | `dii` (local) |
+|---|---|---|
+| altura (F0) | 214 Hz | 207 Hz |
+| brilho acima de 6 kHz | 0,320 | **0,023 — 17× menos** |
+
+Nenhum ajuste de volume, tom ou velocidade recupera agudo que não foi
+sintetizado. A pergunta certa é por que a voz de rede falhou, e a resposta mais
+comum é **arranque**: o serviço sobe antes de a rede existir. Neste robô, medido
+no boot, o serviço subiu às 00:19:22, a face abriu às :28 e a rede só ficou
+utilizável às :31 — a saudação tentava a voz de rede três segundos cedo demais,
+falhava, e o robô passava a falar pela reserva. Como nada mais fala depois da
+saudação, era a voz do robô inteiro que mudava.
+
+Hoje o robô espera a rede antes da primeira frase (ver `speech/fallback.py`); se
+você vir isso num robô antigo, é esta a causa.
+
+#### A voz tem um chiado metálico, em qualquer motor
+
+O ALSA está convertendo a taxa por **interpolação linear** — o que ele faz
+quando `libasound2-plugins` não está instalado. Medido neste robô, levando a
+mesma frase da Thalita (24 kHz) para os 48 kHz da placa:
+
+| conversor | brilho 6–12 kHz | lixo acima de 12 kHz | CPU |
+|---|---|---|---|
+| (a fonte) | 0,3321 | — | — |
+| linear | 0,2339 | **0,107** | 0,01 s |
+| `samplerate_medium` | 0,3210 | 0,00017 | 0,09 s |
+| `samplerate_best` | 0,3320 | 0,00038 | 0,26 s |
+| **`speexrate_medium`** | **0,3278** | **0,00013** | **0,01 s** |
+
+A interpolação linear joga fora 30% do brilho e devolve 10% de energia acima de
+12 kHz que não existia no original — imagens da reamostragem, que é o que se
+ouve como aspereza. O `speexrate_medium` custa o mesmo e preserva 99%:
+
+```bash
+sudo apt install libasound2-plugins
+sudo ./scripts/configurar-audio.sh      # escreve o conversor no /etc/asound.conf
+```
+
 ### A inteligência
 
 #### `doctor` acusa a IA de rede como inacessível

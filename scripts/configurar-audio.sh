@@ -104,8 +104,30 @@ fi
 #            de microfone falham enquanto o robô está escutando.
 #
 # `asym` é o que junta os dois lados num único dispositivo padrão.
+#
+# **Quem converte a taxa importa tanto quanto o fato de converter.** Sem os
+# plugins do `libasound2-plugins`, o `plug` usa interpolação linear, e ela é
+# ruim de um jeito que se ouve. Medido neste robô, passando a mesma frase da voz
+# Thalita (24 kHz) para os 48 kHz da placa:
+#
+#   conversor           brilho 6-12 kHz   lixo acima de 12 kHz   CPU
+#   (fonte)                    0,3321                      —       —
+#   linear                     0,2339            0,107            0,01 s
+#   samplerate_medium          0,3210            0,00017          0,09 s
+#   samplerate_best            0,3320            0,00038          0,26 s
+#   speexrate_medium           0,3278            0,00013          0,01 s
+#
+# A interpolação linear joga fora 30% do brilho da voz — o sopro e o "s", o que
+# separa uma voz nítida de uma abafada — e ainda devolve 10% de energia acima de
+# 12 kHz que não existia no original: imagens da reamostragem, que é o que soa
+# metálico. O `speexrate_medium` custa o mesmo que ela e preserva 99%.
 cat > "${ALSA_CONF}" <<EOF
 # Escrito por scripts/configurar-audio.sh — rode-o de novo para mudar.
+
+# Ver o comentário no script: sem isto a conversão de taxa é feita por
+# interpolação linear, e a voz perde 30% do brilho.
+defaults.pcm.rate_converter "speexrate_medium"
+
 pcm.!default {
     type asym
     playback.pcm "roboteye_saida"
