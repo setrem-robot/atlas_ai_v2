@@ -40,6 +40,62 @@ NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # o robo notifica aqui
 MAX_LINHA = 256
 
 
+def _dados_de_anuncio(uuid: str) -> str:
+    """Monta o pacote de anuncio com o UUID do servico, em hexadecimal.
+
+    O formato e o do proprio Bluetooth: um byte de tamanho, um de tipo, e os
+    dados. Tipo 0x07 e "lista completa de UUIDs de 128 bits", e o UUID vai em
+    ordem inversa de bytes — o padrao manda little-endian, e trocar a ordem faz
+    o celular procurar por um servico que nao existe.
+    """
+    bytes_uuid = bytes.fromhex(uuid.replace("-", ""))[::-1]
+    return f"{len(bytes_uuid) + 1:02x}07{bytes_uuid.hex()}"
+
+
+def _dados_de_nome(nome: str) -> str:
+    """O nome vai na resposta de varredura: no anuncio nao cabe.
+
+    Um anuncio tem 31 bytes e o UUID de 128 bits ja consome 18. Tipo 0x09 e
+    "nome completo do dispositivo".
+    """
+    bruto = nome.encode("utf-8")[:20]
+    return f"{len(bruto) + 1:02x}09{bruto.hex()}"
+
+
+def anunciar_pelo_kernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
+    """Poe o anuncio no ar pelo `btmgmt`, falando direto com o kernel.
+
+    O caminho normal seria o `bluetoothd`, mas neste controlador ele recusa
+    todo registro de anuncio — inclusive um vazio, e inclusive vindo do
+    `bluetoothctl` — com `Invalid Parameters (0x0d)`. Pelo kernel, o mesmo
+    anuncio sobe: `Instance added: 1`, e o celular passa a encontrar o robo.
+    """
+    import subprocess
+
+    subprocess.run(["btmgmt", "rm-adv", "1"], capture_output=True)
+    pronto = subprocess.run(
+        [
+            "btmgmt",
+            "add-adv",
+            "-d",
+            _dados_de_anuncio(uuid),
+            "-s",
+            _dados_de_nome(nome),
+            # `-c` marca o anuncio como conectavel; sem isso o celular ve o robo
+            # e nao consegue abrir conexao.
+            "-c",
+            "1",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if "Instance added" in pronto.stdout:
+        logger.info("anunciando %r pelo bluetooth", nome)
+        return True
+    logger.error("nao consegui anunciar: %s", (pronto.stderr or pronto.stdout).strip()[:120])
+    return False
+
+
 class PonteBLE:
     """Recebe linhas JSON pelo BLE e as entrega a quem souber o que fazer.
 
@@ -127,10 +183,32 @@ class PonteBLE:
         return p
 
     def anunciar(self) -> None:
-        """Comeca a anunciar e bloqueia. Roda numa thread propria."""
+        """Poe o servico no ar e bloqueia. Roda numa thread propria.
+
+        Nao usa o `publish()` da biblioteca, e a razao e concreta: ele registra
+        o servico GATT e **em seguida** o anuncio, e o anuncio falha neste
+        controlador (`Invalid Parameters (0x0d)` vindo do proprio chip). A
+        excecao acontece antes do laco de eventos comecar — e sem laco, o
+        servico que ja tinha sido registrado nao responde a ninguem. O celular
+        entao encontra o robo, conecta, nao acha o servico e desiste.
+
+        Aqui as duas coisas sao separadas: o anuncio vai pelo kernel, por
+        `btmgmt` (ver `anunciar_pelo_kernel`), e o que fica neste processo e
+        so o GATT, com o laco rodando.
+        """
         p = self._periferico or self.montar()
-        logger.info("bluetooth no ar como %r; o celular ja pode procurar", self._nome)
-        p.publish()
+
+        for objeto in (*p.services, *p.characteristics, *p.descriptors):
+            p.app.add_managed_object(objeto)
+        if not p.dongle.powered:
+            p.dongle.powered = True
+        p.srv_mng.register_application(p.app, {})
+
+        logger.info("servico bluetooth no ar; o celular ja pode conectar")
+        try:
+            p.mainloop.run()
+        except KeyboardInterrupt:
+            p.mainloop.quit()
 
     # -- eventos do radio --------------------------------------------------
     def _ao_conectar(self, device=None) -> None:

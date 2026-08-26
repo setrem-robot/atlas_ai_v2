@@ -104,3 +104,42 @@ class TestQuandoOCelularSome:
         ponte._ao_conectar()
         escrever(ponte, b'"F"}\n')
         assert {"cmd": "F"} not in recebidos
+
+
+class TestPacoteDeAnuncio:
+    """O pacote que vai no ar, byte a byte.
+
+    Errar aqui nao da erro em lugar nenhum: o robo anuncia, o celular ve outro
+    servico (ou nenhum) e simplesmente nao acha o Atlas.
+    """
+
+    def test_o_uuid_vai_em_ordem_inversa(self) -> None:
+        from roboteye.ble.nus import _dados_de_anuncio
+
+        # O Bluetooth manda os UUIDs em little-endian. Na ordem natural, o
+        # celular procuraria um servico que nao existe.
+        pacote = _dados_de_anuncio("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
+        assert pacote == "11079ecadc240ee5a9e093f3a3b50100406e"
+
+    def test_o_cabecalho_diz_tamanho_e_tipo(self) -> None:
+        from roboteye.ble.nus import _dados_de_anuncio
+
+        pacote = _dados_de_anuncio(NUS_SERVICE)
+        assert pacote[:2] == "11", "17 bytes seguem"
+        assert pacote[2:4] == "07", "lista completa de UUIDs de 128 bits"
+        assert len(bytes.fromhex(pacote)) == 18
+
+    def test_o_nome_cabe_na_resposta_de_varredura(self) -> None:
+        from roboteye.ble.nus import _dados_de_nome
+
+        pacote = _dados_de_nome("Atlas")
+        assert pacote == "060941746c6173"
+        assert bytes.fromhex(pacote)[2:].decode() == "Atlas"
+
+    def test_nome_longo_e_cortado(self) -> None:
+        from roboteye.ble.nus import _dados_de_nome
+
+        # A resposta de varredura tambem tem 31 bytes; um nome enorme faria o
+        # kernel recusar o anuncio inteiro.
+        pacote = _dados_de_nome("A" * 60)
+        assert len(bytes.fromhex(pacote)) <= 31
