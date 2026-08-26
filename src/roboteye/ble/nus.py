@@ -82,12 +82,20 @@ def anunciar_pelo_kernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
             ["btmgmt", *args], capture_output=True, text=True, input="", timeout=15
         )
 
-    # Nada de `advertising on` aqui, por mais tentador que pareca. Esse comando
-    # liga o anuncio **legado**, gerido pelo kernel com dados proprios, e ele
-    # sobrescreve a instancia que registramos logo abaixo — o radio passa a
-    # transmitir, o `current settings` passa a mostrar `advertising`, tudo
-    # parece certo, e o celular nao acha o robo porque o UUID do servico nao
-    # esta mais no ar. Os dois modos se excluem; o nosso e o gerenciado.
+    # Nada de `advertising on` aqui, por mais tentador que pareca — e foi
+    # tentador: o `advertising` aparece em `supported settings` e nao em
+    # `current settings`, o que parece um radio desligado esperando ser ligado.
+    #
+    # Nao e. Esse comando liga o anuncio **legado**, que o kernel monta com
+    # dados proprios, e ele sobrescreve a instancia registrada logo abaixo. O
+    # radio passa a transmitir, o `current settings` passa a mostrar
+    # `advertising`, tudo parece mais certo do que antes — e o celular deixa de
+    # achar o robo, porque o UUID do servico nao esta mais no ar.
+    #
+    # Os dois modos se excluem. O nosso e o gerenciado, e com ele funcionando o
+    # `current settings` **nao** mostra `advertising`. Confirmado no robo: com
+    # o anuncio gerenciado sozinho, o app conecta com o Wi-Fi ligado, no mesmo
+    # canal de 2,4 GHz e com o intervalo padrao de 1280 ms.
     btmgmt("rm-adv", "1")
     pronto = btmgmt(
         "add-adv",
