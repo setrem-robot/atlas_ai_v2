@@ -142,7 +142,13 @@ if [[ "${WITH_BLE}" == true ]]; then
     EXTRAS="${EXTRAS},ble"
     # O `bluezero` fala com o BlueZ por D-Bus, e as duas pontas disso vem do
     # sistema: compilar o PyGObject no Pi demora minutos e falha na imagem Lite.
-    sudo apt-get install -y --no-install-recommends python3-dbus python3-gi bluez
+    #
+    # O `mosquitto` entra aqui porque é para onde a ponte entrega o que recebe.
+    # Sem ele, o app conecta, os comandos chegam ao Pi e morrem sem ninguém do
+    # outro lado — sem erro em lugar nenhum. Se o `orquestrador` já estiver
+    # instalado nesta máquina, o broker dele é o mesmo e o apt não faz nada.
+    sudo apt-get install -y --no-install-recommends python3-dbus python3-gi bluez mosquitto
+    sudo systemctl enable --now mosquitto || warn "não consegui subir o broker MQTT"
 fi
 "${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[${EXTRAS}]"
 info "pacote instalado (extras: ${EXTRAS})"
