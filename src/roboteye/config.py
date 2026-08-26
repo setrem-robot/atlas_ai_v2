@@ -456,6 +456,12 @@ class WebSettings:
     """Pagina de configuracao servida pelo robo."""
 
     enabled: bool = True
+    #: Mostra na pagina os comandos que chegam ao robo. Precisa de um broker
+    #: MQTT local — que so existe quando o corpo do robo (o `orquestrador`)
+    #: esta instalado na mesma maquina.
+    mostrar_comandos: bool = True
+    mqtt_host: str = "127.0.0.1"
+    mqtt_port: int = 1883
     #: 0.0.0.0 de proposito: a pagina existe para ser aberta do celular.
     host: str = "0.0.0.0"
     port: int = 8080
@@ -466,6 +472,9 @@ class WebSettings:
     def from_env(cls) -> WebSettings:
         return cls(
             enabled=_get_bool("WEB_ENABLED", True),
+            mostrar_comandos=_get_bool("WEB_COMANDOS", True),
+            mqtt_host=_get_str("WEB_MQTT_HOST", "127.0.0.1"),
+            mqtt_port=_get_int("WEB_MQTT_PORT", 1883, minimum=1),
             host=_get_str("WEB_HOST", "0.0.0.0"),
             port=_get_int("WEB_PORT", 8080, minimum=1),
             pin=_get_str("WEB_PIN", ""),

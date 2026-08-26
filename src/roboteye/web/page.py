@@ -115,6 +115,43 @@ PAGE = """<!doctype html>
   .medida .sub { font-size: 11.5px; color: var(--fraco); }
   .medida.alerta .val { color: var(--aviso); }
   .medida.bom .val { color: var(--ok); }
+  /* --- controle --- */
+  .controle { display: flex; gap: 15px; align-items: center; }
+  .cruz {
+    display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(3, 30px);
+    gap: 3px; flex: none;
+  }
+  .seta {
+    display: grid; place-items: center; font-size: 12px;
+    background: #0a0f16; border: 1px solid var(--borda); border-radius: 7px;
+    color: var(--apagado); transition: none;
+  }
+  .seta.cima  { grid-area: 1 / 2; }
+  .seta.esq   { grid-area: 2 / 1; }
+  .seta.meio  { grid-area: 2 / 2; font-size: 9px; }
+  .seta.dir   { grid-area: 2 / 3; }
+  .seta.baixo { grid-area: 3 / 2; }
+  .seta.aceso {
+    background: var(--olho); border-color: var(--olho); color: #04121a;
+    box-shadow: 0 0 14px #04c9fd55;
+  }
+  .seta.parada { background: #2a3140; border-color: #3a4356; color: var(--texto); }
+  .controle-lado { min-width: 0; }
+  .controle-lado .rot {
+    display: block; font-size: 10.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--apagado); font-weight: 600;
+  }
+  .agora { font-size: 25px; font-weight: 650; letter-spacing: -.02em; margin-top: 1px; }
+  .agora.vivo { color: var(--olho); }
+  /* A fita e o rastro dos ultimos comandos: o mais novo entra pela esquerda e
+     os antigos vao apagando, para se ver o ritmo do toque sem ler texto. */
+  .fita { display: flex; gap: 4px; margin-top: 12px; height: 20px; overflow: hidden; }
+  .fita span {
+    flex: none; width: 20px; display: grid; place-items: center; font-size: 9px;
+    border-radius: 5px; background: #0a0f16; border: 1px solid var(--borda);
+    color: var(--fraco);
+  }
+
   .falas { max-height: 200px; overflow-y: auto; margin-bottom: 11px;
            display: flex; flex-direction: column; gap: 7px; }
   .falas p {
@@ -184,6 +221,25 @@ PAGE = """<!doctype html>
       <button class="leve" onclick="testarVoz()">Falar uma frase</button>
     </div>
     <p class="aviso" id="resVoz"></p>
+  </fieldset>
+
+  <fieldset id="blocoControle">
+    <legend>Controle</legend>
+    <div class="controle">
+      <div class="cruz">
+        <span class="seta cima" data-dir="frente">&#9650;</span>
+        <span class="seta esq" data-dir="esquerda">&#9664;</span>
+        <span class="seta meio" data-dir="parar">&#9632;</span>
+        <span class="seta dir" data-dir="direita">&#9654;</span>
+        <span class="seta baixo" data-dir="tras">&#9660;</span>
+      </div>
+      <div class="controle-lado">
+        <span class="rot">Comando agora</span>
+        <div class="agora" id="comandoAtual">—</div>
+        <p class="dica" id="comandoDica">esperando o celular</p>
+      </div>
+    </div>
+    <div class="fita" id="fitaComandos"></div>
   </fieldset>
 
   <fieldset>
@@ -302,6 +358,13 @@ async function carregar() {
   if (!window._relogioPainel) {
     window._relogioPainel = setInterval(atualizarPainel, 5000);
   }
+  // O direcional so tem graca se acompanhar o dedo: 700 ms e o intervalo em
+  // que a seta acende junto com o toque, sem pesar no robo.
+  if (!window._relogioControle) {
+    window._relogioControle = setInterval(async () => {
+      try { pintarControle((await api("/api/robo")).controle); } catch (e) { /* sem drama */ }
+    }, 700);
+  }
   for (const campo of CAMPOS) {
     if (estado.config[campo]) $(campo).value = estado.config[campo];
   }
@@ -357,6 +420,32 @@ function duracao(s) {
   return `${min} min`;
 }
 
+const SETAS = {frente: "\u25b2", tras: "\u25bc", esquerda: "\u25c0",
+               direita: "\u25b6", parar: "\u25a0"};
+
+function pintarControle(c) {
+  const atual = c && c.atual;
+  for (const seta of document.querySelectorAll(".seta")) {
+    const desta = seta.dataset.dir === atual;
+    seta.classList.toggle("aceso", desta && atual !== "parar");
+    seta.classList.toggle("parada", desta && atual === "parar");
+  }
+
+  const rotulo = $("comandoAtual");
+  rotulo.textContent = atual ? atual : "—";
+  rotulo.classList.toggle("vivo", !!atual && atual !== "parar");
+
+  $("comandoDica").textContent = !c || !c.total
+    ? "esperando o celular"
+    : (c.recebendo ? "recebendo agora" : "último há instantes");
+
+  // A fita mostra o rastro: o mais novo na esquerda, os antigos apagando.
+  $("fitaComandos").innerHTML = (c && c.ultimos || [])
+    .map((u, i) => `<span style="opacity:${(1 - i * 0.075).toFixed(2)}">` +
+                   `${SETAS[u.direcao] || "?"}</span>`)
+    .join("");
+}
+
 async function atualizarPainel() {
   let r;
   try { r = await api("/api/robo"); } catch (e) { return; }
@@ -394,6 +483,7 @@ async function atualizarPainel() {
       vivo ? "de pé" : estado, "", vivo ? "bom" : "alerta"));
   }
 
+  pintarControle(r.controle);
   $("estadoRobo").innerHTML = partes.join("");
   $("versaoRobo").textContent = r.versao
     ? `versão: ${r.versao.commit} — ${r.versao.titulo} (${r.versao.quando})` : "";

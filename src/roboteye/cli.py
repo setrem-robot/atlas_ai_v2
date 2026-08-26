@@ -217,9 +217,17 @@ def _config_page(settings: Settings, app: Any = None):
     from roboteye.web import ConfigServer
 
     config = build_web_config(settings)
+    comandos = None
+    if settings.web.mostrar_comandos:
+        from roboteye.web.comandos import ComandosRecebidos
+
+        comandos = ComandosRecebidos()
+        comandos.escutar(host=settings.web.mqtt_host, port=settings.web.mqtt_port)
+
     if app is not None:
         config = replace(
             config,
+            comandos=comandos,
             conversa=_conversa_do(app),
             # O atualizador pergunta isto antes de reiniciar o robo: ninguem quer
             # a face sumindo no meio de uma frase.
