@@ -41,6 +41,7 @@ from roboteye.config import PROJECT_ROOT, Settings
 from roboteye.logging_setup import get_logger
 from roboteye.web import envfile
 from roboteye.web.conversa import ConversaWeb
+from roboteye.web.estado import instantaneo
 from roboteye.web.page import PAGE
 
 logger = get_logger(__name__)
@@ -175,6 +176,11 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
                 self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif path == "/api/state":
                 self._guarded(lambda _: _state(config))
+            elif path == "/api/robo":
+                # Separado do `/api/state` de proposito: este e consultado a
+                # cada poucos segundos por uma pagina aberta, enquanto aquele
+                # le o `.env` e o catalogo de vozes, que nao mudam sozinhos.
+                self._guarded(lambda _: instantaneo(PROJECT_ROOT))
             else:
                 self._json(404, {"erro": "rota desconhecida"})
 

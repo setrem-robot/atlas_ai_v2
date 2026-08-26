@@ -72,22 +72,33 @@ def anunciar_pelo_kernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
     """
     import subprocess
 
-    subprocess.run(["btmgmt", "rm-adv", "1"], capture_output=True)
-    pronto = subprocess.run(
-        [
-            "btmgmt",
-            "add-adv",
-            "-d",
-            _dados_de_anuncio(uuid),
-            "-s",
-            _dados_de_nome(nome),
-            # `-c` marca o anuncio como conectavel; sem isso o celular ve o robo
-            # e nao consegue abrir conexao.
-            "-c",
-            "1",
-        ],
-        capture_output=True,
-        text=True,
+    def btmgmt(*args: str) -> subprocess.CompletedProcess:
+        # `input=""` e nao `stdin=DEVNULL`, e a diferenca custou um servico que
+        # nao subia: com a entrada apenas fechada, o `btmgmt` fica esperando
+        # comandos do modo interativo e nunca retorna. Medido no robo: com
+        # `DEVNULL` trava; com `input=""` volta em 0,0 s. Como servico, travar
+        # aqui vira um arranque que expira em silencio depois de um minuto e meio.
+        return subprocess.run(
+            ["btmgmt", *args], capture_output=True, text=True, input="", timeout=15
+        )
+
+    # O `advertising` do controlador aparece em `supported settings` e **nao**
+    # em `current settings` ate alguem liga-lo. Enquanto esteve assim, o radio
+    # nao transmitiu nada — com o registro do anuncio dando certo e o celular
+    # sem ver o robo, que e o pior tipo de falha para diagnosticar.
+    btmgmt("advertising", "on")
+
+    btmgmt("rm-adv", "1")
+    pronto = btmgmt(
+        "add-adv",
+        "-d",
+        _dados_de_anuncio(uuid),
+        "-s",
+        _dados_de_nome(nome),
+        # `-c` marca o anuncio como conectavel; sem isso o celular ve o robo e
+        # nao consegue abrir conexao.
+        "-c",
+        "1",
     )
     if "Instance added" in pronto.stdout:
         logger.info("anunciando %r pelo bluetooth", nome)

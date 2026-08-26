@@ -57,7 +57,17 @@ PAGE = """<!doctype html>
   .rodape { position: sticky; bottom: 0; padding: 12px 0 0;
             background: linear-gradient(transparent, var(--fundo) 30%); }
   .rodape button { width: 100%; }
-  .falas{max-height:190px;overflow-y:auto;margin-bottom:10px}
+  .painel{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:8px}
+.medida{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);
+        border-radius:8px;padding:8px 10px}
+.medida .rot{display:block;font-size:.68rem;letter-spacing:.08em;
+             text-transform:uppercase;opacity:.55}
+.medida .val{font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}
+.medida .sub{font-size:.75rem;opacity:.6}
+.medida.alerta{border-color:#c2703a}
+.medida.alerta .val{color:#e0a959}
+.medida.bom .val{color:#35d48c}
+.falas{max-height:190px;overflow-y:auto;margin-bottom:10px}
 .falas p{margin:0 0 6px;line-height:1.35}
 .falas .quem{opacity:.6;font-size:.8em;text-transform:uppercase;letter-spacing:.04em}
 .dica { font-size: 12px; color: var(--fraco); margin-top: 6px; }
@@ -113,6 +123,12 @@ PAGE = """<!doctype html>
       <button class="leve" onclick="testarVoz()">Falar uma frase</button>
     </div>
     <p class="aviso" id="resVoz"></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>O robô agora</legend>
+    <div id="painel" class="painel">carregando…</div>
+    <p class="dica" id="versaoRobo"></p>
   </fieldset>
 
   <fieldset id="blocoConversa" style="display:none">
@@ -221,6 +237,10 @@ async function carregar() {
   if (!window._relogioConversa) {
     window._relogioConversa = setInterval(atualizarConversa, 4000);
   }
+  atualizarPainel();
+  if (!window._relogioPainel) {
+    window._relogioPainel = setInterval(atualizarPainel, 5000);
+  }
   for (const campo of CAMPOS) {
     if (estado.config[campo]) $(campo).value = estado.config[campo];
   }
@@ -258,6 +278,64 @@ async function conversar() {
   } catch (e) {
     mostrar("resConversa", e.message, "erro");
   }
+}
+
+function medida(rotulo, valor, sub, estado) {
+  const classe = estado ? " " + estado : "";
+  const rodape = sub ? `<span class="sub">${sub}</span>` : "";
+  return `<div class="medida${classe}"><span class="rot">${rotulo}</span>` +
+         `<span class="val">${valor}</span>${rodape}</div>`;
+}
+
+function duracao(s) {
+  if (s === null || s === undefined) return "?";
+  if (s < 60) return s + " s";
+  const min = Math.floor(s / 60) % 60, h = Math.floor(s / 3600) % 24, d = Math.floor(s / 86400);
+  if (d) return `${d} d ${h} h`;
+  if (h) return `${h} h ${min} min`;
+  return `${min} min`;
+}
+
+async function atualizarPainel() {
+  let r;
+  try { r = await api("/api/robo"); } catch (e) { return; }
+
+  const partes = [];
+  if (r.temperatura !== null) {
+    // Sem ventoinha, o Pi reduz a frequência acima do limite — e a resposta da
+    // Atlas fica mais lenta sem nada no log dizendo por quê.
+    const quente = r.temperatura >= r.temperatura_alerta;
+    partes.push(medida("Temperatura", r.temperatura.toFixed(1) + " °C",
+      quente ? "acima do limite" : "ok", quente ? "alerta" : "bom"));
+  }
+  if (r.memoria) {
+    partes.push(medida("Memória livre", (r.memoria.livre_mb / 1024).toFixed(1) + " GB",
+      `de ${(r.memoria.total_mb / 1024).toFixed(1)} GB`));
+  }
+  if (r.disco) {
+    const apertado = r.disco.livre_gb <= r.disco.minimo_gb;
+    partes.push(medida("Cartão livre", r.disco.livre_gb.toFixed(1) + " GB",
+      `de ${r.disco.total_gb} GB`, apertado ? "alerta" : ""));
+  }
+  if (r.carga !== null) partes.push(medida("Carga", r.carga.toFixed(2), "último minuto"));
+  partes.push(medida("Ligado há", duracao(r.ligado_ha), ""));
+
+  const bt = r.bluetooth || {};
+  partes.push(medida("Celular", bt.conectado ? "conectado" : "não",
+    bt.aparelhos && bt.aparelhos.length ? bt.aparelhos[0] : "pelo bluetooth",
+    bt.conectado ? "bom" : ""));
+
+  for (const [nome, estado] of Object.entries(r.servicos || {})) {
+    const vivo = estado === "active";
+    const rotulo = nome.replace("roboteye-ble", "bluetooth do app")
+                       .replace("roboteye", "face e voz");
+    partes.push(medida(rotulo,
+      vivo ? "de pé" : estado, "", vivo ? "bom" : "alerta"));
+  }
+
+  $("painel").innerHTML = partes.join("");
+  $("versaoRobo").textContent = r.versao
+    ? `versão: ${r.versao.commit} — ${r.versao.titulo} (${r.versao.quando})` : "";
 }
 
 async function atualizarConversa() {

@@ -1,0 +1,31 @@
+# Ponte Bluetooth: o celular controla o robô falando com o Raspberry Pi direto,
+# sem ESP32 no caminho.
+#
+# Instalado por `./scripts/setup-raspberry-pi.sh --service`.
+#
+#   sudo systemctl start roboteye-ble     sobe agora
+#   journalctl -u roboteye-ble -f         acompanha os comandos que chegam
+
+[Unit]
+Description=RobotEye - ponte bluetooth para o controle do celular
+# O rádio precisa estar de pé; o broker, não — o cliente MQTT reconecta sozinho,
+# e é melhor o robô já estar visível no celular enquanto o resto sobe.
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+# Root porque anunciar exige falar com o kernel (`btmgmt`) e registrar o serviço
+# no BlueZ. É o mesmo privilégio que o `bluetoothd` tem.
+User=root
+WorkingDirectory=@REPO_DIR@
+Environment=PYTHONUNBUFFERED=1
+
+
+ExecStart=@REPO_DIR@/.venv/bin/roboteye ble --nome @BLE_NOME@
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
