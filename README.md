@@ -16,6 +16,18 @@ você> quem é você?
 Atlas> Sou a Atlas, um robô construído aqui na Setrem. Ainda estou aprendendo.
 ```
 
+**Chegou agora?** A Atlas é maior que este repositório. São três, e cada um roda
+sozinho:
+
+| Repositório | O que é | O que faz |
+|---|---|---|
+| [**atlas_ai_v2**](https://github.com/setrem-robot/atlas_ai_v2) *(este)* | a cara | face animada, voz, conversa com IA e a ponte Bluetooth |
+| [**orquestrador**](https://github.com/setrem-robot/orquestrador) | o corpo | motores, GPS, Wi-Fi, telemetria e a nuvem |
+| [**aplicativo**](https://github.com/setrem-robot/aplicativo) | o controle | app Flutter: dirigir o robô e ver os dados |
+
+Para rodar **só a face na sua máquina**, sem robô nenhum, vá direto para
+[Instalação](#instalação) — são dois comandos.
+
 ---
 
 ## Índice
@@ -69,11 +81,20 @@ O que isso custa, medido no próprio Pi 5:
 |---|---|
 | Arranque até a face na tela | **6,9 s** |
 | CPU da face (contínuo, 30 FPS, 800x480) | **17–21% de um núcleo** |
-| Memória da face | 130–145 MB |
+| Memória da face | 70–145 MB — ver a nota abaixo |
 | Custo de um quadro | 3,4 ms mediana / 3,9 ms p95 |
 | Resposta pela IA de rede (modelo quente) | **1–3 s** |
 | Resposta pela IA local, depois do aquecimento | ~1 s |
 | Temperatura em repouso / sob carga de IA | 50 °C / **78,5 °C** |
+
+> **A faixa da memória é larga porque há duas medições que não batem.** A que
+> gerou a tabela acima registrou 130–145 MB; a que está gravada em
+> `src/roboteye/memoria.py`, feita depois e estável ao longo de 16 mil quadros,
+> registrou 70 MiB para o mesmo processo. As duas leem `VmRSS`, então uma das
+> duas está errada e não dá para decidir qual de longe do robô. Rode
+> `roboteye memoria` no Pi e acredite nele — é ele que mede a máquina que você
+> tem na frente. Em qualquer um dos dois casos a conclusão não muda: a face não
+> é o problema de memória deste robô, e quem ocupa giga é o modelo de linguagem.
 
 O número que merece atenção é o último: **não há ventoinha**, e trinta segundos
 de modelo local levam o Pi de 56 °C a quase 80 °C. Conversas longas pela IA local
@@ -84,8 +105,14 @@ vão reduzir a frequência do processador. Um cooler oficial resolve.
 Este repositório é só a **cabeça** do robô — face, voz e conversa. O corpo
 (motores, GPS, Wi-Fi) vive em [`orquestrador`](https://github.com/setrem-robot/orquestrador),
 e o controle no celular em [`aplicativo`](https://github.com/setrem-robot/aplicativo).
-As três partes compartilham a marca "Atlas" e **nada mais**: este repositório não
-fala MQTT, serial nem GPIO. Veja [O que falta](#o-que-falta).
+
+**Há exatamente um ponto de contato entre as duas partes, e é de mão única.**
+Desde que o ESP32 saiu, a ponte Bluetooth roda aqui (`src/roboteye/ble/`): o Pi
+anuncia o serviço BLE que era do ESP32 e publica o que chega do celular em
+`robo/comando/entrada`. Daí para a frente o caminho é todo do `orquestrador`.
+Fora essa ponte, este repositório não fala MQTT, serial nem GPIO — e a Atlas
+continua sem saber a própria bateria e sem falar o que o app manda. Veja
+[O que falta](#o-que-falta).
 
 ---
 
@@ -1154,8 +1181,9 @@ aqui é bug esquecido — é trabalho que ainda não foi feito.
 ### A Atlas não fala o que o app manda
 
 O `orquestrador` já publica em `robo/voz/falar` quando alguém pede para o robô
-falar pelo celular. **Ninguém consome esse tópico.** Este repositório não fala
-MQTT: os dois lados do contrato existem, e os fios nunca foram ligados.
+falar pelo celular. **Ninguém consome esse tópico.** A ponte Bluetooth daqui só
+*escreve* no MQTT (`robo/comando/entrada`); ninguém neste repositório *lê*. Os
+dois lados do contrato existem, e os fios nunca foram ligados.
 
 O lugar natural para isso é um assinante MQTT que publique no `EventBus` daqui —
 sem que `core/assistant.py` ou a face saibam que MQTT existe, do mesmo jeito que
@@ -1190,6 +1218,27 @@ Com o serviço rodando, nenhum outro processo consegue abrir a placa de som — 
 voz. Resolver de verdade exigiria um servidor de áudio (PipeWire) rodando o dia
 todo, o que foi considerado caro demais para o que resolve. Veja
 [Solução de problemas](#solução-de-problemas).
+
+### Dois brokers disputam a porta 1883
+
+Esta é a pegadinha mais cara do projeto hoje, e ela mora exatamente na fronteira
+entre os dois repositórios. `scripts/setup-raspberry-pi.sh --bluetooth-app`
+instala o Mosquitto pelo `apt`; o `pi/docker-compose.yml` do `orquestrador` sobe
+outro na mesma porta. **O segundo a subir falha com "Address already in use"** —
+e o sintoma não parece de broker: o app conecta, os comandos chegam ao Pi, e o
+robô não se mexe, porque a ponte publica com sucesso num broker que ninguém mais
+escuta.
+
+Enquanto não houver uma decisão única sobre quem sobe o broker, confira antes de
+procurar o problema em outro lugar:
+
+```bash
+systemctl is-active mosquitto        # o do apt
+docker ps --filter name=mosquitto    # o do compose
+sudo ss -lntp | grep 1883            # quem realmente está com a porta
+```
+
+Ver `../orquestrador/pi/mosquitto/apt/robo.conf.example`.
 
 ### Falta uma segunda voz de licença limpa
 
