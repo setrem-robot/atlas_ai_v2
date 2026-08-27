@@ -94,6 +94,7 @@ sudo apt-get install -y --no-install-recommends \
     libgbm1 \
     libdrm2 \
     alsa-utils \
+    iw \
     git
 
 # Três dessas linhas existem por causa da imagem Lite, e cada uma custou uma
@@ -115,6 +116,10 @@ sudo apt-get install -y --no-install-recommends \
 #                    jurando que está tudo certo. O sintoma que denuncia é a
 #                    taxa de quadros: 2143/s numa tela de 60 Hz é o SDL
 #                    "desenhando" para lugar nenhum.
+#
+#   iw               `roboteye radio` lê por ele a banda em que o Wi-Fi está.
+#                    Sem isso o robô não sabe dizer se está disputando os 2,4
+#                    GHz com o próprio Bluetooth — ver `scripts/separar-radios.sh`.
 #
 # A tela e o teclado do console vêm por estes grupos.
 sudo usermod -aG video,render,input,audio "${USER}" || warn "nao foi possivel ajustar os grupos"
@@ -150,6 +155,15 @@ if [[ "${WITH_BLE}" == true ]]; then
     # instalado nesta máquina, o broker dele é o mesmo e o apt não faz nada.
     sudo apt-get install -y --no-install-recommends python3-dbus python3-gi bluez mosquitto
     sudo systemctl enable --now mosquitto || warn "não consegui subir o broker MQTT"
+    # Um broker só. Se o `orquestrador` também estiver instalado aqui, o
+    # docker-compose dele sobe um segundo Mosquitto na mesma porta 1883 — e o
+    # segundo a subir falha com "Address already in use". O sintoma não parece
+    # de broker: o app conecta, os comandos chegam ao Pi e o robô não se mexe,
+    # porque esta ponte publica com sucesso num broker que ninguém escuta.
+    if docker compose -f ../orquestrador/pi/docker-compose.yml ps -q 2>/dev/null | grep -q .; then
+        warn "há outro Mosquitto rodando pelo docker-compose do orquestrador."
+        warn "Escolha um dos dois — veja pi/mosquitto/apt/robo.conf.example lá."
+    fi
 fi
 "${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[${EXTRAS}]"
 info "pacote instalado (extras: ${EXTRAS})"
