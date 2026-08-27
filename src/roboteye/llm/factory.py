@@ -22,7 +22,12 @@ def create_llm_client(settings: LLMSettings) -> LLMClient:
             backup = _backup_for(settings)
             if backup is None:
                 return primary
-            return FallbackLLMClient(primary, backup, probe_interval=settings.probe_interval)
+            return FallbackLLMClient(
+                primary,
+                backup,
+                probe_interval=settings.probe_interval,
+                keep_alive_ocioso=settings.fallback_keep_alive,
+            )
         case "echo":
             return EchoClient()
         case other:  # pragma: no cover - config.py ja valida
@@ -42,5 +47,9 @@ def _backup_for(settings: LLMSettings) -> LLMClient | None:
             settings,
             host=settings.fallback_host,
             model=settings.fallback_model or settings.model,
-        )
+        ),
+        # O reserva nasce ocioso: enquanto a IA de rede responde, ele nao deve
+        # segurar memoria nenhuma do Pi. Quem o promove e o `FallbackLLMClient`,
+        # no instante em que a rede cai.
+        keep_alive=settings.fallback_keep_alive,
     )

@@ -52,6 +52,25 @@ class LLMClient(Protocol):
         ...
 
 
+@runtime_checkable
+class ModeloResidente(Protocol):
+    """Cliente cujo modelo ocupa memoria desta maquina, e pode devolve-la.
+
+    Separado de `LLMClient` de proposito: o `EchoClient` nao tem modelo nenhum
+    e o Ollama da maquina de mesa tem, mas gasta a memoria *dela*. Quem precisa
+    liberar RAM aqui pergunta por este protocolo em vez de assumir que todo
+    cliente sabe se descarregar.
+    """
+
+    def set_keep_alive(self, valor: str) -> None:
+        """Muda quanto tempo o modelo fica residente depois de responder."""
+        ...
+
+    def unload(self) -> bool:
+        """Solta o modelo da memoria agora. Devolve se o pedido foi aceito."""
+        ...
+
+
 def collect(chunks: Iterator[str]) -> str:
     """Consome um fluxo de pedacos e devolve a resposta completa."""
     return "".join(chunks).strip()
