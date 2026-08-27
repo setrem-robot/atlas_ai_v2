@@ -276,6 +276,8 @@ roboteye say "Oi, tudo bem?"   # testa a voz e sai
 roboteye setup                 # escolhe IA, modelo e voz (grava no .env)
 roboteye models                # o que a máquina da IA tem instalado
 roboteye doctor                # diagnóstico do ambiente
+roboteye memoria               # onde a RAM do robô está indo
+roboteye radio                 # Wi-Fi e Bluetooth estão brigando pela antena?
 roboteye preview               # salva um PNG com todas as expressões
 roboteye web                   # página de configuração, para abrir do celular
 roboteye voice ensure          # baixa o que a configuração atual precisa
@@ -887,6 +889,11 @@ meio da conversa:
 | aquecendo só a conexão (como era) | 12 s |
 | aquecendo com a persona | **1 s** |
 
+Esse aquecimento acontece **no instante em que a queda é percebida**, e não no
+arranque: manter o modelo local carregado o dia inteiro custaria mais de um giga
+de RAM para um caso que quase não acontece. Ver
+[Onde a memória vai](#onde-a-memória-vai).
+
 Qual modelo cabe no Pi 5, medido com a face rodando junto:
 
 | Modelo | Velocidade | Português |
@@ -902,6 +909,84 @@ ar é **aviso**, não falha — o robô ainda conversa:
 [aviso] IA de rede             inacessivel em http://192.168.1.50:11434
 [ ok ] IA local (reserva)     gemma3:1b em http://127.0.0.1:11434
 ```
+
+### Onde a memória vai
+
+O Pi tem 8 GB e a suspeita natural é que a face e a escuta os estejam comendo.
+Medido, elas não estão nem perto:
+
+| Inquilino | RAM | Como se comporta |
+|---|---|---|
+| face (pygame + numpy, 800x480) | **70 MiB** | estável após 16 mil quadros |
+| escuta (Whisper `base`, int8) | **276 MiB** | estável após cinco transcrições |
+| Ollama local com `gemma3:1b` | **~1,5 GB** | enquanto o modelo estiver carregado |
+
+Os dois primeiros somam ~4% da memória do robô. Quem ocupa giga é o modelo de
+linguagem local — e ele passa quase todo o tempo **sem responder nada**, porque
+quem responde é a máquina de mesa. Por isso a reserva local nasce ociosa:
+
+```bash
+ROBOTEYE_LLM_FALLBACK_KEEP_ALIVE=0   # devolve a RAM assim que termina de falar
+ROBOTEYE_LLM_NUM_CTX=2048            # o cache de atenção é reservado por este número
+```
+
+Não há pressa escondida nisso. O momento de ler o modelo do cartão não é a
+primeira pergunta depois da queda, e sim a **queda**: a mesma sondagem que
+descobre que o Wi-Fi caiu manda carregar o modelo, em segundo plano, enquanto
+ninguém está esperando resposta. Quando a rede volta, a memória é devolvida na
+hora, sem esperar o tempo de expiração do Ollama.
+
+`ROBOTEYE_LLM_NUM_CTX` é o outro lado da conta: o Ollama reserva o cache de
+atenção pelo tamanho **declarado**, e não pelo texto que chega. Este robô
+conversa com ~500 tokens de persona, oito mensagens curtas de histórico e
+respostas de 120 tokens — 2048 sobra, e o padrão de 4096 dobra a reserva a troco
+de espaço que nunca é usado.
+
+Para ver o quadro no robô:
+
+```bash
+roboteye memoria
+```
+
+Ele mostra o total, o que cada processo do robô ocupa, o que o Ollama local está
+segurando, e avisa quando alguém está muito acima do que já foi medido dele —
+uma face em 300 MiB não é uma face grande, é uma face com defeito.
+
+### Wi-Fi e Bluetooth na mesma antena
+
+Com o ESP32 fora do caminho, o rádio Bluetooth passou a ser o **do próprio Pi** —
+o mesmo chip e a mesma antena do Wi-Fi. Em 2,4 GHz os dois ocupam literalmente a
+mesma faixa e precisam se revezar. Medido no robô com `scripts/bench-radio.sh`,
+com o anúncio BLE no ar:
+
+| | perda | rtt min/méd/máx | mdev |
+|---|---|---|---|
+| Bluetooth parado | 0% | 2,96 / 4,09 / 8,57 ms | 1,01 ms |
+| Bluetooth anunciando | 0% | 0,68 / 4,81 / 41,47 ms | 6,08 ms |
+
+Nenhum pacote perdido, média 18% maior, picos cinco vezes maiores. Para uma
+resposta de IA que leva ~1000 ms isso é irrelevante — mas o app repete o comando
+de direção a cada 300 ms, e é ali que o pico de 41 ms começa a aparecer como
+engasgo no controle.
+
+**A saída é de banda, não de ajuste fino.** O Bluetooth só existe em 2,4 GHz e
+não há o que fazer quanto a isso; o Wi-Fi também fala 5 GHz, onde não há
+Bluetooth nenhum. Levando o Wi-Fi para lá, a disputa acaba em vez de ser
+administrada:
+
+```bash
+roboteye radio                     # em que banda está, e o que fazer
+sudo ./scripts/separar-radios.sh   # fixa o Wi-Fi em 5 GHz e desliga o power-save
+```
+
+O script confere que a rede existe em 5 GHz **antes** de travar a banda — sem
+isso o robô ficaria offline, perdendo a IA boa e a voz da nuvem de uma vez. Se
+essa rede for só de 2,4 GHz, ele diz isso e não muda nada. Para voltar atrás:
+`sudo ./scripts/separar-radios.sh --desfazer`.
+
+O `power-save` do Wi-Fi é o segundo ajuste: ele desliga o rádio entre pacotes
+para poupar bateria, o que num robô ligado na tomada não compra nada, custa
+latência e ainda encurta as frestas que o Bluetooth usaria.
 
 ### Configurando pelo celular
 

@@ -81,6 +81,34 @@ consome mais de meio nucleo o tempo todo.
 - `quality_for("auto")` ja cai para `LOW` em ARM (`face/renderer.py`). Preserve essa
   heuristica em qualquer refatoracao do renderizador.
 
+## Orcamento de memoria
+
+O Pi tem 8 GB, e por muito tempo a suspeita foi a face e a escuta. Medido, nao
+sao elas — e este numero existe aqui para a suspeita nao voltar:
+
+| Inquilino | RSS | Como se comporta |
+|---|---|---|
+| face (pygame + numpy, 800x480) | 70 MiB | estavel apos 16 mil quadros |
+| escuta (Whisper `base`, int8) | 276 MiB | estavel apos cinco transcricoes |
+| Ollama local com `gemma3:1b` | ~1,5 GB | enquanto o modelo estiver carregado |
+
+Ou seja: os dois primeiros somam ~4% da maquina, e quem ocupa giga e o modelo de
+linguagem. Otimizar a face por memoria e trabalho sem retorno; se aparecer
+pressao de RAM, o lugar de olhar e o `keep_alive` e o `num_ctx` do LLM.
+
+**Regras:**
+
+- `roboteye memoria` e a medida. Ele tambem compara cada processo com a tabela
+  acima (`memoria.py::_ESPERADO_MIB`) e destaca quem estiver tres vezes acima —
+  uma face em 300 MiB nao e uma face grande, e uma face com defeito.
+- O modelo de reserva **nao** fica residente enquanto a IA de rede responde.
+  `FallbackLLMClient` o carrega no instante em que percebe a queda e o
+  descarrega quando a rede volta. Ao mexer em `llm/fallback.py`, preserve isso:
+  aquecer os dois no arranque foi o comportamento antigo, e custava 1,5 GB o dia
+  inteiro para um caso raro.
+- `num_ctx` e memoria, nao qualidade: o Ollama reserva o cache de atencao pelo
+  tamanho declarado. Subi-lo "por seguranca" e reservar RAM que nunca sera usada.
+
 ## O que fluidez significa aqui
 
 A animacao ja e boa; o risco e estragar sem perceber. Ao mexer nela, proteja:
@@ -179,14 +207,9 @@ sem tela e sem placa de som — mantenha assim: nada de teste que exija hardware
 
 Levantadas em auditoria; nao mexa nelas de passagem, mas conheca-as:
 
-1. `FaceSettings.fps` e 60 fixo, sem a heuristica de ARM que `quality` tem. Cair para
-   30 em ARM cortaria pela metade o gasto continuo sem custo visual perceptivel.
-2. `setup-raspberry-pi.sh` instala o extra `online` (que puxa `miniaudio`, sem wheel
-   aarch64) mas nao instala `build-essential`. Falha em Pi OS Lite.
-3. Escolher uma voz Kokoro num Pi passa em silencio; `roboteye doctor` poderia avisar.
-4. `roboteye.service` assume X11 (`DISPLAY=:0`), mas o Pi OS Bookworm no Pi 5 usa
-   Wayland. Alem disso e servico de sistema em `multi-user.target`: sobe antes da
-   sessao grafica e reinicia a cada 5 s ate ela existir. Um servico de usuario
-   (`systemctl --user` + `loginctl enable-linger`) resolveria os dois.
-5. `pygame.HWSURFACE` e no-op no SDL2 (`face/app.py`). O que teria efeito e `vsync=1`
-   no `set_mode`, que daria o teto de quadros de graca e removeria tearing.
+1. Escolher uma voz Kokoro num Pi passa em silencio; `roboteye doctor` poderia avisar.
+2. `tests/test_speaker.py::test_lote_respeita_o_teto_de_tamanho` e sensivel ao
+   escalonador: ele conta com o consumidor **nao** vencer a fila antes das 12
+   frases entrarem. Falha isolada sob carga (visto uma vez em tres suites
+   seguidas, com o mypy rodando junto). Nao e regressao; e um teste que mede
+   tempo sem controlar o relogio.
