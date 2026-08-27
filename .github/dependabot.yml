@@ -1,0 +1,21 @@
+# Atualização automática de dependências, com aviso de vulnerabilidade.
+#
+# Abre um PR quando uma dependência ganha versão nova — e, o que mais importa,
+# quando uma em uso tem falha de segurança conhecida. Sem isto, uma CVE numa das
+# bibliotecas de voz ou de IA ficaria invisível até alguém tropeçar nela.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
