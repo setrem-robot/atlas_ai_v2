@@ -40,7 +40,9 @@ from urllib.parse import urlparse
 from roboteye.config import PROJECT_ROOT, Settings
 from roboteye.logging_setup import get_logger
 from roboteye.web import envfile
+from roboteye.web.comandos import ComandosRecebidos
 from roboteye.web.conversa import ConversaWeb
+from roboteye.web.estado import instantaneo
 from roboteye.web.page import PAGE
 
 logger = get_logger(__name__)
@@ -85,6 +87,8 @@ class WebConfig:
     #: Diz se a Atlas esta no meio de uma resposta. Quem pergunta e o script de
     #: atualizacao, para nao reiniciar o robo com ela falando.
     ocupado: Callable[[], bool] | None = None
+    #: O que o robo esta recebendo do controle. Presente quando ha broker.
+    comandos: ComandosRecebidos | None = None
 
 
 class _Gatekeeper:
@@ -175,6 +179,11 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
                 self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif path == "/api/state":
                 self._guarded(lambda _: _state(config))
+            elif path == "/api/robo":
+                # Separado do `/api/state` de proposito: este e consultado a
+                # cada poucos segundos por uma pagina aberta, enquanto aquele
+                # le o `.env` e o catalogo de vozes, que nao mudam sozinhos.
+                self._guarded(lambda _: _robo(config))
             else:
                 self._json(404, {"erro": "rota desconhecida"})
 
@@ -258,6 +267,17 @@ def _state(config: WebConfig) -> dict[str, Any]:
         "ocupado": bool(config.ocupado and config.ocupado()),
         "atualizacao": {"disponivel": _atualizacao_instalada()},
     }
+
+
+def _robo(config: WebConfig) -> dict[str, Any]:
+    """Como o robo esta, mais o que ele esta obedecendo."""
+    estado = instantaneo(PROJECT_ROOT)
+    estado["controle"] = (
+        config.comandos.instantaneo()
+        if config.comandos is not None
+        else {"atual": None, "recebendo": False, "ultimos": [], "total": 0}
+    )
+    return estado
 
 
 #: Unidade systemd que traz a versao publicada. Ver `scripts/atualizar.sh`.

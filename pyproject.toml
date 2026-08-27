@@ -56,6 +56,13 @@ stt = [
     "vosk>=0.3.45",
     "sounddevice>=0.4.6",
 ]
+# Bluetooth: o celular fala com o Pi direto, sem ESP32. O `bluezero` precisa do
+# python3-dbus e python3-gi do sistema (o setup instala), e o `paho-mqtt` e como
+# o comando chega aos motores.
+ble = [
+    "bluezero>=0.9",
+    "paho-mqtt>=2.1",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

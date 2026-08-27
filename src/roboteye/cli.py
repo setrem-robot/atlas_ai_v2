@@ -7,6 +7,8 @@ roboteye say TEXT  fala um texto e sai
 roboteye setup     configuracao inicial (IA, modelo e voz)
 roboteye models    lista os modelos da maquina da IA
 roboteye doctor    diagnostico do ambiente
+roboteye memoria   onde a RAM do robo esta indo
+roboteye radio     Wi-Fi e Bluetooth disputando a mesma antena?
 roboteye preview   salva um PNG com todas as expressoes
 roboteye voice ... gerencia os modelos de voz
 """
@@ -92,6 +94,15 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subparsers.add_parser("doctor", help="verifica dependencias, voz e LLM")
     doctor.set_defaults(handler=_command_doctor)
 
+    memoria = subparsers.add_parser("memoria", help="mostra onde a RAM do robo esta indo")
+    memoria.add_argument("--json", action="store_true", help="saida em JSON, para graficos")
+    memoria.set_defaults(handler=_command_memoria)
+
+    radio = subparsers.add_parser(
+        "radio", help="diz se o Wi-Fi e o Bluetooth estao brigando pela mesma antena"
+    )
+    radio.set_defaults(handler=_command_radio)
+
     setup = subparsers.add_parser(
         "setup",
         help="configuracao inicial: onde roda a IA, qual modelo e qual voz",
@@ -129,6 +140,12 @@ def build_parser() -> argparse.ArgumentParser:
     web = subparsers.add_parser("web", help="pagina de configuracao, para abrir do celular")
     web.add_argument("--port", type=int, help="porta (padrao: 8080)")
     web.set_defaults(handler=_command_web)
+
+    ble = subparsers.add_parser("ble", help="ponte bluetooth: o celular controla o robo sem ESP32")
+    ble.add_argument("--nome", default="Atlas", help="nome que aparece na busca do celular")
+    ble.add_argument("--mqtt-host", default="127.0.0.1", help="broker (padrao: 127.0.0.1)")
+    ble.add_argument("--mqtt-port", type=int, default=1883, help="porta do broker")
+    ble.set_defaults(handler=_command_ble)
 
     voice = subparsers.add_parser("voice", help="gerencia modelos de voz")
     voice_subparsers = voice.add_subparsers(dest="voice_command", required=True)
@@ -211,9 +228,17 @@ def _config_page(settings: Settings, app: Any = None):
     from roboteye.web import ConfigServer
 
     config = build_web_config(settings)
+    comandos = None
+    if settings.web.mostrar_comandos:
+        from roboteye.web.comandos import ComandosRecebidos
+
+        comandos = ComandosRecebidos()
+        comandos.escutar(host=settings.web.mqtt_host, port=settings.web.mqtt_port)
+
     if app is not None:
         config = replace(
             config,
+            comandos=comandos,
             conversa=_conversa_do(app),
             # O atualizador pergunta isto antes de reiniciar o robo: ninguem quer
             # a face sumindo no meio de uma frase.
@@ -278,6 +303,32 @@ def _command_face(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
+def _command_ble(args: argparse.Namespace, _settings: Settings) -> int:
+    """Poe o robo no ar pelo bluetooth e entrega os comandos aos motores.
+
+    Substitui o par ESP32 + `serial_ingestor`: o celular fala com o Pi direto, e
+    o que chega vai para o mesmo topico MQTT de sempre.
+    """
+    from roboteye.ble import EntregaMqtt, PonteBLE, anunciar_pelo_kernel
+
+    entrega = EntregaMqtt(host=args.mqtt_host, port=args.mqtt_port)
+    entrega.conectar()
+
+    if not anunciar_pelo_kernel(args.nome):
+        logger.error("sem anuncio no ar, o celular nao vai achar o robo")
+        return EXIT_ERROR
+
+    ponte = PonteBLE(entrega, nome=args.nome)
+    try:
+        # Bloqueia no laco de eventos do D-Bus ate o servico ser encerrado.
+        ponte.anunciar()
+    except KeyboardInterrupt:
+        logger.info("encerrando a ponte bluetooth")
+    finally:
+        entrega.fechar()
+    return EXIT_OK
+
+
 def _command_say(args: argparse.Namespace, settings: Settings) -> int:
     import wave
 
@@ -336,6 +387,32 @@ def _command_doctor(_: argparse.Namespace, settings: Settings) -> int:
     report = run_diagnostics(settings)
     print(report.render())
     return EXIT_OK if report.ok else EXIT_ERROR
+
+
+def _command_memoria(args: argparse.Namespace, settings: Settings) -> int:
+    """Mostra de quem e a memoria que o robo esta gastando."""
+    from roboteye.memoria import medir, render_json
+
+    # O Ollama que interessa e o do proprio Pi: e ele que ocupa RAM aqui. O da
+    # maquina de mesa gasta a memoria dela, e nao ha o que otimizar daqui.
+    local = settings.llm.fallback_host or _host_se_local(settings.llm.host)
+    relatorio = medir(ollama_host=local)
+    print(render_json(relatorio) if args.json else relatorio.render())
+    return EXIT_OK if relatorio.folgado or bool(relatorio.erro) else EXIT_ERROR
+
+
+def _command_radio(_: argparse.Namespace, __: Settings) -> int:
+    """Diz se o Wi-Fi e o Bluetooth estao disputando a mesma faixa."""
+    from roboteye.radio import aconselhar, medir, render
+
+    estado = medir()
+    print(render(estado))
+    return EXIT_OK if not aconselhar(estado) else EXIT_ERROR
+
+
+def _host_se_local(host: str) -> str:
+    """O endereco do LLM, mas so quando ele aponta para esta maquina."""
+    return host if any(marca in host for marca in ("127.0.0.1", "localhost", "::1")) else ""
 
 
 def _command_setup(args: argparse.Namespace, settings: Settings) -> int:

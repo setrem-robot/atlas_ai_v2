@@ -193,6 +193,24 @@ class LLMSettings:
     fallback_model: str = ""
     #: De quanto em quanto tempo perguntar se o `host` voltou.
     probe_interval: float = 10.0
+    #: Tamanho da janela de contexto, em tokens. E o que mais pesa na memoria
+    #: do robo depois do proprio modelo: o Ollama reserva o cache de atencao
+    #: pelo tamanho declarado, nao pelo texto que chega. Este robo conversa com
+    #: ~500 tokens de persona, oito mensagens curtas de historico e respostas de
+    #: 120 tokens — 2048 sobra, e o padrao de 4096 do Ollama dobra a conta a
+    #: troco de espaco que nunca e usado.
+    num_ctx: int = 2048
+    #: Quanto tempo o modelo fica na memoria depois de responder, no formato do
+    #: Ollama ("5m", "30s", "0"). Vale para o `host` principal, que costuma ser
+    #: a maquina de mesa — onde memoria sobra.
+    keep_alive: str = "5m"
+    #: O mesmo, para o reserva que roda no proprio Pi. "0" faz ele devolver a
+    #: memoria assim que termina de falar, que e o que mantem ~1,5 GB livres
+    #: enquanto a rede esta de pe. Quem paga por isso e a primeira resposta
+    #: depois de uma queda — e mesmo essa e coberta na maior parte das vezes,
+    #: porque o `FallbackLLMClient` carrega o modelo no instante em que percebe
+    #: a queda, e nao na hora da pergunta.
+    fallback_keep_alive: str = "0"
 
     @classmethod
     def from_env(cls, *, default_language: str = "en") -> LLMSettings:
@@ -216,6 +234,9 @@ class LLMSettings:
             fallback_host=_get_str("LLM_FALLBACK_HOST", "").rstrip("/"),
             fallback_model=_get_str("LLM_FALLBACK_MODEL", ""),
             probe_interval=_get_float("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
+            num_ctx=_get_int("LLM_NUM_CTX", 2048, minimum=256),
+            keep_alive=_get_str("LLM_KEEP_ALIVE", "5m"),
+            fallback_keep_alive=_get_str("LLM_FALLBACK_KEEP_ALIVE", "0"),
         )
 
 
@@ -456,6 +477,12 @@ class WebSettings:
     """Pagina de configuracao servida pelo robo."""
 
     enabled: bool = True
+    #: Mostra na pagina os comandos que chegam ao robo. Precisa de um broker
+    #: MQTT local — que so existe quando o corpo do robo (o `orquestrador`)
+    #: esta instalado na mesma maquina.
+    mostrar_comandos: bool = True
+    mqtt_host: str = "127.0.0.1"
+    mqtt_port: int = 1883
     #: 0.0.0.0 de proposito: a pagina existe para ser aberta do celular.
     host: str = "0.0.0.0"
     port: int = 8080
@@ -466,6 +493,9 @@ class WebSettings:
     def from_env(cls) -> WebSettings:
         return cls(
             enabled=_get_bool("WEB_ENABLED", True),
+            mostrar_comandos=_get_bool("WEB_COMANDOS", True),
+            mqtt_host=_get_str("WEB_MQTT_HOST", "127.0.0.1"),
+            mqtt_port=_get_int("WEB_MQTT_PORT", 1883, minimum=1),
             host=_get_str("WEB_HOST", "0.0.0.0"),
             port=_get_int("WEB_PORT", 8080, minimum=1),
             pin=_get_str("WEB_PIN", ""),

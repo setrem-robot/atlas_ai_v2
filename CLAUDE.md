@@ -6,21 +6,36 @@ convenções de estilo deste repositório já estão documentadas em detalhe em
 — leia aquilo primeiro para qualquer mudança de código. Este arquivo cobre
 só o que falta: a relação (ou falta dela) com o resto do projeto do robô.
 
-## Desacoplado de `orquestrador` — de propósito
+## Um ponto de contato com o `orquestrador`, e só um
 
-Este repositório **não** fala com o barramento MQTT do `orquestrador` (o
-"corpo" do robô: motores, GPS, Wi-Fi). Confirmado por leitura de todo
-`src/roboteye/`: nenhuma menção a MQTT, porta serial, GPIO, ou aos tópicos
-de `robo_common/topics.py`. `core/assistant.py:1` usa a palavra
-"orquestrador" só como substantivo comum em português (descreve que a
-classe `Assistant` liga LLM + memória + voz), não como referência ao
-repositório `orquestrador`.
+O RobotEye (a "cara" da Atlas) e o `orquestrador` (o "corpo": motores, GPS,
+Wi-Fi) continuam sendo dois programas separados. Mas **deixaram de ser
+desacoplados**: a ponte Bluetooth trouxe um ponto de contato, e ele é o único.
 
-As duas partes compartilham apenas a marca "Atlas" (mesma persona, ver
-`persona/atlas.md`). Se um dia fizer sentido integrá-las — por exemplo, o
-RobotEye reagir a `robo/telemetria/bateria` ou falar quando o `orquestrador`
-receber `{"tipo":"voz",...}` via `robo/voz/falar` — isso é trabalho novo, não
-algo que já existe e só não foi documentado. Veja
+- **`src/roboteye/ble/`** — o Pi anuncia o serviço BLE que era do ESP32 e
+  publica o que chega do celular em `robo/comando/entrada`, o mesmo tópico que
+  o `serial_ingestor` alimentava. Daí para a frente o caminho é todo do
+  `orquestrador`: ele roteia para `robo/motores/comando`, e o serviço `motores`
+  executa. O contrato desse tópico mora em `robo_common/topics.py`, no outro
+  repositório — mudar o nome aqui sem mudar lá faz o robô aceitar comandos e
+  não mover nada.
+- **`src/roboteye/web/comandos.py`** — a página do celular assina o mesmo
+  barramento só para *mostrar* o que o robô está obedecendo. Lê, não escreve.
+
+Fora esses dois, `src/roboteye/` não conhece MQTT, serial nem GPIO — e a
+`Assistant` de `core/assistant.py` continua sendo um "orquestrador" só no
+sentido comum da palavra (liga LLM + memória + voz), sem relação com o
+repositório de mesmo nome.
+
+**Um broker só.** `scripts/setup-raspberry-pi.sh --bluetooth-app` instala o
+Mosquitto pelo apt, e o `pi/docker-compose.yml` do `orquestrador` sobe outro na
+mesma porta 1883. O segundo a subir falha com "Address already in use", e o
+sintoma não parece de broker: o app conecta, os comandos chegam ao Pi e o robô
+não se mexe — porque esta ponte publica com sucesso num broker que ninguém mais
+escuta. Ver `../orquestrador/pi/mosquitto/apt/robo.conf.example`.
+
+O que ainda **não** existe: o RobotEye reagir a `robo/telemetria/bateria`, ou
+falar quando alguém publica em `robo/voz/falar`. Isso é trabalho novo. Veja
 `../MAPA-COMUNICACAO.md` para o mapa completo do que existe hoje.
 
 ## Já fortemente orientado a objetos

@@ -16,6 +16,18 @@ você> quem é você?
 Atlas> Sou a Atlas, um robô construído aqui na Setrem. Ainda estou aprendendo.
 ```
 
+**Chegou agora?** A Atlas é maior que este repositório. São três, e cada um roda
+sozinho:
+
+| Repositório | O que é | O que faz |
+|---|---|---|
+| [**atlas_ai_v2**](https://github.com/setrem-robot/atlas_ai_v2) *(este)* | a cara | face animada, voz, conversa com IA e a ponte Bluetooth |
+| [**orquestrador**](https://github.com/setrem-robot/orquestrador) | o corpo | motores, GPS, Wi-Fi, telemetria e a nuvem |
+| [**aplicativo**](https://github.com/setrem-robot/aplicativo) | o controle | app Flutter: dirigir o robô e ver os dados |
+
+Para rodar **só a face na sua máquina**, sem robô nenhum, vá direto para
+[Instalação](#instalação) — são dois comandos.
+
 ---
 
 ## Índice
@@ -69,11 +81,20 @@ O que isso custa, medido no próprio Pi 5:
 |---|---|
 | Arranque até a face na tela | **6,9 s** |
 | CPU da face (contínuo, 30 FPS, 800x480) | **17–21% de um núcleo** |
-| Memória da face | 130–145 MB |
+| Memória da face | 70–145 MB — ver a nota abaixo |
 | Custo de um quadro | 3,4 ms mediana / 3,9 ms p95 |
 | Resposta pela IA de rede (modelo quente) | **1–3 s** |
 | Resposta pela IA local, depois do aquecimento | ~1 s |
 | Temperatura em repouso / sob carga de IA | 50 °C / **78,5 °C** |
+
+> **A faixa da memória é larga porque há duas medições que não batem.** A que
+> gerou a tabela acima registrou 130–145 MB; a que está gravada em
+> `src/roboteye/memoria.py`, feita depois e estável ao longo de 16 mil quadros,
+> registrou 70 MiB para o mesmo processo. As duas leem `VmRSS`, então uma das
+> duas está errada e não dá para decidir qual de longe do robô. Rode
+> `roboteye memoria` no Pi e acredite nele — é ele que mede a máquina que você
+> tem na frente. Em qualquer um dos dois casos a conclusão não muda: a face não
+> é o problema de memória deste robô, e quem ocupa giga é o modelo de linguagem.
 
 O número que merece atenção é o último: **não há ventoinha**, e trinta segundos
 de modelo local levam o Pi de 56 °C a quase 80 °C. Conversas longas pela IA local
@@ -84,8 +105,14 @@ vão reduzir a frequência do processador. Um cooler oficial resolve.
 Este repositório é só a **cabeça** do robô — face, voz e conversa. O corpo
 (motores, GPS, Wi-Fi) vive em [`orquestrador`](https://github.com/setrem-robot/orquestrador),
 e o controle no celular em [`aplicativo`](https://github.com/setrem-robot/aplicativo).
-As três partes compartilham a marca "Atlas" e **nada mais**: este repositório não
-fala MQTT, serial nem GPIO. Veja [O que falta](#o-que-falta).
+
+**Há exatamente um ponto de contato entre as duas partes, e é de mão única.**
+Desde que o ESP32 saiu, a ponte Bluetooth roda aqui (`src/roboteye/ble/`): o Pi
+anuncia o serviço BLE que era do ESP32 e publica o que chega do celular em
+`robo/comando/entrada`. Daí para a frente o caminho é todo do `orquestrador`.
+Fora essa ponte, este repositório não fala MQTT, serial nem GPIO — e a Atlas
+continua sem saber a própria bateria e sem falar o que o app manda. Veja
+[O que falta](#o-que-falta).
 
 ---
 
@@ -276,6 +303,8 @@ roboteye say "Oi, tudo bem?"   # testa a voz e sai
 roboteye setup                 # escolhe IA, modelo e voz (grava no .env)
 roboteye models                # o que a máquina da IA tem instalado
 roboteye doctor                # diagnóstico do ambiente
+roboteye memoria               # onde a RAM do robô está indo
+roboteye radio                 # Wi-Fi e Bluetooth estão brigando pela antena?
 roboteye preview               # salva um PNG com todas as expressões
 roboteye web                   # página de configuração, para abrir do celular
 roboteye voice ensure          # baixa o que a configuração atual precisa
@@ -887,6 +916,11 @@ meio da conversa:
 | aquecendo só a conexão (como era) | 12 s |
 | aquecendo com a persona | **1 s** |
 
+Esse aquecimento acontece **no instante em que a queda é percebida**, e não no
+arranque: manter o modelo local carregado o dia inteiro custaria mais de um giga
+de RAM para um caso que quase não acontece. Ver
+[Onde a memória vai](#onde-a-memória-vai).
+
 Qual modelo cabe no Pi 5, medido com a face rodando junto:
 
 | Modelo | Velocidade | Português |
@@ -902,6 +936,84 @@ ar é **aviso**, não falha — o robô ainda conversa:
 [aviso] IA de rede             inacessivel em http://192.168.1.50:11434
 [ ok ] IA local (reserva)     gemma3:1b em http://127.0.0.1:11434
 ```
+
+### Onde a memória vai
+
+O Pi tem 8 GB e a suspeita natural é que a face e a escuta os estejam comendo.
+Medido, elas não estão nem perto:
+
+| Inquilino | RAM | Como se comporta |
+|---|---|---|
+| face (pygame + numpy, 800x480) | **70 MiB** | estável após 16 mil quadros |
+| escuta (Whisper `base`, int8) | **276 MiB** | estável após cinco transcrições |
+| Ollama local com `gemma3:1b` | **~1,5 GB** | enquanto o modelo estiver carregado |
+
+Os dois primeiros somam ~4% da memória do robô. Quem ocupa giga é o modelo de
+linguagem local — e ele passa quase todo o tempo **sem responder nada**, porque
+quem responde é a máquina de mesa. Por isso a reserva local nasce ociosa:
+
+```bash
+ROBOTEYE_LLM_FALLBACK_KEEP_ALIVE=0   # devolve a RAM assim que termina de falar
+ROBOTEYE_LLM_NUM_CTX=2048            # o cache de atenção é reservado por este número
+```
+
+Não há pressa escondida nisso. O momento de ler o modelo do cartão não é a
+primeira pergunta depois da queda, e sim a **queda**: a mesma sondagem que
+descobre que o Wi-Fi caiu manda carregar o modelo, em segundo plano, enquanto
+ninguém está esperando resposta. Quando a rede volta, a memória é devolvida na
+hora, sem esperar o tempo de expiração do Ollama.
+
+`ROBOTEYE_LLM_NUM_CTX` é o outro lado da conta: o Ollama reserva o cache de
+atenção pelo tamanho **declarado**, e não pelo texto que chega. Este robô
+conversa com ~500 tokens de persona, oito mensagens curtas de histórico e
+respostas de 120 tokens — 2048 sobra, e o padrão de 4096 dobra a reserva a troco
+de espaço que nunca é usado.
+
+Para ver o quadro no robô:
+
+```bash
+roboteye memoria
+```
+
+Ele mostra o total, o que cada processo do robô ocupa, o que o Ollama local está
+segurando, e avisa quando alguém está muito acima do que já foi medido dele —
+uma face em 300 MiB não é uma face grande, é uma face com defeito.
+
+### Wi-Fi e Bluetooth na mesma antena
+
+Com o ESP32 fora do caminho, o rádio Bluetooth passou a ser o **do próprio Pi** —
+o mesmo chip e a mesma antena do Wi-Fi. Em 2,4 GHz os dois ocupam literalmente a
+mesma faixa e precisam se revezar. Medido no robô com `scripts/bench-radio.sh`,
+com o anúncio BLE no ar:
+
+| | perda | rtt min/méd/máx | mdev |
+|---|---|---|---|
+| Bluetooth parado | 0% | 2,96 / 4,09 / 8,57 ms | 1,01 ms |
+| Bluetooth anunciando | 0% | 0,68 / 4,81 / 41,47 ms | 6,08 ms |
+
+Nenhum pacote perdido, média 18% maior, picos cinco vezes maiores. Para uma
+resposta de IA que leva ~1000 ms isso é irrelevante — mas o app repete o comando
+de direção a cada 300 ms, e é ali que o pico de 41 ms começa a aparecer como
+engasgo no controle.
+
+**A saída é de banda, não de ajuste fino.** O Bluetooth só existe em 2,4 GHz e
+não há o que fazer quanto a isso; o Wi-Fi também fala 5 GHz, onde não há
+Bluetooth nenhum. Levando o Wi-Fi para lá, a disputa acaba em vez de ser
+administrada:
+
+```bash
+roboteye radio                     # em que banda está, e o que fazer
+sudo ./scripts/separar-radios.sh   # fixa o Wi-Fi em 5 GHz e desliga o power-save
+```
+
+O script confere que a rede existe em 5 GHz **antes** de travar a banda — sem
+isso o robô ficaria offline, perdendo a IA boa e a voz da nuvem de uma vez. Se
+essa rede for só de 2,4 GHz, ele diz isso e não muda nada. Para voltar atrás:
+`sudo ./scripts/separar-radios.sh --desfazer`.
+
+O `power-save` do Wi-Fi é o segundo ajuste: ele desliga o rádio entre pacotes
+para poupar bateria, o que num robô ligado na tomada não compra nada, custa
+latência e ainda encurta as frestas que o Bluetooth usaria.
 
 ### Configurando pelo celular
 
@@ -1069,8 +1181,9 @@ aqui é bug esquecido — é trabalho que ainda não foi feito.
 ### A Atlas não fala o que o app manda
 
 O `orquestrador` já publica em `robo/voz/falar` quando alguém pede para o robô
-falar pelo celular. **Ninguém consome esse tópico.** Este repositório não fala
-MQTT: os dois lados do contrato existem, e os fios nunca foram ligados.
+falar pelo celular. **Ninguém consome esse tópico.** A ponte Bluetooth daqui só
+*escreve* no MQTT (`robo/comando/entrada`); ninguém neste repositório *lê*. Os
+dois lados do contrato existem, e os fios nunca foram ligados.
 
 O lugar natural para isso é um assinante MQTT que publique no `EventBus` daqui —
 sem que `core/assistant.py` ou a face saibam que MQTT existe, do mesmo jeito que
@@ -1105,6 +1218,27 @@ Com o serviço rodando, nenhum outro processo consegue abrir a placa de som — 
 voz. Resolver de verdade exigiria um servidor de áudio (PipeWire) rodando o dia
 todo, o que foi considerado caro demais para o que resolve. Veja
 [Solução de problemas](#solução-de-problemas).
+
+### Dois brokers disputam a porta 1883
+
+Esta é a pegadinha mais cara do projeto hoje, e ela mora exatamente na fronteira
+entre os dois repositórios. `scripts/setup-raspberry-pi.sh --bluetooth-app`
+instala o Mosquitto pelo `apt`; o `pi/docker-compose.yml` do `orquestrador` sobe
+outro na mesma porta. **O segundo a subir falha com "Address already in use"** —
+e o sintoma não parece de broker: o app conecta, os comandos chegam ao Pi, e o
+robô não se mexe, porque a ponte publica com sucesso num broker que ninguém mais
+escuta.
+
+Enquanto não houver uma decisão única sobre quem sobe o broker, confira antes de
+procurar o problema em outro lugar:
+
+```bash
+systemctl is-active mosquitto        # o do apt
+docker ps --filter name=mosquitto    # o do compose
+sudo ss -lntp | grep 1883            # quem realmente está com a porta
+```
+
+Ver `../orquestrador/pi/mosquitto/apt/robo.conf.example`.
 
 ### Falta uma segunda voz de licença limpa
 
@@ -1289,6 +1423,60 @@ internet" por "fala arrastada", além de 338 MB de modelo.
 
 Deixe `ROBOTEYE_VOICE_FALLBACK` **vazio**: o catálogo escolhe sozinho uma voz
 leve em ARM (`dii`, do Piper, 61 MB e oito vezes mais rápida).
+
+#### A voz está abafada, e não parece a que eu escolhi
+
+Provavelmente **não é** a que você escolheu. Confira antes de mexer em qualquer
+outra coisa:
+
+```bash
+journalctl -u roboteye -b | grep -i "reserva\|de volta"
+```
+
+Se aparecer `falando pela voz reserva (piper): edge indisponivel`, o robô caiu
+para a voz local e ficou nela. As duas têm quase a mesma **altura** — medindo a
+mesma frase, 214 Hz na Thalita contra 207 Hz na `dii` —, então não soa "mais
+grave": soa **surda**. O que as separa é o brilho, a energia acima de 6 kHz, que
+é onde moram o sopro e o "s":
+
+| | Thalita (rede) | `dii` (local) |
+|---|---|---|
+| altura (F0) | 214 Hz | 207 Hz |
+| brilho acima de 6 kHz | 0,320 | **0,023 — 17× menos** |
+
+Nenhum ajuste de volume, tom ou velocidade recupera agudo que não foi
+sintetizado. A pergunta certa é por que a voz de rede falhou, e a resposta mais
+comum é **arranque**: o serviço sobe antes de a rede existir. Neste robô, medido
+no boot, o serviço subiu às 00:19:22, a face abriu às :28 e a rede só ficou
+utilizável às :31 — a saudação tentava a voz de rede três segundos cedo demais,
+falhava, e o robô passava a falar pela reserva. Como nada mais fala depois da
+saudação, era a voz do robô inteiro que mudava.
+
+Hoje o robô espera a rede antes da primeira frase (ver `speech/fallback.py`); se
+você vir isso num robô antigo, é esta a causa.
+
+#### A voz tem um chiado metálico, em qualquer motor
+
+O ALSA está convertendo a taxa por **interpolação linear** — o que ele faz
+quando `libasound2-plugins` não está instalado. Medido neste robô, levando a
+mesma frase da Thalita (24 kHz) para os 48 kHz da placa:
+
+| conversor | brilho 6–12 kHz | lixo acima de 12 kHz | CPU |
+|---|---|---|---|
+| (a fonte) | 0,3321 | — | — |
+| linear | 0,2339 | **0,107** | 0,01 s |
+| `samplerate_medium` | 0,3210 | 0,00017 | 0,09 s |
+| `samplerate_best` | 0,3320 | 0,00038 | 0,26 s |
+| **`speexrate_medium`** | **0,3278** | **0,00013** | **0,01 s** |
+
+A interpolação linear joga fora 30% do brilho e devolve 10% de energia acima de
+12 kHz que não existia no original — imagens da reamostragem, que é o que se
+ouve como aspereza. O `speexrate_medium` custa o mesmo e preserva 99%:
+
+```bash
+sudo apt install libasound2-plugins
+sudo ./scripts/configurar-audio.sh      # escreve o conversor no /etc/asound.conf
+```
 
 ### A inteligência
 
