@@ -117,8 +117,13 @@ def aconselhar(estado: EstadoRadio) -> list[Conselho]:
     return conselhos
 
 
-def render(estado: EstadoRadio) -> str:
-    """Relatorio legivel de `EstadoRadio` mais os conselhos."""
+def render(estado: EstadoRadio, conselhos: list[Conselho] | None = None) -> str:
+    """Relatorio legivel de `EstadoRadio` mais os conselhos.
+
+    `conselhos` pode vir pronto de quem ja os calculou — a CLI precisa deles
+    tambem para o codigo de saida, e `aconselhar` e a mesma conta. Sem o
+    parametro, ele os calcula aqui, como antes.
+    """
     if estado.erro:
         return f"\nRádio do RobotEye\n{'=' * 60}\n{estado.erro}\n"
 
@@ -135,7 +140,8 @@ def render(estado: EstadoRadio) -> str:
     linhas.append(f"  economia    {economia}")
     linhas.append(f"  Bluetooth   {'ligado' if estado.bluetooth_ligado else 'desligado'}")
 
-    conselhos = aconselhar(estado)
+    if conselhos is None:
+        conselhos = aconselhar(estado)
     linhas.append("=" * 60)
     if not conselhos:
         if estado.disputando:  # pragma: no cover - `aconselhar` sempre cobre esse caso

@@ -251,15 +251,21 @@ class PonteBLE:
     def _ao_receber(self, value, options=None) -> None:
         """Um pacote BLE chegou. Pode trazer meia linha, ou duas coladas."""
         self._buffer.extend(bytes(value))
-        if len(self._buffer) > MAX_LINHA:
-            logger.warning("linha longa demais no bluetooth; descartando")
-            self._buffer.clear()
-            return
 
+        # Primeiro tira todas as linhas completas. So depois o que sobra — o
+        # trecho SEM `\n` — conta para o limite. Checar o buffer inteiro antes
+        # disso descartaria uma rajada de comandos validos so porque a soma
+        # deles passou de MAX_LINHA, e um "parada" no fim iria junto.
         while b"\n" in self._buffer:
             linha, _, resto = self._buffer.partition(b"\n")
             self._buffer = bytearray(resto)
             self._processar(linha.strip())
+
+        # O que restou e uma linha ainda por terminar. So ela pode crescer sem
+        # limite (um emissor que nunca manda `\n`), e e so ela que se descarta.
+        if len(self._buffer) > MAX_LINHA:
+            logger.warning("linha longa demais no bluetooth; descartando")
+            self._buffer.clear()
 
     def _processar(self, linha: bytes | bytearray) -> None:
         if not linha:

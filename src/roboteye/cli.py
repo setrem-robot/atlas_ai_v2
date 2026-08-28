@@ -406,8 +406,11 @@ def _command_radio(_: argparse.Namespace, __: Settings) -> int:
     from roboteye.radio import aconselhar, medir, render
 
     estado = medir()
-    print(render(estado))
-    return EXIT_OK if not aconselhar(estado) else EXIT_ERROR
+    # Uma conta so: `aconselhar` alimenta tanto o relatorio quanto o codigo de
+    # saida. Antes rodava duas vezes — barato, mas repetido a toa.
+    conselhos = aconselhar(estado)
+    print(render(estado, conselhos))
+    return EXIT_OK if not conselhos else EXIT_ERROR
 
 
 def _host_se_local(host: str) -> str:
