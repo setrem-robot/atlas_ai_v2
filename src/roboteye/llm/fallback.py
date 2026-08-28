@@ -63,6 +63,11 @@ class FallbackLLMClient:
         #: Ultimo arranjo de memoria efetivamente aplicado. None enquanto
         #: nenhum foi — e o que faz o arranque valer como uma aplicacao.
         self._memoria_estado: bool | None = None
+        #: Serializa o carregar/descarregar do reserva. Sem ele, uma rede que
+        #: pisca (cai, volta, cai) em segundos poe `_segurar_reserva` e
+        #: `_soltar_reserva` correndo juntas no mesmo modelo, e o estado final
+        #: vira o de quem terminar por ultimo — o oposto do pedido.
+        self._memoria_lock = threading.Lock()
         #: Quanto tempo o reserva fica residente quando *nao* e ele quem
         #: responde. "0" devolve a memoria assim que ele termina de falar.
         self._keep_alive_ocioso = keep_alive_ocioso
@@ -133,16 +138,30 @@ class FallbackLLMClient:
             return
         self._memoria_estado = primaria_no_ar
 
-        # Uma troca anterior ainda em andamento: a de agora e mais recente e a
-        # de la ja vai encontrar o estado mudado. Deixar as duas correrem juntas
-        # renderia carregar e descarregar o mesmo modelo ao mesmo tempo.
-        if self._memoria is not None and self._memoria.is_alive():
-            self._memoria.join(timeout=0.1)
-
-        alvo = self._soltar_reserva if primaria_no_ar else self._segurar_reserva
-        thread = threading.Thread(target=alvo, name="llm-memoria-reserva", daemon=True)
+        # A aplicacao roda numa thread para nao segurar a sondagem, mas serializada
+        # pelo lock: uma troca so comeca quando a anterior terminou. E, antes de
+        # agir, ela confere se ainda e a troca mais recente — se a rede mudou de
+        # novo enquanto esta esperava o lock, quem manda e a mais nova, e esta
+        # aqui sai sem tocar no modelo. E o que garante que o estado final e
+        # sempre o ultimo pedido, e nao o da thread que por acaso terminou depois.
+        thread = threading.Thread(
+            target=self._aplicar_memoria,
+            args=(primaria_no_ar,),
+            name="llm-memoria-reserva",
+            daemon=True,
+        )
         self._memoria = thread
         thread.start()
+
+    def _aplicar_memoria(self, primaria_no_ar: bool) -> None:
+        with self._memoria_lock:
+            if self._memoria_estado is not primaria_no_ar:
+                # Uma troca mais nova ja mudou o alvo; ela aplica o certo.
+                return
+            if primaria_no_ar:
+                self._soltar_reserva()
+            else:
+                self._segurar_reserva()
 
     def _segurar_reserva(self) -> None:
         """A rede caiu: o modelo local passa a valer a RAM que ocupa."""
