@@ -236,6 +236,15 @@ class Speaker:
             # faria, entre outras coisas, o fim de turno ser anunciado com uma
             # frase ainda por dizer — e a face pararia de falar antes da voz.
             preparada = self._tomar_preparada()
+            # Um adiantamento em andamento é a próxima fala, na ordem — a frase
+            # dele já saiu da fila. Esperá-lo aqui, antes de puxar qualquer outra
+            # coisa, resolve dois defeitos de uma vez: puxar da fila uma frase
+            # mais nova falaria fora de ordem (A, C, B), e cair no `get()` com o
+            # áudio já pronto em `_pronto` deixaria a última frase presa até a
+            # próxima interação enfileirar algo.
+            if preparada is None and self._adiantando is not None and self._adiantando.is_alive():
+                self._adiantando.join()
+                preparada = self._tomar_preparada()
             if preparada is not None:
                 lote, chunks = preparada
                 try:
@@ -321,7 +330,12 @@ class Speaker:
             self._held.appendleft(proximo)
             return
 
-        lote = self._batch(proximo)
+        # `esperar=False`: este `_batch` roda na thread do locutor, entre duas
+        # escritas de audio da fala atual. A espera de 0,25 s por mais uma frase
+        # ali vira silencio no meio da fala — o engasgo que o adiantamento
+        # existe para tirar. Aqui ele so junta o que ja esta na fila agora; o que
+        # chegar depois sai como o proximo adiantamento, sem custo nenhum.
+        lote = self._batch(proximo, esperar=False)
 
         def trabalhar() -> None:
             chunks: list[SpeechChunk] | None
@@ -352,7 +366,7 @@ class Speaker:
         self._adiantando = threading.Thread(target=trabalhar, name="speaker-adiantar", daemon=True)
         self._adiantando.start()
 
-    def _batch(self, first: _Utterance) -> _Utterance:
+    def _batch(self, first: _Utterance, *, esperar: bool = True) -> _Utterance:
         """Junta numa unica sintese as frases que ja estao esperando na fila.
 
         Cortar a resposta em frases serve para comecar a falar antes de o modelo
@@ -375,8 +389,9 @@ class Speaker:
         length = len(first.text)
         # Só a primeira espera: depois dela, o que já chegou entra sem custo, e
         # o que não chegou fica para o adiantamento, que roda enquanto esta fala
-        # já está tocando.
-        espera = ESPERA_LOTE_S
+        # já está tocando. `esperar=False` zera até essa primeira espera — é o
+        # que o adiantamento usa para não bloquear a thread do áudio.
+        espera = ESPERA_LOTE_S if esperar else 0.0
 
         while length < MAX_BATCH_CHARS:
             try:
