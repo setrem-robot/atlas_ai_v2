@@ -23,13 +23,18 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator, Sequence
 
-from roboteye.llm.base import ChatMessage, LLMClient, LLMError
+from roboteye.llm.base import ChatMessage, LLMClient, LLMError, ModeloResidente
 from roboteye.logging_setup import get_logger
 
 logger = get_logger(__name__)
 
 #: De quanto em quanto tempo a thread de fundo pergunta se a rede voltou.
 DEFAULT_PROBE_INTERVAL = 10.0
+
+#: Quanto tempo o modelo de reserva fica residente **enquanto ele e quem
+#: responde**. Nao e o mesmo que o `fallback_keep_alive` da configuracao, que
+#: vale para o estado normal (rede de pe, reserva fora da memoria).
+KEEP_ALIVE_EM_USO = "5m"
 
 
 class FallbackLLMClient:
@@ -42,11 +47,34 @@ class FallbackLLMClient:
         *,
         probe_interval: float = DEFAULT_PROBE_INTERVAL,
         on_switch: Callable[[str], None] | None = None,
+        keep_alive_ocioso: str = "0",
     ) -> None:
         self._primary = primary
         self._backup = backup
         self._probe_interval = max(0.0, probe_interval)
         self._on_switch = on_switch
+        #: O mesmo objeto de `_backup`, quando ele sabe soltar a propria
+        #: memoria. None para um reserva que nao ocupa RAM desta maquina —
+        #: o `EchoClient` dos testes, por exemplo.
+        self._residente = backup if isinstance(backup, ModeloResidente) else None
+        #: Ultima troca de memoria pedida, para nao repetir o mesmo pedido a
+        #: cada sondagem quando o estado nao mudou.
+        self._memoria: threading.Thread | None = None
+        #: Ultimo arranjo de memoria efetivamente aplicado. None enquanto
+        #: nenhum foi — e o que faz o arranque valer como uma aplicacao.
+        self._memoria_estado: bool | None = None
+        #: Serializa o carregar/descarregar do reserva. Sem ele, uma rede que
+        #: pisca (cai, volta, cai) em segundos poe `_segurar_reserva` e
+        #: `_soltar_reserva` correndo juntas no mesmo modelo, e o estado final
+        #: vira o de quem terminar por ultimo — o oposto do pedido.
+        self._memoria_lock = threading.Lock()
+        #: Quanto tempo o reserva fica residente quando *nao* e ele quem
+        #: responde. "0" devolve a memoria assim que ele termina de falar.
+        self._keep_alive_ocioso = keep_alive_ocioso
+        #: A persona, guardada no aquecimento. E o que o reserva precisa
+        #: reprocessar se um dia tiver de assumir — sao ~500 tokens, e num Pi
+        #: le-los custa segundos que ninguem quer pagar no meio de uma pergunta.
+        self._prompt: Sequence[ChatMessage] = ()
         #: Atributo, e nao propriedade: o protocolo `LLMClient` declara `name`
         #: como variavel, e uma propriedade so de leitura nao o satisfaz.
         self.name = "rede+local"
@@ -71,6 +99,7 @@ class FallbackLLMClient:
             self._primary_up = up
         if not mudou:
             return
+        self._ajustar_memoria(up)
         # Uma resposta que vem do modelo pequeno e mais curta e mais simples que
         # a de costume. Sem aviso, isso passa por "a IA ficou burra" — e quem
         # esta vendo vai procurar o erro no modelo, que e o lugar onde ele nao esta.
@@ -85,6 +114,72 @@ class FallbackLLMClient:
         if self._on_switch is not None:
             self._on_switch(message)
 
+    # -- memoria do reserva -------------------------------------------------
+    def _ajustar_memoria(self, primaria_no_ar: bool) -> None:
+        """Poe o modelo de reserva na memoria, ou o tira dela.
+
+        Num Raspberry Pi de 8 GB o modelo local ocupa mais de um giga o tempo
+        todo — e, na maior parte desse tempo, sem responder nada: quem responde
+        e a maquina de mesa. Deixa-lo residente "por garantia" e reservar a
+        memoria do robo inteiro para o caso raro.
+
+        O momento de carregar nao e a primeira pergunta depois da queda, e sim a
+        **queda**. A sondagem descobre isso em ate `probe_interval` segundos, e
+        e ali que este metodo manda ler o modelo do cartao — em segundo plano,
+        enquanto ninguem esta esperando. Quando a rede volta, a memoria e
+        devolvida na hora, sem esperar o tempo de expiracao do Ollama.
+        """
+        if self._residente is None:
+            return
+        # Idempotente de proposito: e chamado tanto pela troca de estado quanto
+        # pelo arranque, e repetir o pedido significaria descarregar um modelo
+        # que a chamada anterior acabou de mandar carregar.
+        if self._memoria_estado is primaria_no_ar:
+            return
+        self._memoria_estado = primaria_no_ar
+
+        # A aplicacao roda numa thread para nao segurar a sondagem, mas serializada
+        # pelo lock: uma troca so comeca quando a anterior terminou. E, antes de
+        # agir, ela confere se ainda e a troca mais recente — se a rede mudou de
+        # novo enquanto esta esperava o lock, quem manda e a mais nova, e esta
+        # aqui sai sem tocar no modelo. E o que garante que o estado final e
+        # sempre o ultimo pedido, e nao o da thread que por acaso terminou depois.
+        thread = threading.Thread(
+            target=self._aplicar_memoria,
+            args=(primaria_no_ar,),
+            name="llm-memoria-reserva",
+            daemon=True,
+        )
+        self._memoria = thread
+        thread.start()
+
+    def _aplicar_memoria(self, primaria_no_ar: bool) -> None:
+        with self._memoria_lock:
+            if self._memoria_estado is not primaria_no_ar:
+                # Uma troca mais nova ja mudou o alvo; ela aplica o certo.
+                return
+            if primaria_no_ar:
+                self._soltar_reserva()
+            else:
+                self._segurar_reserva()
+
+    def _segurar_reserva(self) -> None:
+        """A rede caiu: o modelo local passa a valer a RAM que ocupa."""
+        assert self._residente is not None
+        self._residente.set_keep_alive(KEEP_ALIVE_EM_USO)
+        try:
+            self._backup.warm_up(self._prompt)
+        except Exception as exc:
+            # Amplo de proposito: se o reserva nao carregar agora, ele ainda
+            # sera tentado na pergunta seguinte — so mais devagar.
+            logger.debug("nao consegui preparar o modelo local: %s", exc)
+
+    def _soltar_reserva(self) -> None:
+        """A rede voltou: o modelo local devolve a memoria."""
+        assert self._residente is not None
+        self._residente.set_keep_alive(self._keep_alive_ocioso)
+        self._residente.unload()
+
     # -- ciclo de vida -----------------------------------------------------
     def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
         """Descobre quem esta de pe, aquece os dois e comeca a vigiar a rede.
@@ -95,20 +190,34 @@ class FallbackLLMClient:
         pergunta de quem chegou perto do robo seria justamente a que paga a
         espera. A pergunta barata (`is_available`) resolve isso em segundos.
 
-        O reserva aquece de qualquer jeito, e pelo mesmo motivo que a voz
-        reserva: de nada adianta trocar de modelo num milissegundo se o que
-        assume ainda precisa ser lido do cartao SD, que e onde o Pi e mais lento.
+        **So aquece quem vai responder.** Antes os dois eram aquecidos, o que
+        deixava o modelo do Pi residente 24 horas por dia para um caso que
+        acontece raramente — mais de um giga de RAM parada num robo que tambem
+        precisa dela para a face e para a escuta. Hoje o reserva e carregado no
+        instante em que a rede cai (ver `_ajustar_memoria`), que e cedo o
+        bastante: a sondagem descobre a queda em segundos, e ninguem esta
+        esperando por uma resposta nesse meio-tempo.
         """
-        self._set_primary(self._primary.is_available())
+        self._prompt = messages
+        no_ar = self._primary.is_available()
+        self._set_primary(no_ar)
+        # Tambem no arranque, e nao so nas trocas: numa reinicializacao o Ollama
+        # local pode ter ficado com o modelo carregado da execucao anterior, e
+        # `_set_primary` nao mexe em memoria quando nada mudou. Quando ha o que
+        # carregar, e esta chamada que o carrega — dai o reserva nao aparecer
+        # abaixo.
+        self._ajustar_memoria(no_ar)
 
-        alvos = [self._backup, self._primary] if self.using_primary else [self._backup]
-        for client in alvos:
+        # Um reserva que nao ocupa memoria desta maquina nao tem o que gerenciar,
+        # e `_ajustar_memoria` nao o teria aquecido.
+        alvo = self._primary if no_ar else (None if self._residente else self._backup)
+        if alvo is not None:
             try:
-                client.warm_up(messages)
+                alvo.warm_up(messages)
             except Exception as exc:
-                # Amplo de proposito: um modelo que nao carrega nao pode
-                # impedir o robo de subir com o outro.
-                logger.debug("aquecimento de %s falhou: %s", client.name, exc)
+                # Amplo de proposito: um modelo que nao carrega nao pode impedir
+                # o robo de subir com o outro.
+                logger.debug("aquecimento de %s falhou: %s", alvo.name, exc)
 
         if self._watcher is None and self._probe_interval > 0:
             self._stop.clear()

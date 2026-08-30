@@ -16,7 +16,10 @@ from roboteye.core.events import (
     EventBus,
     Notice,
     Shutdown,
+    SpeechHeard,
+    SpeechStarted,
     ThinkingStarted,
+    UserMessage,
 )
 from roboteye.logging_setup import get_logger
 
@@ -27,6 +30,10 @@ REPLY_PREFIX = "\033[35mAtlas\033[0m> "
 ERROR_PREFIX = "\033[31m  !\033[0m "
 #: Aviso: amarelo, nao vermelho. Nada quebrou, mas mudou.
 NOTICE_PREFIX = "\033[33m  ~\033[0m "
+#: Escuta pelo microfone: o que o robo ouviu, para depurar o STT.
+HEARD_PREFIX = "\033[36m🎤\033[0m "
+DIM = "\033[90m"
+RESET = "\033[0m"
 
 HELP = """\
 Comandos:
@@ -54,6 +61,11 @@ class ConsoleChat:
         self._running = False
         self._thread: threading.Thread | None = None
         self._echo = echo_replies
+
+        #: Instante da mensagem do usuario aguardando a 1a fala da resposta. Serve
+        #: so para medir o tempo ate o robo comecar a responder; a 1a `SpeechStarted`
+        #: consome e zera, para o numero sair uma vez por turno.
+        self._aguardando_desde: float | None = None
 
         if echo_replies:
             bus.subscribe(self._print_event)
@@ -158,14 +170,47 @@ class ConsoleChat:
     # -- saida -------------------------------------------------------------
     def _print_event(self, event: Event) -> None:
         match event:
+            case SpeechHeard():
+                self._print_heard(event)
+            case UserMessage():
+                # So marca o inicio do turno para cronometrar a resposta. Nao
+                # imprime: o texto digitado ja esta na tela, e o falado saiu no
+                # bloco do `SpeechHeard` acima.
+                self._aguardando_desde = event.timestamp
             case ThinkingStarted():
-                print("  \033[90m…pensando\033[0m")
+                print(f"  {DIM}…pensando{RESET}")
+            case SpeechStarted():
+                if self._aguardando_desde is not None:
+                    ms = (event.timestamp - self._aguardando_desde) * 1000.0
+                    print(f"   {DIM}⏱ 1a fala em {ms:.0f} ms (LLM + TTS){RESET}")
+                    self._aguardando_desde = None
             case AssistantReply(text=text):
                 print(f"{REPLY_PREFIX}{text}")
             case ErrorOccurred(message=message, source=source):
                 print(f"{ERROR_PREFIX}[{source}] {message}")
             case Notice(message=message, source=source):
                 print(f"{NOTICE_PREFIX}[{source}] {message}")
+
+    def _print_heard(self, event: SpeechHeard) -> None:
+        """Mostra o que o microfone entendeu, com as medidas do reconhecimento."""
+        medidas = [f"STT {event.ms:.0f} ms"]
+        if event.confidence is not None:
+            medidas.append(f"conf {event.confidence:.2f}")
+        if event.no_speech is not None and event.no_speech > 0.5:
+            # So aparece quando e alto: e o sinal de que o trecho era mais
+            # silencio ou ruido que fala — a pista mais util quando o STT inventa.
+            medidas.append(f"silencio {event.no_speech:.0%}")
+        selo = f"{DIM}[{' · '.join(medidas)}]{RESET}"
+
+        if event.accepted is None:
+            # Ouvido, mas nao era com o robo (faltou o nome, ou a janela fechou).
+            print(f'{HEARD_PREFIX}{DIM}ignorado:{RESET} "{event.raw}"  {selo}')
+            return
+
+        print(f'{HEARD_PREFIX}ouvi: "{event.raw}"  {selo}')
+        if event.accepted != event.raw:
+            # O nome e os restos foram tirados: mostra o que virou a pergunta.
+            print(f'   {DIM}→ entendi:{RESET} "{event.accepted}"')
 
     def _on_shutdown(self, _: Event) -> None:
         self._running = False

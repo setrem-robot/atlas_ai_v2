@@ -106,19 +106,21 @@ class TestQueda:
 
 
 class TestAquecimento:
-    def test_aquece_os_dois(self) -> None:
+    def test_aquece_quem_vai_responder(self) -> None:
         rede, local = IAFalsa("rede"), IAFalsa("local")
         montar(rede, local).warm_up()
-        assert rede.aquecido and local.aquecido
+        assert rede.aquecido
+        # O local nao: um reserva que ocupa memoria nao deve ocupa-la enquanto
+        # nao e ele quem responde. Ver `TestMemoriaDaReserva`.
+        assert not local.aquecido
 
-    def test_a_persona_chega_aos_dois(self) -> None:
-        # E o que faz o modelo local responder em 2 s em vez de 12 na primeira
+    def test_a_persona_chega_a_quem_foi_aquecido(self) -> None:
+        # E o que faz o modelo responder em 2 s em vez de 12 na primeira
         # pergunta: o prefixo ja processado fica guardado no servidor.
         persona = (ChatMessage(role="system", content="voce e a Atlas"),)
         rede, local = IAFalsa("rede"), IAFalsa("local")
         montar(rede, local).warm_up(persona)
         assert rede.aquecido_com == list(persona)
-        assert local.aquecido_com == list(persona)
 
     def test_nao_espera_por_uma_rede_que_nao_existe(self) -> None:
         # Aquecer o que ja se sabe fora do ar custa o tempo limite inteiro.
@@ -139,13 +141,94 @@ class TestAquecimento:
     def test_aquecer_nao_derruba_o_arranque(self) -> None:
         rede, local = IAFalsa("rede"), IAFalsa("local")
         rede.warm_up = _explodir  # type: ignore[method-assign]
-        montar(rede, local).warm_up()
-        assert local.aquecido
+        cliente = montar(rede, local)
+        cliente.warm_up()  # nao levanta
+        # E o robo continua sabendo com quem falar.
+        assert responder(cliente) == ["rede", "rede"]
 
     def test_fechar_fecha_os_dois(self) -> None:
         rede, local = IAFalsa("rede"), IAFalsa("local")
         montar(rede, local).close()
         assert rede.fechado and local.fechado
+
+
+class IAResidente(IAFalsa):
+    """Reserva que ocupa memoria desta maquina — e sabe devolve-la."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.keep_alive = "0"
+        self.descarregou = 0
+
+    def set_keep_alive(self, valor: str) -> None:
+        self.keep_alive = valor
+
+    def unload(self) -> bool:
+        self.descarregou += 1
+        return True
+
+
+def _esperar_memoria(cliente: FallbackLLMClient) -> None:
+    """Deixa a troca de memoria terminar antes de conferir o resultado.
+
+    Ela roda em thread de proposito: carregar o modelo do cartao demora
+    segundos, e segurar a sondagem por isso atrasaria a descoberta de que a
+    rede voltou.
+    """
+    thread = cliente._memoria
+    if thread is not None:
+        thread.join(timeout=5.0)
+
+
+class TestMemoriaDaReserva:
+    """O modelo do Pi so ocupa RAM quando e ele quem responde."""
+
+    def test_com_a_rede_de_pe_a_reserva_fica_fora_da_memoria(self) -> None:
+        rede, local = IAFalsa("rede"), IAResidente("local")
+        cliente = montar(rede, local)
+        cliente.warm_up()
+        _esperar_memoria(cliente)
+        assert not local.aquecido
+        assert local.descarregou == 1
+
+    def test_a_queda_carrega_a_reserva_antes_da_pergunta(self) -> None:
+        # O momento de ler o modelo do cartao e a queda, e nao a pergunta
+        # seguinte: ali ninguem esta esperando resposta.
+        persona = (ChatMessage(role="system", content="voce e a Atlas"),)
+        rede, local = IAFalsa("rede"), IAResidente("local")
+        cliente = montar(rede, local)
+        cliente.warm_up(persona)
+        _esperar_memoria(cliente)
+
+        rede.disponivel = False
+        cliente._set_primary(False)
+        _esperar_memoria(cliente)
+
+        assert local.aquecido_com == list(persona)
+        assert local.keep_alive == "5m"
+
+    def test_a_rede_de_volta_devolve_a_memoria(self) -> None:
+        rede, local = IAFalsa("rede"), IAResidente("local")
+        cliente = montar(rede, local)
+        cliente.warm_up()
+        _esperar_memoria(cliente)
+
+        cliente._set_primary(False)
+        _esperar_memoria(cliente)
+        cliente._set_primary(True)
+        _esperar_memoria(cliente)
+
+        assert local.keep_alive == "0"
+        # Uma no arranque e outra quando a rede voltou.
+        assert local.descarregou == 2
+
+    def test_reserva_sem_memoria_propria_continua_sendo_aquecida(self) -> None:
+        # `EchoClient` e afins nao ocupam RAM desta maquina: nao ha o que
+        # gerenciar, e o comportamento antigo (aquecer) segue valendo.
+        rede, local = IAFalsa("rede"), IAFalsa("local")
+        rede.disponivel = False
+        montar(rede, local).warm_up()
+        assert local.aquecido
 
 
 class TestFactory:

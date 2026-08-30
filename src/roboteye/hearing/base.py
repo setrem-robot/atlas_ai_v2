@@ -8,11 +8,30 @@ aqui um `Ouvido` transforma som em texto. Os dois sao protocolos, os dois tem
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 
 class HearingError(RuntimeError):
     """Falha ao escutar."""
+
+
+@dataclass(frozen=True, slots=True)
+class Transcricao:
+    """Uma frase reconhecida, com o que se sabe sobre como ela foi reconhecida.
+
+    O texto e o unico campo que o robo usa para responder; o resto existe para
+    depurar a escuta — ver por que uma frase saiu errada sem ter de gravar audio.
+    Motores que nao medem confianca (o Vosk) deixam esses campos em `None`.
+    """
+
+    texto: str
+    #: Quanto a transcricao demorou, em milissegundos.
+    ms: float = 0.0
+    #: Media do log-prob dos trechos: perto de 0 e alta, -1 ja e baixa.
+    confianca: float | None = None
+    #: Probabilidade de o trecho ser silencio/ruido, e nao fala.
+    sem_fala: float | None = None
 
 
 @runtime_checkable
@@ -21,7 +40,7 @@ class Ouvido(Protocol):
 
     name: str
 
-    def escutar(self) -> Iterator[str]:
+    def escutar(self) -> Iterator[Transcricao]:
         """Produz cada frase reconhecida, uma por vez, ate ser fechado.
 
         Bloqueia esperando alguem falar. Quem chama roda isto numa thread.

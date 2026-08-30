@@ -21,6 +21,7 @@ from roboteye.core.events import (
     Notice,
     Shutdown,
     SpeechFinished,
+    SpeechHeard,
     SpeechStarted,
 )
 from roboteye.face.app import FaceApp
@@ -184,12 +185,24 @@ class Application:
         # ele — que e como as pessoas falam: "Atlas!" ... "quanto e dois mais dois?"
         conversa = Conversa(self.settings.hearing.janela_s)
         try:
-            for ouvido in self.ears.escutar():
+            for transcricao in self.ears.escutar():
                 pergunta = dirigido_ao_robo(
-                    ouvido, self.settings.hearing.wake_word, conversa=conversa
+                    transcricao.texto, self.settings.hearing.wake_word, conversa=conversa
+                )
+                # Publicado para toda transcricao, dirigida ou nao: a tela de
+                # debug mostra ate o que o robo ouviu e ignorou, que e metade do
+                # trabalho de descobrir por que ele nao respondeu.
+                self.bus.publish(
+                    SpeechHeard(
+                        raw=transcricao.texto,
+                        accepted=pergunta,
+                        ms=transcricao.ms,
+                        confidence=transcricao.confianca,
+                        no_speech=transcricao.sem_fala,
+                    )
                 )
                 if pergunta is None:
-                    logger.debug("ouvi %r, mas nao era comigo", ouvido)
+                    logger.debug("ouvi %r, mas nao era comigo", transcricao.texto)
                     # Chamada sem pergunta ("Atlas!") abre a janela: a face
                     # mostra que esta esperando, que e o unico jeito de quem
                     # falou saber que foi ouvido antes de fazer a pergunta.

@@ -41,6 +41,27 @@ class UserMessage(Event):
 
 
 @dataclass(frozen=True, slots=True)
+class SpeechHeard(Event):
+    """O microfone transcreveu algo — dirigido ao robo ou nao.
+
+    Existe so para depurar a escuta: carrega o texto exato que o motor entendeu
+    (`raw`), o que sobrou depois do filtro do nome (`accepted`, `None` quando nao
+    era com o robo) e as medidas que ajudam a entender um erro de reconhecimento
+    — quanto a transcricao demorou e o quanto o modelo confiou nela. Quem escuta
+    e a interface de debug; o resto do sistema segue reagindo a `UserMessage`.
+    """
+
+    raw: str
+    accepted: str | None
+    ms: float
+    #: Media do log-prob do Whisper: perto de 0 e confianca alta, -1 ja e baixa.
+    #: `None` nos motores que nao expoem isso (Vosk).
+    confidence: float | None = None
+    #: Probabilidade de o trecho ser silencio/ruido, tambem do Whisper.
+    no_speech: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ListeningChanged(Event):
     """O robo passou a ouvir alguem, ou parou.
 

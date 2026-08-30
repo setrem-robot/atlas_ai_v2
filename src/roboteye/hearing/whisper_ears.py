@@ -22,9 +22,10 @@ momento em que a pessoa esta esperando resposta.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 
-from roboteye.hearing.base import HearingError
+from roboteye.hearing.base import HearingError, Transcricao
 from roboteye.hearing.microfone import Microfone
 from roboteye.logging_setup import get_logger
 
@@ -84,7 +85,7 @@ class WhisperEars:
         self._microfone.retomar()
 
     # -- escuta ------------------------------------------------------------
-    def escutar(self) -> Iterator[str]:
+    def escutar(self) -> Iterator[Transcricao]:
         self.warm_up()
         if self._modelo is None:
             raise HearingError(
@@ -93,14 +94,17 @@ class WhisperEars:
             )
 
         for trecho in self._microfone.frases():
-            texto = self._transcrever(trecho)
-            if texto:
-                yield texto
+            transcricao = self._transcrever(trecho)
+            if transcricao.texto:
+                yield transcricao
 
-    def _transcrever(self, audio) -> str:
+    def _transcrever(self, audio) -> Transcricao:
         modelo = self._modelo
         if modelo is None:  # pragma: no cover - `escutar` ja garantiu
-            return ""
+            return Transcricao("")
+        # A transcricao acontece de verdade ao percorrer os segmentos (o
+        # `faster-whisper` e preguicoso), entao o cronometro cerca o laco.
+        inicio = time.perf_counter()
         try:
             segmentos, _ = modelo.transcribe(
                 audio,
@@ -113,9 +117,26 @@ class WhisperEars:
                 vad_filter=True,
                 condition_on_previous_text=False,
             )
-            return " ".join(s.text for s in segmentos).strip()
+            partes: list[str] = []
+            logprobs: list[float] = []
+            silencios: list[float] = []
+            for s in segmentos:
+                partes.append(s.text)
+                logprobs.append(s.avg_logprob)
+                silencios.append(s.no_speech_prob)
         except Exception as exc:
             # Uma transcricao que falha nao pode derrubar a escuta: a proxima
             # frase tem todo o direito de funcionar.
             logger.warning("nao consegui transcrever o trecho: %s", exc)
-            return ""
+            return Transcricao("")
+
+        ms = (time.perf_counter() - inicio) * 1000.0
+        return Transcricao(
+            # Cada segmento do Whisper vem com um espaco a frente; juntar com
+            # `" ".join` cru deixaria espacos duplos no meio da frase que a
+            # pessoa nao disse. Um `.strip()` por segmento remove esse artefato.
+            texto=" ".join(p.strip() for p in partes if p.strip()),
+            ms=ms,
+            confianca=sum(logprobs) / len(logprobs) if logprobs else None,
+            sem_fala=max(silencios) if silencios else None,
+        )

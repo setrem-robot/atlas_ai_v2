@@ -27,10 +27,13 @@ class OllamaClient:
 
     name = "ollama"
 
-    def __init__(self, settings: LLMSettings) -> None:
+    def __init__(self, settings: LLMSettings, *, keep_alive: str | None = None) -> None:
         self._host = settings.host
         self._model = settings.model
         self._num_predict = settings.max_tokens
+        self._num_ctx = settings.num_ctx
+        #: Mutavel de proposito — ver `set_keep_alive`.
+        self._keep_alive = keep_alive if keep_alive is not None else settings.keep_alive
         self._timeout = httpx.Timeout(
             connect=5.0,
             read=settings.timeout,
@@ -69,12 +72,50 @@ class OllamaClient:
                     "messages": corpo,
                     "stream": False,
                     "think": False,
-                    "options": {"num_predict": 1},
+                    # Sem isto o aquecimento nao aqueceria nada: com
+                    # `keep_alive` valendo "0", o Ollama carrega o modelo,
+                    # responde e o descarrega antes da primeira pergunta de
+                    # verdade. Quem manda aquecer quer o modelo *residente*.
+                    "keep_alive": self._keep_alive_de_aquecimento(),
+                    "options": {"num_predict": 1, "num_ctx": self._num_ctx},
                 },
                 timeout=60.0,
             )
         except httpx.HTTPError as exc:
             logger.debug("aquecimento do LLM falhou (segue o jogo): %s", exc)
+
+    def _keep_alive_de_aquecimento(self) -> str:
+        return "5m" if self._keep_alive.strip() in {"0", "0s", ""} else self._keep_alive
+
+    def set_keep_alive(self, valor: str) -> None:
+        """Muda quanto tempo o modelo fica residente depois de responder.
+
+        Existe para o reserva local: enquanto a IA de rede responde, ele nao
+        deve ocupar nada; no momento em que ela cai, passa a valer a pena
+        segura-lo na memoria. Ver `FallbackLLMClient`.
+        """
+        self._keep_alive = valor
+
+    def unload(self) -> bool:
+        """Pede ao Ollama que solte este modelo da memoria agora.
+
+        Um `keep_alive` de "0" numa chamada vazia e como a propria API do Ollama
+        descarrega — nao ha rota dedicada para isso. Devolve se o pedido foi
+        aceito; falhar aqui nao e erro de ninguem, so memoria que continua presa
+        ate o tempo dela expirar.
+        """
+        try:
+            resposta = self._http().post(
+                "/api/chat",
+                json={"model": self._model, "messages": [], "keep_alive": 0},
+                timeout=10.0,
+            )
+            resposta.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.debug("nao consegui descarregar %s: %s", self._model, exc)
+            return False
+        logger.info("modelo %s descarregado da memoria", self._model)
+        return True
 
     def close(self) -> None:
         if self._client is not None:
@@ -110,9 +151,14 @@ class OllamaClient:
             # Modelos com modo de raciocinio (Qwen3 e afins) gastariam a cota de
             # tokens pensando em voz alta — e o robo falaria o raciocinio inteiro.
             "think": False,
+            "keep_alive": self._keep_alive,
             "options": {
                 # Respostas curtas: o robo fala, nao redige.
                 "num_predict": self._num_predict,
+                # O cache de atencao e reservado pelo tamanho declarado, e nao
+                # pelo texto que chega: cada token de contexto a mais e memoria
+                # presa no Pi mesmo numa conversa de duas frases.
+                "num_ctx": self._num_ctx,
                 "temperature": 0.8,
             },
         }

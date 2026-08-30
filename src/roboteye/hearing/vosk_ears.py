@@ -24,10 +24,11 @@ import contextlib
 import json
 import queue
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
-from roboteye.hearing.base import HearingError
+from roboteye.hearing.base import HearingError, Transcricao
 from roboteye.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -99,7 +100,7 @@ class VoskEars:
         self._pausado.clear()
 
     # -- escuta ------------------------------------------------------------
-    def escutar(self) -> Iterator[str]:
+    def escutar(self) -> Iterator[Transcricao]:
         self.warm_up()
         if self._model is None:
             raise HearingError(
@@ -145,7 +146,12 @@ class VoskEars:
                     continue
                 if bloco is None:
                     break
+                inicio = time.perf_counter()
                 if reconhecedor.AcceptWaveform(bloco):
                     texto = json.loads(reconhecedor.Result()).get("text", "").strip()
                     if texto:
-                        yield texto
+                        # O Vosk nao expoe confianca por aqui; so o tempo do
+                        # ultimo bloco entra na medida, que e o custo real de
+                        # fechar a frase.
+                        ms = (time.perf_counter() - inicio) * 1000.0
+                        yield Transcricao(texto=texto, ms=ms)
