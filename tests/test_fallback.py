@@ -207,3 +207,82 @@ class TestAviso:
 def test_cooldown_negativo_nao_quebra(cooldown: float) -> None:
     engine = FallbackEngine(VozFalsa("a"), VozFalsa("b"), cooldown=cooldown)
     assert consumir(engine) == ["a", "a"]
+
+
+class VozDeRede(VozFalsa):
+    """Voz online que sabe dizer se a rede já chegou.
+
+    Existe porque o motor de rede real ganhou essa pergunta (`alcancavel`) para
+    que a saudação de arranque não fosse pela voz errada — ver a docstring de
+    `fallback.py`.
+    """
+
+    def __init__(self, name: str = "nuvem", *, chega_na_tentativa: int | None = 0) -> None:
+        super().__init__(name)
+        #: Em qual consulta a rede aparece. None = nunca chega.
+        self._chega = chega_na_tentativa
+        self.consultas = 0
+
+    def alcancavel(self) -> bool:
+        atual = self.consultas
+        self.consultas += 1
+        return self._chega is not None and atual >= self._chega
+
+
+class TestEsperaDeArranque:
+    """A primeira frase espera a rede subir; as seguintes, não.
+
+    O robô fala a saudação segundos antes de a rede existir. Desistir ali não
+    trocava uma frase de voz — trocava a voz do robô pelo resto da sessão,
+    porque nada mais fala depois da saudação.
+    """
+
+    def test_nao_espera_quando_a_rede_ja_esta_de_pe(self) -> None:
+        nuvem, local = VozDeRede(chega_na_tentativa=0), VozFalsa("local")
+        assert consumir(FallbackEngine(nuvem, local)) == ["nuvem", "nuvem"]
+        assert nuvem.consultas == 1, "uma consulta basta quando a rede responde"
+
+    def test_espera_a_rede_chegar_e_usa_a_voz_boa(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        dormidas: list[float] = []
+        monkeypatch.setattr("roboteye.speech.fallback.time.sleep", dormidas.append)
+
+        nuvem, local = VozDeRede(chega_na_tentativa=2), VozFalsa("local")
+        assert consumir(FallbackEngine(nuvem, local)) == ["nuvem", "nuvem"]
+        assert local.falas == [], "a reserva não devia ter falado"
+        assert dormidas, "esperou sem dormir — isso viraria laço quente"
+
+    def test_desiste_e_fala_pela_reserva_se_a_rede_nao_vier(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sem internet nenhuma, o robô ainda tem que dar bom dia."""
+        agora = [0.0]
+        monkeypatch.setattr("roboteye.speech.fallback.time.monotonic", lambda: agora[0])
+        monkeypatch.setattr(
+            "roboteye.speech.fallback.time.sleep",
+            lambda s: agora.__setitem__(0, agora[0] + s),
+        )
+
+        nuvem, local = VozDeRede(chega_na_tentativa=None), VozFalsa("local")
+        assert consumir(FallbackEngine(nuvem, local)) == ["local", "local"]
+        assert agora[0] <= FallbackEngine(nuvem, local)._espera_de_arranque + 1
+
+    def test_espera_uma_vez_so(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Depois da primeira frase, quem conversa prefere a reserva agora."""
+        monkeypatch.setattr("roboteye.speech.fallback.time.sleep", lambda _: None)
+
+        nuvem, local = VozDeRede(chega_na_tentativa=1), VozFalsa("local")
+        motor = FallbackEngine(nuvem, local)
+        consumir(motor)
+        consultas_apos_a_primeira = nuvem.consultas
+        consumir(motor, "outra frase")
+        assert nuvem.consultas == consultas_apos_a_primeira
+
+    def test_voz_local_nao_e_perguntada(self) -> None:
+        """Uma voz de disco nunca esteve fora do ar; não há o que esperar."""
+        local_preferida, reserva = VozFalsa("local"), VozFalsa("outra")
+        assert consumir(FallbackEngine(local_preferida, reserva)) == ["local", "local"]
+
+    def test_espera_desligada_nao_consulta_a_rede(self) -> None:
+        nuvem, local = VozDeRede(chega_na_tentativa=None), VozFalsa("local")
+        consumir(FallbackEngine(nuvem, local, espera_de_arranque=0))
+        assert nuvem.consultas == 0

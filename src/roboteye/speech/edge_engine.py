@@ -24,6 +24,7 @@ frase a frase, a fala continua comecando cedo.
 from __future__ import annotations
 
 import asyncio
+import socket
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -53,6 +54,10 @@ DEFAULT_SPEAKER = "pt-BR-ThalitaMultilingualNeural"
 CONNECT_TIMEOUT = 8
 RECEIVE_TIMEOUT = 25
 
+#: Servidor que a biblioteca procura. So e usado para perguntar se ja da para
+#: chegar la (ver `alcancavel`); quem abre a conexao de verdade e o `edge_tts`.
+SERVIDOR = "speech.platform.bing.com"
+
 
 class EdgeEngine:
     """Sintetiza voz pelas vozes neurais da Microsoft."""
@@ -74,6 +79,23 @@ class EdgeEngine:
 
     def close(self) -> None:
         self._ready = False
+
+    def alcancavel(self) -> bool:
+        """Se da para chegar ao servidor de sintese agora.
+
+        So resolve o nome — nao abre conexao nem sintetiza — porque a pergunta
+        precisa custar milissegundos quando a rede esta de pe, e porque e
+        exatamente a resolucao de nome que falha quando o robo acabou de ligar
+        (`Temporary failure in name resolution`).
+
+        Existe para o `FallbackEngine` saber esperar em vez de desistir: ver o
+        comentario sobre o arranque em `fallback.py`.
+        """
+        try:
+            socket.getaddrinfo(SERVIDOR, 443, proto=socket.IPPROTO_TCP)
+        except OSError:
+            return False
+        return True
 
     # -- sintese -----------------------------------------------------------
     def synthesize(self, text: str) -> Iterator[SpeechChunk]:

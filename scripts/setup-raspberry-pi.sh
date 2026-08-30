@@ -8,6 +8,7 @@
 #   ./scripts/setup-raspberry-pi.sh --service           também instala o serviço systemd
 #   ./scripts/setup-raspberry-pi.sh --branch NOME      branch que o robô segue (padrão: producao)
 #   ./scripts/setup-raspberry-pi.sh --escuta           também instala o microfone (STT)
+#   ./scripts/setup-raspberry-pi.sh --bluetooth-app    ponte para o app controlar os motores
 #   ./scripts/setup-raspberry-pi.sh --voice dora        usa outra voz
 #   ./scripts/setup-raspberry-pi.sh --ollama IP:PORTA   endereço da máquina com a IA
 #   ./scripts/setup-raspberry-pi.sh --model qwen3:8b    modelo de linguagem
@@ -29,6 +30,8 @@ ASSUME_YES=false
 WITH_BLUETOOTH=false
 WITH_SERVICE=false
 WITH_HEARING=false
+WITH_BLE=false
+BLE_NOME="Atlas"
 #: Branch que o robô segue. Deliberadamente NÃO é o `main`: é o que separa
 #: "estou mexendo" de "está no robô".
 UPDATE_BRANCH="producao"
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         --bluetooth) WITH_BLUETOOTH=true; shift ;;
         --service)   WITH_SERVICE=true; shift ;;
         --escuta)    WITH_HEARING=true; shift ;;
+        --bluetooth-app) WITH_BLE=true; shift ;;
         --branch)    UPDATE_BRANCH="${2:?--branch exige um nome}"; shift 2 ;;
         --voice)     VOICE="${2:?--voice exige um nome}"; shift 2 ;;
         --model)     MODEL="${2:?--model exige um nome}"; shift 2 ;;
@@ -79,6 +83,7 @@ sudo apt-get install -y --no-install-recommends \
     build-essential \
     python3-pygame \
     libportaudio2 \
+    libasound2-plugins \
     libsdl2-2.0-0 \
     libsdl2-ttf-2.0-0 \
     libegl1 \
@@ -133,6 +138,18 @@ fi
 EXTRAS="tts,online"
 if [[ "${WITH_HEARING}" == true ]]; then
     EXTRAS="${EXTRAS},stt"
+fi
+if [[ "${WITH_BLE}" == true ]]; then
+    EXTRAS="${EXTRAS},ble"
+    # O `bluezero` fala com o BlueZ por D-Bus, e as duas pontas disso vem do
+    # sistema: compilar o PyGObject no Pi demora minutos e falha na imagem Lite.
+    #
+    # O `mosquitto` entra aqui porque é para onde a ponte entrega o que recebe.
+    # Sem ele, o app conecta, os comandos chegam ao Pi e morrem sem ninguém do
+    # outro lado — sem erro em lugar nenhum. Se o `orquestrador` já estiver
+    # instalado nesta máquina, o broker dele é o mesmo e o apt não faz nada.
+    sudo apt-get install -y --no-install-recommends python3-dbus python3-gi bluez mosquitto
+    sudo systemctl enable --now mosquitto || warn "não consegui subir o broker MQTT"
 fi
 "${VENV_DIR}/bin/pip" install --quiet -e "${REPO_DIR}[${EXTRAS}]"
 info "pacote instalado (extras: ${EXTRAS})"
@@ -242,6 +259,14 @@ SUDO
         warn "regra de sudo recusada; o botão de atualizar vai pedir para rodar à mão"
     fi
     rm -f "${SUDOERS_TMP}"
+
+    if [[ "${WITH_BLE}" == true ]]; then
+        sed -e "s|@REPO_DIR@|${REPO_DIR}|g" -e "s|@BLE_NOME@|${BLE_NOME}|g" \
+            "${REPO_DIR}/scripts/roboteye-ble.service" \
+            | sudo tee /etc/systemd/system/roboteye-ble.service >/dev/null
+        sudo systemctl enable roboteye-ble.service
+        info "ponte bluetooth instalada; o celular procura por \"${BLE_NOME}\""
+    fi
 
     sudo systemctl daemon-reload
     sudo systemctl enable roboteye.service

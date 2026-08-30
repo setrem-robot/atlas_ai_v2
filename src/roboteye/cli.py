@@ -130,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--port", type=int, help="porta (padrao: 8080)")
     web.set_defaults(handler=_command_web)
 
+    ble = subparsers.add_parser("ble", help="ponte bluetooth: o celular controla o robo sem ESP32")
+    ble.add_argument("--nome", default="Atlas", help="nome que aparece na busca do celular")
+    ble.add_argument("--mqtt-host", default="127.0.0.1", help="broker (padrao: 127.0.0.1)")
+    ble.add_argument("--mqtt-port", type=int, default=1883, help="porta do broker")
+    ble.set_defaults(handler=_command_ble)
+
     voice = subparsers.add_parser("voice", help="gerencia modelos de voz")
     voice_subparsers = voice.add_subparsers(dest="voice_command", required=True)
 
@@ -211,9 +217,17 @@ def _config_page(settings: Settings, app: Any = None):
     from roboteye.web import ConfigServer
 
     config = build_web_config(settings)
+    comandos = None
+    if settings.web.mostrar_comandos:
+        from roboteye.web.comandos import ComandosRecebidos
+
+        comandos = ComandosRecebidos()
+        comandos.escutar(host=settings.web.mqtt_host, port=settings.web.mqtt_port)
+
     if app is not None:
         config = replace(
             config,
+            comandos=comandos,
             conversa=_conversa_do(app),
             # O atualizador pergunta isto antes de reiniciar o robo: ninguem quer
             # a face sumindo no meio de uma frase.
@@ -275,6 +289,32 @@ def _command_face(args: argparse.Namespace, settings: Settings) -> int:
     settings = _apply_face_overrides(args, settings)
     with Application.build(settings) as app, _config_page(settings, app):
         app.run_face()
+    return EXIT_OK
+
+
+def _command_ble(args: argparse.Namespace, _settings: Settings) -> int:
+    """Poe o robo no ar pelo bluetooth e entrega os comandos aos motores.
+
+    Substitui o par ESP32 + `serial_ingestor`: o celular fala com o Pi direto, e
+    o que chega vai para o mesmo topico MQTT de sempre.
+    """
+    from roboteye.ble import EntregaMqtt, PonteBLE, anunciar_pelo_kernel
+
+    entrega = EntregaMqtt(host=args.mqtt_host, port=args.mqtt_port)
+    entrega.conectar()
+
+    if not anunciar_pelo_kernel(args.nome):
+        logger.error("sem anuncio no ar, o celular nao vai achar o robo")
+        return EXIT_ERROR
+
+    ponte = PonteBLE(entrega, nome=args.nome)
+    try:
+        # Bloqueia no laco de eventos do D-Bus ate o servico ser encerrado.
+        ponte.anunciar()
+    except KeyboardInterrupt:
+        logger.info("encerrando a ponte bluetooth")
+    finally:
+        entrega.fechar()
     return EXIT_OK
 
 
