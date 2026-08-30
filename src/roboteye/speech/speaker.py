@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections import deque
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
@@ -432,10 +433,23 @@ class Speaker:
                 polish=self._polish,
             )
 
+        # Cronometro do TTS: a sintese e preguicosa, o custo real e o tempo ate
+        # o primeiro bloco de audio ficar pronto. So vale medir quando a fala foi
+        # sintetizada aqui; a adiantada ja veio pronta, com latencia zero.
+        inicio = time.monotonic()
+        primeiro = True
+
         for chunk in stream:
             if not self._is_current(item.generation):
                 logger.debug("fala abortada no meio do audio")
                 return
+
+            if primeiro:
+                primeiro = False
+                if pronto is None:
+                    logger.info(
+                        "TTS: primeiro audio em %.0f ms", (time.monotonic() - inicio) * 1000.0
+                    )
 
             # A cada bloco, e nao so no comeco: quando esta fala arranca, o
             # modelo em geral **ainda nao escreveu** a proxima, entao tentar uma
