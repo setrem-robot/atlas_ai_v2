@@ -1,7 +1,11 @@
 # atlas_ai_v2 (RobotEye) — contexto para Claude Code
 
-A arquitetura interna, orçamento de performance no Raspberry Pi 5 e as
-convenções de estilo deste repositório já estão documentadas em detalhe em
+**Como o repositório funciona, ponta a ponta:**
+[`COMO-FUNCIONA.md`](./COMO-FUNCIONA.md) — o caminho de uma pergunta desde o
+microfone até a face, as peças uma a uma, e as decisões que explicam o desenho.
+
+O orçamento de performance no Raspberry Pi 5 e as convenções de estilo deste
+repositório estão em
 **[`.claude/agents/roboteye-keeper.md`](./.claude/agents/roboteye-keeper.md)**
 — leia aquilo primeiro para qualquer mudança de código. Este arquivo cobre
 só o que falta: a relação (ou falta dela) com o resto do projeto do robô.
@@ -58,9 +62,9 @@ Se for usar este projeto como exemplo de POO para a disciplina do curso,
 os pontos mais fortes (com arquivo:linha) são:
 
 - **Herança + polimorfismo clássicos**: `core/events.py::Event` (dataclass
-  base, `frozen=True`) com 8 subclasses (`UserMessage`, `ThinkingStarted`,
-  `AssistantReply`, `SpeechStarted`, `SpeechFinished`, `ErrorOccurred`,
-  `Notice`, `Shutdown`); `EventBus.publish` despacha por `isinstance`. É o
+  base, `frozen=True`) com 10 subclasses (`UserMessage`, `ThinkingStarted`,
+  `AssistantReply`, `SpeechStarted`, `SpeechFinished`, `SpeechHeard`,
+  `ListeningChanged`, `ErrorOccurred`, `Notice`, `Shutdown`); `EventBus.publish` despacha por `isinstance`. É o
   exemplo mais "de livro-texto" do projeto inteiro.
 - **Factory Method**: `llm/factory.py::create_llm_client` e
   `speech/factory.py::create_tts_engine` escolhem a implementação concreta
