@@ -25,7 +25,13 @@ from roboteye.core.events import (
     SpeechStarted,
 )
 from roboteye.face.app import FaceApp
-from roboteye.hearing import HearingError, Ouvido, create_ears, dirigido_ao_robo
+from roboteye.hearing import (
+    AvisaAoFecharFrase,
+    HearingError,
+    Ouvido,
+    create_ears,
+    dirigido_ao_robo,
+)
 from roboteye.hearing.gatilho import Conversa
 from roboteye.llm.base import LLMClient
 from roboteye.llm.factory import create_llm_client
@@ -62,6 +68,9 @@ class Application:
     _ouvindo: threading.Thread | None = None
     #: Relogio do "Oi?" — armado ao ser chamada, cancelado quando a pergunta vem.
     _chamado: threading.Timer | None = None
+    #: A janela de "fui chamada ha pouco". Nasce em `_escutar`; o sinal de fim
+    #: de captura a consulta para nao apitar quando e a sala que esta falando.
+    _conversa: Conversa | None = None
 
     # -- construcao --------------------------------------------------------
     @classmethod
@@ -182,6 +191,14 @@ class Application:
         # som curto fecha esse buraco na hora, sem esperar sintese nenhuma.
         self.bus.subscribe(self._avisar_que_estou_ouvindo, event_type=ListeningChanged)
 
+        # E o outro lado do par: um som ao fechar a captura da frase seguinte,
+        # para quem perguntou saber que pode parar de falar. Vem do microfone e
+        # nao do reconhecimento de proposito — esperar a transcricao custaria
+        # quase dois segundos, e o aviso chegaria depois de a pessoa ja ter
+        # desistido de esperar.
+        if isinstance(ouvido, AvisaAoFecharFrase):
+            ouvido.ao_fechar_frase(self._avisar_que_terminei_de_ouvir)
+
         self._ouvindo = threading.Thread(target=self._escutar, name="ouvidos", daemon=True)
         self._ouvindo.start()
 
@@ -191,6 +208,9 @@ class Application:
         # Chamar o nome abre uma janela em que a frase seguinte e aceita sem
         # ele — que e como as pessoas falam: "Atlas!" ... "quanto e dois mais dois?"
         conversa = Conversa(self.settings.hearing.janela_s)
+        # Guardada tambem no objeto: quem avisa o fim da captura roda a partir
+        # do microfone e precisa saber se a janela esta aberta.
+        self._conversa = conversa
         try:
             for transcricao in self.ears.escutar():
                 pergunta = dirigido_ao_robo(
@@ -242,6 +262,25 @@ class Application:
             # O sinal e conforto, nao funcao: falhar aqui nao pode impedir o
             # robo de ouvir a pergunta que vem em seguida.
             logger.debug("nao consegui tocar o sinal de escuta: %s", exc)
+
+    def _avisar_que_terminei_de_ouvir(self) -> None:
+        """Toca o sinal de fecho quando a captura de uma frase termina.
+
+        **So com a janela aberta.** Um microfone aberto numa sala fecha uma
+        captura a cada frase que alguem diz por perto, e sem esta guarda o robo
+        apitaria o dia inteiro para conversas que nao sao com ele. Com a janela
+        aberta, o que acabou de fechar e quase certamente a pergunta.
+
+        Quem pergunta tudo de uma vez ("Atlas, quantos alunos tem?") nao ouve
+        este sinal: a janela so abre quando o nome vem sozinho. Nesse caso o
+        aviso e a propria resposta, que chega logo.
+        """
+        if self._conversa is None or not self._conversa.aberta():
+            return
+        try:
+            self.speaker.sinalizar(sinal.ouvi())
+        except Exception as exc:
+            logger.debug("nao consegui tocar o sinal de fim de escuta: %s", exc)
 
     def _perguntar_se_ficou_no_ar(self) -> None:
         """Diz "Oi?" se chamarem o nome e a pergunta nao vier.

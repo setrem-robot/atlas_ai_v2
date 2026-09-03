@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import math
 import struct
+from itertools import pairwise
+
+import pytest
 
 from roboteye.core.events import ListeningChanged, SpeechFinished, SpeechStarted
 from roboteye.hearing.microfone import BLOCO, TAXA
@@ -19,6 +22,48 @@ from roboteye.speech import sinal
 
 def amostras(pcm: bytes) -> list[int]:
     return list(struct.unpack(f"<{len(pcm) // 2}h", pcm))
+
+
+class TestOPar:
+    """Os dois sons são um par, e é o par que carrega o significado."""
+
+    def test_sao_sons_diferentes(self) -> None:
+        assert sinal.escutando()[0].audio != sinal.ouvi()[0].audio
+
+    def test_um_sobe_e_o_outro_desce(self) -> None:
+        """Subindo se lê "pode falar"; descendo, "pronto, ouvi".
+
+        Um som sozinho não diria qual dos dois momentos é — e saber qual é o
+        pedido inteiro. Se um dia os dois virarem o mesmo, o robô passa a
+        avisar duas vezes a mesma coisa.
+        """
+        assert _pico_no_fim(sinal.escutando()) > _pico_no_comeco(sinal.escutando())
+        assert _pico_no_fim(sinal.ouvi()) < _pico_no_comeco(sinal.ouvi())
+
+    def test_duram_o_mesmo(self) -> None:
+        assert len(sinal.escutando()[0].audio) == len(sinal.ouvi()[0].audio)
+
+
+def _frequencia_dominante(pcm: bytes) -> float:
+    """Frequência aproximada, contando quantas vezes o sinal cruza o zero."""
+    v = amostras(pcm)
+    cruzamentos = sum(1 for a, b in pairwise(v) if (a >= 0) != (b >= 0))
+    return cruzamentos / 2 / (len(v) / sinal.TAXA)
+
+
+def _um_terco(pcm: bytes) -> int:
+    """Corte alinhado à amostra: cada uma tem 2 bytes, e meio não existe."""
+    return (len(pcm) // 3) // 2 * 2
+
+
+def _pico_no_comeco(chunks) -> float:
+    pcm = chunks[0].audio
+    return _frequencia_dominante(pcm[: _um_terco(pcm)])
+
+
+def _pico_no_fim(chunks) -> float:
+    pcm = chunks[0].audio
+    return _frequencia_dominante(pcm[len(pcm) - _um_terco(pcm) :])
 
 
 class TestOSom:
@@ -33,28 +78,28 @@ class TestOSom:
         minimo_do_microfone_s = 0.4
         assert sinal.duracao_s() < minimo_do_microfone_s
 
-    def test_nao_comeca_nem_termina_com_estalo(self) -> None:
+    @pytest.mark.parametrize("qual", ["escutando", "ouvi"])
+    def test_nao_comeca_nem_termina_com_estalo(self, qual: str) -> None:
         """Corte seco numa senoide vira clique, e clique se ouve mais que a nota."""
-        valores = amostras(sinal.escutando()[0].audio)
+        valores = amostras(getattr(sinal, qual)()[0].audio)
         assert abs(valores[0]) < 100, "começa com degrau"
         assert abs(valores[-1]) < 100, "termina com degrau"
 
-    def test_nao_estoura_a_escala(self) -> None:
-        valores = amostras(sinal.escutando()[0].audio)
+    @pytest.mark.parametrize("qual", ["escutando", "ouvi"])
+    def test_nao_estoura_a_escala(self, qual: str) -> None:
+        valores = amostras(getattr(sinal, qual)()[0].audio)
         assert max(abs(v) for v in valores) < 32767
 
-    def test_tem_som_de_verdade_no_meio(self) -> None:
+    @pytest.mark.parametrize("qual", ["escutando", "ouvi"])
+    def test_tem_som_de_verdade_no_meio(self, qual: str) -> None:
         """Um sinal silencioso passaria em todos os testes acima."""
-        valores = amostras(sinal.escutando()[0].audio)
+        valores = amostras(getattr(sinal, qual)()[0].audio)
         energia = math.sqrt(sum(v * v for v in valores) / len(valores))
         assert energia > 1000, f"o sinal saiu quase mudo (rms {energia:.0f})"
 
-    def test_sobe(self) -> None:
-        """Subir soa como "pode falar"; descer soa como "acabou"."""
-        assert sinal.NOTA_AGUDA_HZ > sinal.NOTA_GRAVE_HZ
-
-    def test_o_formato_e_o_que_a_placa_espera(self) -> None:
-        chunk = sinal.escutando()[0]
+    @pytest.mark.parametrize("qual", ["escutando", "ouvi"])
+    def test_o_formato_e_o_que_a_placa_espera(self, qual: str) -> None:
+        chunk = getattr(sinal, qual)()[0]
         assert chunk.format.channels == 1
         assert chunk.format.sample_width == 2
         assert chunk.format.sample_rate == sinal.TAXA
@@ -142,6 +187,130 @@ class TestQuandoOSinalToca:
         bus.publish(ListeningChanged(active=False))
 
         assert tocados == []
+
+
+class TestOSinalDeFimDeEscuta:
+    """O segundo som do par: "terminei de ouvir, agora deixa comigo".
+
+    Ele vem do **microfone**, e não do reconhecimento. A diferença é de quase
+    dois segundos num Raspberry Pi: esperar a transcrição faria o aviso chegar
+    depois de a pessoa já ter desistido de esperar por ele.
+    """
+
+    def _app_falsa(self, tocados: list, conversa):
+        from roboteye.app import Application
+
+        class LocutorFalso:
+            def sinalizar(self, chunks) -> None:
+                tocados.append(chunks)
+
+        app = object.__new__(Application)
+        app.speaker = LocutorFalso()  # type: ignore[assignment]
+        app._conversa = conversa
+        return app
+
+    def test_toca_quando_a_janela_esta_aberta(self) -> None:
+        from roboteye.hearing.gatilho import Conversa
+
+        conversa = Conversa(8.0)
+        conversa.abrir()
+        tocados: list = []
+        app = self._app_falsa(tocados, conversa)
+
+        app._avisar_que_terminei_de_ouvir()
+
+        assert tocados == [sinal.ouvi()]
+
+    def test_nao_toca_com_a_janela_fechada(self) -> None:
+        """Um microfone aberto numa sala fecha uma captura a cada frase que
+        alguém diz por perto. Sem esta guarda o robô apitaria o dia inteiro."""
+        from roboteye.hearing.gatilho import Conversa
+
+        tocados: list = []
+        app = self._app_falsa(tocados, Conversa(8.0))  # nunca aberta
+
+        app._avisar_que_terminei_de_ouvir()
+
+        assert tocados == []
+
+    def test_nao_toca_antes_de_a_escuta_comecar(self) -> None:
+        tocados: list = []
+        app = self._app_falsa(tocados, None)
+
+        app._avisar_que_terminei_de_ouvir()
+
+        assert tocados == []
+
+
+class TestOMicrofoneAvisaAoFecharAFrase:
+    """O gancho que faz o aviso chegar antes da transcrição."""
+
+    def _blocos(self, m, voz: int, silencio: int):
+        import numpy as np
+
+        from roboteye.hearing.microfone import BLOCO
+
+        for _ in range(3):
+            m._blocos.put_nowait(np.full(BLOCO, 0.001, dtype=np.float32))
+        for _ in range(voz):
+            m._blocos.put_nowait(np.full(BLOCO, 0.2, dtype=np.float32))
+        for _ in range(silencio):
+            m._blocos.put_nowait(np.full(BLOCO, 0.001, dtype=np.float32))
+        m._blocos.put_nowait(None)
+
+    def test_avisa_uma_vez_por_frase(self) -> None:
+        from roboteye.hearing.microfone import Microfone
+
+        m = Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+        avisos: list[int] = []
+        m.ao_fechar_frase(lambda: avisos.append(1))
+
+        self._blocos(m, voz=20, silencio=15)
+        frases = list(m._cortar_em_frases())
+
+        assert len(frases) == 1
+        assert len(avisos) == 1
+
+    def test_nao_avisa_por_ruido_descartado(self) -> None:
+        """Um estalo de porta não é pergunta, e não merece som de resposta."""
+        from roboteye.hearing.microfone import Microfone
+
+        m = Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+        avisos: list[int] = []
+        m.ao_fechar_frase(lambda: avisos.append(1))
+
+        self._blocos(m, voz=2, silencio=15)  # curto demais para ser fala
+        frases = list(m._cortar_em_frases())
+
+        assert frases == []
+        assert avisos == []
+
+    def test_um_aviso_que_falha_nao_perde_a_frase(self) -> None:
+        """O aviso é conforto; a frase é o que a pessoa acabou de dizer."""
+        from roboteye.hearing.microfone import Microfone
+
+        m = Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+
+        def explodir() -> None:
+            raise RuntimeError("o alto-falante sumiu")
+
+        m.ao_fechar_frase(explodir)
+        self._blocos(m, voz=20, silencio=15)
+
+        assert len(list(m._cortar_em_frases())) == 1
+
+    def test_o_ouvido_repassa_o_aviso_ao_microfone(self) -> None:
+        """`WhisperEars` é quem a `Application` enxerga; o gancho passa por ele."""
+        from roboteye.hearing import AvisaAoFecharFrase
+        from roboteye.hearing.whisper_ears import WhisperEars
+
+        ouvido = WhisperEars("tiny")
+        assert isinstance(ouvido, AvisaAoFecharFrase)
+
+        def avisar() -> None: ...
+
+        ouvido.ao_fechar_frase(avisar)
+        assert ouvido._microfone._ao_fechar_frase is avisar
 
 
 class TestOVigiaDoMicrofoneNaoContaOTempoDeFala:
