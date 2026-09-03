@@ -265,6 +265,12 @@ if [[ "${WITH_SERVICE}" == true ]]; then
 # Deixa a página de configuração do RobotEye disparar a atualização.
 ${USER} ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block roboteye-update.service
 ${USER} ALL=(root) NOPASSWD: /bin/systemctl start --no-block roboteye-update.service
+# E reiniciar o robô, que é o que faz a configuração recém-salva valer. Sem
+# esta linha o botão "Reiniciar" da página existia e não funcionava: o serviço
+# roda como ${USER}, e sem sessão gráfica o polkit recusa o `systemctl restart`
+# sem dizer por quê. Continua sendo um comando exato, e só ele.
+${USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart roboteye.service
+${USER} ALL=(root) NOPASSWD: /bin/systemctl restart roboteye.service
 SUDO
     if sudo visudo -c -f "${SUDOERS_TMP}" >/dev/null 2>&1; then
         sudo install -m 0440 -o root -g root "${SUDOERS_TMP}" /etc/sudoers.d/roboteye-update

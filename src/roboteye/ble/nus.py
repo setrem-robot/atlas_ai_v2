@@ -35,9 +35,15 @@ NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  # o celular escreve aqui
 NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # o robo notifica aqui
 
-#: Teto de uma linha. O ESP32 usa o mesmo limite; uma linha maior que isto e
-#: lixo de transmissao, nao comando.
-MAX_LINHA = 256
+#: Teto de uma linha. E o mesmo `MAX_LINE` do `esp32_ble_bridge.ino`, e o mesmo
+#: que o app usa para fatiar a rota segura (`RotaSegura.paraMensagensBle`).
+#:
+#: Estava em 256, metade do contrato — as duas pontes aceitavam mensagens
+#: diferentes. Nenhuma mensagem de hoje chega perto (a maior, um ponto de rota,
+#: tem uns 65 bytes), entao a divergencia nao aparecia; apareceria na primeira
+#: mensagem entre 257 e 512 bytes, e apareceria so numa das duas pontes — que e
+#: o tipo de defeito que se procura no lugar errado por um dia inteiro.
+MAX_LINHA = 512
 
 
 def _dados_de_anuncio(uuid: str) -> str:

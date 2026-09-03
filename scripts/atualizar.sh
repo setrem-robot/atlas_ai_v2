@@ -60,9 +60,40 @@ como_dono() {
 }
 
 # --- 1. há novidade? --------------------------------------------------------
+# No arranque, este script corre junto com a rede subindo, e perde.
+#
+# Medido no robô: `network-online.target` foi dado por satisfeito, o serviço
+# começou, e um segundo depois o `git fetch` falhou — enquanto o próprio robô
+# ainda registrava "a rede ainda nao subiu" no log da voz. O Wi-Fi associa
+# antes de haver rota e DNS, e `network-online.target` não espera por isso.
+#
+# Duas mudanças, e nenhuma delas é "esperar mais no systemd", que atrasaria o
+# arranque inteiro por uma tarefa que não é urgente:
+#
+#   - tenta algumas vezes, com espera crescente;
+#   - desistir por falta de rede **não é falha**. Antes era `exit 1`, e o robô
+#     terminava todo boot com uma unidade em vermelho no `systemctl --failed` —
+#     ruído permanente que esconde a falha do dia em que houver uma de verdade.
+#     Sem rede não há novidade a aplicar; o robô segue na versão que tem.
+TENTATIVAS_FETCH=5
 log "procurando novidade em origin/${BRANCH}"
-if ! como_dono git fetch --quiet origin "${BRANCH}" 2>/dev/null; then
-    fail "não consegui falar com o GitHub (sem rede?)"
+espera=3
+buscou=false
+for tentativa in $(seq 1 "${TENTATIVAS_FETCH}"); do
+    if como_dono git fetch --quiet origin "${BRANCH}" 2>/dev/null; then
+        buscou=true
+        break
+    fi
+    if (( tentativa < TENTATIVAS_FETCH )); then
+        log "GitHub ainda fora de alcance (${tentativa}/${TENTATIVAS_FETCH}); tento em ${espera}s"
+        sleep "${espera}"
+        espera=$(( espera * 2 ))
+    fi
+done
+
+if [[ "${buscou}" == false ]]; then
+    log "sem contato com o GitHub depois de ${TENTATIVAS_FETCH} tentativas; fica para a próxima vez"
+    exit 0
 fi
 
 ATUAL="$(como_dono git rev-parse HEAD)"
