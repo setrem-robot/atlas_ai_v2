@@ -74,6 +74,12 @@ class _Utterance:
     text: str
     generation: int
     end_of_turn: bool = False
+    #: Audio ja pronto que **nao e fala**: o sinal de escuta. Passa pela mesma
+    #: fila para o dispositivo de audio continuar tendo um dono so, mas nao
+    #: publica `SpeechStarted` — e isso importa, porque quem escuta esse evento
+    #: pausa o microfone, e um bipe que pausasse a escuta faria o robo ficar
+    #: surdo justamente ao anunciar que esta ouvindo.
+    sinal: tuple[SpeechChunk, ...] | None = None
 
 
 @dataclass(slots=True)
@@ -177,6 +183,19 @@ class Speaker:
         self._idle.clear()
         self._queue.put(_Utterance(cleaned, generation))
 
+    def sinalizar(self, chunks: tuple[SpeechChunk, ...]) -> None:
+        """Toca um som curto que nao e fala (ver `speech/sinal.py`).
+
+        Entra na fila como qualquer outra coisa — o dispositivo de audio tem um
+        dono so, e furar isso seria pedir "Device unavailable" no pior momento.
+        Na pratica a fila esta vazia quando isto e chamado: o robo nao esta
+        falando enquanto escuta.
+        """
+        with self._state.lock:
+            generation = self._state.generation
+        self._idle.clear()
+        self._queue.put(_Utterance("", generation, sinal=chunks))
+
     def end_turn(self) -> None:
         """Marca o fim de uma resposta: dispara `SpeechFinished` apos a ultima frase."""
         with self._state.lock:
@@ -276,6 +295,9 @@ class Speaker:
                         self._envelope.end()
                     self._bus.publish(SpeechFinished())
                     continue
+                if item.sinal is not None:
+                    self._tocar_sinal(item.sinal)
+                    continue
                 self._speak(self._batch(item))
             except SpeechError as exc:
                 logger.error("falha ao falar: %s", exc)
@@ -339,10 +361,15 @@ class Speaker:
         except queue.Empty:
             return
 
-        # Sentinelas e fim de turno nao se sintetizam; voltam para o laco.
-        if proximo is None or proximo.end_of_turn or proximo.generation != geracao:
-            # Nao se adianta fim de turno nem sentinela. Volta para a frente da
-            # fila, que e de onde saiu.
+        # Sentinelas, fim de turno e sinais nao se sintetizam; voltam para o
+        # laco. O sinal ja vem com o audio pronto: nao ha o que adiantar, e
+        # manda-lo para o motor de voz sintetizaria um texto vazio.
+        if (
+            proximo is None
+            or proximo.end_of_turn
+            or proximo.sinal is not None
+            or proximo.generation != geracao
+        ):
             self._held.appendleft(proximo)
             return
 
@@ -418,7 +445,12 @@ class Speaker:
 
             # Fim de turno, encerramento ou sobra de uma fala ja interrompida:
             # nada disso entra no lote. Guarda para o laco principal tratar.
-            if item is None or item.end_of_turn or item.generation != first.generation:
+            if (
+                item is None
+                or item.end_of_turn
+                or item.sinal is not None
+                or item.generation != first.generation
+            ):
                 self._held.appendleft(item)
                 break
 
@@ -479,6 +511,19 @@ class Speaker:
             # para tras justamente nos trechos longos.
             if self._envelope is not None:
                 self._envelope.feed(chunk.audio, chunk.format)
+            self._sink.write(chunk.audio)
+
+    def _tocar_sinal(self, chunks: tuple[SpeechChunk, ...]) -> None:
+        """Toca um som pronto, sem anunciar fala.
+
+        De proposito, nao publica `SpeechStarted`/`SpeechFinished` e nao mexe no
+        envelope: um sinal nao e uma frase. A face nao deve mudar de expressao
+        por causa dele, e — mais importante — quem escuta `SpeechStarted` pausa
+        o microfone. Um bipe que pausasse a escuta faria o robo ficar surdo no
+        exato instante em que anuncia que esta ouvindo.
+        """
+        for chunk in chunks:
+            self._sink.start(chunk.format)
             self._sink.write(chunk.audio)
 
     def _is_current(self, generation: int) -> bool:
