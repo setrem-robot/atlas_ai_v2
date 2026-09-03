@@ -192,6 +192,30 @@ class TestServidor:
         assert status == 500
         assert envfile.read(env)["ROBOTEYE_VOICE"] == "dora", "deixou o arquivo quebrado"
 
+    def test_o_tamanho_do_modelo_de_escuta_e_editavel_pela_pagina(
+        self, servidor: str, env: Path
+    ) -> None:
+        """Trocar entre rápido e preciso não pode exigir SSH.
+
+        É a mesma ideia que já vale para a voz: o que se troca no dia a dia sai
+        do `.env` e vai para a página do celular.
+        """
+        status, dados = self._pedir(
+            servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "tiny"}
+        )
+        assert status == 200, dados
+        assert envfile.read(env)["ROBOTEYE_HEARING_MODEL_SIZE"] == "tiny"
+
+    def test_tamanho_de_modelo_inventado_e_recusado(self, servidor: str, env: Path) -> None:
+        """O `faster-whisper` BAIXA o que pedirem: um erro de digitação viraria
+        uma tentativa de download de um modelo inexistente, no arranque, com a
+        escuta desligando em silêncio."""
+        status, _ = self._pedir(servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "gigante"})
+        assert status == 500
+        # O desfazer grava a chave de volta com o valor anterior — aqui, vazio.
+        # O que importa é que o valor inventado não ficou.
+        assert envfile.read(env).get("ROBOTEYE_HEARING_MODEL_SIZE", "") != "gigante"
+
     def test_so_grava_chaves_conhecidas(self, servidor: str, env: Path) -> None:
         """A página não pode virar um editor livre do ambiente do processo."""
         self._pedir(servidor, "/api/config", {"PATH": "/comprometido"})
