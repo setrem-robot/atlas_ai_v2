@@ -71,6 +71,27 @@ BLOCO = 480
 #: 300; cortar em 150 tira o zumbido inteiro sem tocar na fala.
 CORTE_GRAVES_HZ = 150.0
 
+#: Quanto tempo sem **nenhum** bloco significa que a captura morreu.
+#:
+#: Sala quieta também produz bloco: silêncio é áudio de energia baixa, não
+#: ausência de áudio. A 30 ms por bloco chegam uns 33 por segundo, e três
+#: segundos de nada só acontecem quando o dispositivo parou de entregar — foi
+#: o que aconteceu no robô quando a placa USB se desconectou e voltou com outro
+#: número (`usb 1-1: USB disconnect` no `dmesg`). A partir dali o PortAudio
+#: ficava girando no `poll` do ALSA sobre um dispositivo que não existia mais:
+#: um núcleo inteiro a 100%, o robô surdo, e **nada** no log dizendo isso.
+SEM_AUDIO_S = 3.0
+
+#: Espera antes de tentar reabrir, e o teto dela. Dobra a cada tentativa: um
+#: dispositivo que sumiu de vez não deve virar um laço de reabertura a cada
+#: segundo pelo resto do dia.
+ESPERA_INICIAL_S = 1.0
+ESPERA_MAXIMA_S = 15.0
+
+
+class _CapturaParou(Exception):
+    """O dispositivo deixou de entregar áudio. Interna: quem trata é `frases()`."""
+
 
 class PassaAlta:
     """Filtro de primeira ordem, aplicado bloco a bloco.
@@ -148,11 +169,53 @@ class Microfone:
             self._blocos.put_nowait(None)
 
     def frases(self) -> Iterator[np.ndarray]:
-        """Produz um trecho de áudio por frase falada, até ser fechado."""
+        """Produz um trecho de áudio por frase falada, até ser fechado.
+
+        Reabre o dispositivo sozinha quando ele para de entregar áudio. Isto não
+        é zelo defensivo genérico: a placa USB deste robô se desconecta e volta
+        com outro número de dispositivo, e sem reabrir o robô ficava surdo até
+        alguém reiniciar o serviço — enquanto queimava um núcleo de CPU no laço
+        de `poll` do ALSA. Ver `SEM_AUDIO_S`.
+        """
         try:
             import sounddevice as sd
         except (ImportError, OSError) as exc:
             raise HearingError(f"microfone indisponivel: {exc}") from exc
+
+        espera = ESPERA_INICIAL_S
+        primeira = True
+        while not self._fechado:
+            try:
+                yield from self._uma_captura(sd)
+                return  # saiu limpo: alguém chamou `fechar()`
+            except _CapturaParou as motivo:
+                logger.warning("o microfone parou de entregar audio (%s); reabrindo", motivo)
+            except HearingError:
+                # Nenhuma taxa serve: reabrir não vai mudar isso. Sobe para
+                # quem chamou, que já sabe anunciar "escuta indisponivel".
+                if primeira:
+                    raise
+                logger.warning("o microfone sumiu e nao voltou; tentando de novo")
+            except Exception:
+                logger.exception("falha inesperada na captura; reabrindo")
+            finally:
+                primeira = False
+
+            if self._fechado:
+                return
+            # O que ficou na fila é de antes da queda: entregá-lo agora colaria
+            # um pedaço de frase velha no começo da próxima.
+            self._descartar_pendentes()
+            time.sleep(espera)
+            espera = min(espera * 2.0, ESPERA_MAXIMA_S)
+
+    def _descartar_pendentes(self) -> None:
+        with contextlib.suppress(queue.Empty):
+            while True:
+                self._blocos.get_nowait()
+
+    def _uma_captura(self, sd) -> Iterator[np.ndarray]:
+        """Uma sessão de captura, do `open` até o dispositivo parar."""
 
         def receber(entrada, _quadros, _tempo, status) -> None:
             if status:
@@ -183,7 +246,12 @@ class Microfone:
             callback=receber,
         ):
             if self._calibrar:
-                self._medir_a_sala()
+                # Uma vez só, e só se der certo. Numa reabertura bem-sucedida,
+                # medir de novo esperaria até 20 s a Atlas calar a boca — e a
+                # sala é a mesma de dois segundos atrás. Mas uma medição que
+                # falhou (dispositivo morto, nenhuma amostra) deixou o limiar no
+                # valor de emergência, e esse merece ser refeito.
+                self._calibrar = not self._medir_a_sala()
             logger.info("escutando pelo microfone (limiar %.4f)", self._limiar)
             yield from self._cortar_em_frases()
 
@@ -213,8 +281,11 @@ class Microfone:
 
         raise HearingError("o microfone nao grava em nenhuma taxa util (16000, 32000 ou 48000 Hz)")
 
-    def _medir_a_sala(self) -> None:
+    def _medir_a_sala(self) -> bool:
         """Escolhe o limiar a partir do ruído que esta sala realmente tem.
+
+        Devolve `False` quando não chegou amostra nenhuma — o limiar fica no
+        valor de emergência e quem chamou sabe que precisa medir de novo.
 
         Fica no dobro e meio do ruído medido: alto o bastante para o ar
         condicionado não virar pergunta, baixo o bastante para uma criança
@@ -250,11 +321,12 @@ class Microfone:
         if not amostras:
             self._limiar = 0.02
             logger.warning("nao consegui medir o ruido da sala; usando 0.02")
-            return
+            return False
 
         ruido = float(np.percentile(amostras, 95))
         self._limiar = max(0.015, ruido * 2.5)
         logger.info("ruido da sala %.4f; falar comeca em %.4f", ruido, self._limiar)
+        return True
 
     def _cortar_em_frases(self) -> Iterator[np.ndarray]:
         falando: list[np.ndarray] = []
@@ -263,12 +335,18 @@ class Microfone:
         #: que decide se houve pergunta: o preambulo guardado antes da fala
         #: sozinho ja passaria do minimo, e um estalo de porta viraria pergunta.
         com_voz = 0
+        ultimo_bloco = time.monotonic()
 
         while not self._fechado:
             try:
                 bloco = self._blocos.get(timeout=0.5)
             except queue.Empty:
+                # Pausada, a Atlas está falando e o silêncio na fila é o
+                # esperado — a captura continua viva, só não está enfileirando.
+                if not self._pausado and time.monotonic() - ultimo_bloco > SEM_AUDIO_S:
+                    raise _CapturaParou(f"nada ha {SEM_AUDIO_S:.0f}s") from None
                 continue
+            ultimo_bloco = time.monotonic()
             if bloco is None:
                 break
 

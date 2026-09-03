@@ -163,6 +163,16 @@ class TestServidor:
         status, _ = self._pedir(servidor, "/api/state", pin="000000")
         assert status == 401
 
+    def test_pin_fora_do_ascii_e_recusado_com_resposta(self, servidor: str) -> None:
+        """Errar o PIN tem de dar 401, e não deixar o cliente pendurado.
+
+        `secrets.compare_digest` levanta TypeError com texto fora do ASCII, e a
+        conferência acontece fora do `try` do handler: a requisição morria sem
+        resposta nenhuma, com um traceback no log acusando o lugar errado.
+        """
+        status, _ = self._pedir(servidor, "/api/state", pin="12345ç")
+        assert status == 401
+
     def test_estado_lista_vozes_e_personas(self, servidor: str) -> None:
         status, dados = self._pedir(servidor, "/api/state")
         assert status == 200

@@ -21,7 +21,7 @@ class _Segmento:
 
 
 class _ModeloFalso:
-    def transcribe(self, audio, **_kwargs):  # noqa: ANN001 - assinatura do faster-whisper
+    def transcribe(self, audio, **_kwargs):
         segmentos = [
             _Segmento(" Atlas,", avg_logprob=-0.2, no_speech_prob=0.01),
             _Segmento(" quanto e dois?", avg_logprob=-0.4, no_speech_prob=0.05),

@@ -74,8 +74,8 @@ dev = [
 roboteye = "roboteye.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/setrem-robot/IAv2"
-Repository = "https://github.com/setrem-robot/IAv2"
+Homepage = "https://github.com/setrem-robot/atlas_ai_v2"
+Repository = "https://github.com/setrem-robot/atlas_ai_v2"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/roboteye"]

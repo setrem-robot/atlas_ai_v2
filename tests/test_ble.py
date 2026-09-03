@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from roboteye.ble import NUS_RX, NUS_SERVICE, NUS_TX, PonteBLE
+from roboteye.ble.nus import MAX_LINHA
 
 
 @pytest.fixture
@@ -79,11 +80,22 @@ class TestLixoNaLinha:
         assert recebidos == []
 
     def test_linha_longa_demais_e_descartada(self, ponte: PonteBLE, recebidos: list[dict]) -> None:
-        # Sem teto, um fluxo sem quebra de linha encheria a memoria.
-        escrever(ponte, b"x" * 300)
+        # Sem teto, um fluxo sem quebra de linha encheria a memoria. O teto vem
+        # da constante, e nao de um numero escrito aqui: repetir o valor faria
+        # este teste continuar verde depois de o limite mudar de um lado so.
+        escrever(ponte, b"x" * (MAX_LINHA + 1))
         assert recebidos == []
         escrever(ponte, b'{"cmd":"F"}\n')
         assert recebidos == [{"cmd": "F"}]
+
+    def test_o_teto_da_linha_e_o_mesmo_do_esp32(self) -> None:
+        """`MAX_LINE` no `esp32_ble_bridge.ino` e o fatiamento da rota no app.
+
+        As duas pontes (ESP32 e Pi) precisam aceitar exatamente as mesmas
+        mensagens: com limites diferentes, uma mensagem entre um teto e o outro
+        funciona por um caminho e some pelo outro, sem erro em lugar nenhum.
+        """
+        assert MAX_LINHA == 512
 
 
 class TestQuandoOCelularSome:
