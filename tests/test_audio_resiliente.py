@@ -23,7 +23,9 @@ Nada aqui toca hardware: os dublês falham na hora escolhida.
 from __future__ import annotations
 
 import queue
+import sys
 import threading
+import types
 
 import numpy as np
 import pytest
@@ -187,6 +189,13 @@ class TestEscutaPercebeODispositivoMudo:
         monkeypatch.setattr(mic_mod, "SEM_AUDIO_S", 0.05)
         monkeypatch.setattr(mic_mod, "ESPERA_INICIAL_S", 0.01)
         monkeypatch.setattr(mic_mod, "ESPERA_MAXIMA_S", 0.01)
+        # `frases()` importa o `sounddevice` antes de qualquer coisa, para
+        # falhar cedo e com mensagem boa quando nao ha audio na maquina. Este
+        # teste nao exercita a captura de verdade — ele substitui
+        # `_uma_captura` —, mas passa por esse import: sem um substituto, o
+        # teste so roda onde o extra `tts` estiver instalado, e a CI (que
+        # instala so `[dev]`) fica vermelha.
+        monkeypatch.setitem(sys.modules, "sounddevice", types.ModuleType("sounddevice"))
 
         m = Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
         aberturas: list[int] = []
