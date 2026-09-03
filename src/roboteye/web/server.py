@@ -106,7 +106,12 @@ class _Gatekeeper:
                 return False
             # Comparacao em tempo constante: um PIN curto comparado com `==`
             # vaza, pelo tempo de resposta, quantos digitos ja estao certos.
-            if offered and secrets.compare_digest(offered, self._pin):
+            #
+            # `isascii()` antes: com texto fora do ASCII o `compare_digest`
+            # levanta TypeError em vez de devolver False, e isso acontece fora
+            # do `try` de quem chama — a requisicao morre sem resposta e o
+            # cliente fica esperando. Um PIN nao-ASCII simplesmente nao confere.
+            if offered and offered.isascii() and secrets.compare_digest(offered, self._pin):
                 self._failures = 0
                 return True
 
@@ -175,20 +180,28 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
         # -- entrada -----------------------------------------------------
         def do_GET(self) -> None:
             path = urlparse(self.path).path
+            corpo = self._body()
             if path in {"/", "/index.html"}:
                 self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif path == "/api/state":
-                self._guarded(lambda _: _state(config))
+                self._guarded(lambda _: _state(config), corpo)
             elif path == "/api/robo":
                 # Separado do `/api/state` de proposito: este e consultado a
                 # cada poucos segundos por uma pagina aberta, enquanto aquele
                 # le o `.env` e o catalogo de vozes, que nao mudam sozinhos.
-                self._guarded(lambda _: _robo(config))
+                self._guarded(lambda _: _robo(config), corpo)
             else:
                 self._json(404, {"erro": "rota desconhecida"})
 
         def do_POST(self) -> None:
             path = urlparse(self.path).path
+            # O corpo e lido antes de qualquer decisao, inclusive antes de saber
+            # se a rota existe. Responder e fechar deixando bytes por ler no
+            # socket faz o sistema mandar um RST em vez do fim limpo, e o
+            # cliente recebe "conexao anulada" no lugar do 404 que o servidor
+            # escreveu de verdade (WinError 10053 no Windows; no Linux depende
+            # do tamanho do corpo e passa batido quase sempre).
+            corpo = self._body()
             rotas = {
                 "/api/config": lambda body: _save(config, body),
                 "/api/test/llm": _test_llm,
@@ -201,15 +214,15 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
             if handler is None:
                 self._json(404, {"erro": "rota desconhecida"})
                 return
-            self._guarded(handler)
+            self._guarded(handler, corpo)
 
         # -- apoio -------------------------------------------------------
-        def _guarded(self, action) -> None:
+        def _guarded(self, action, corpo: dict[str, Any]) -> None:
             if not gate.allows(self.headers.get("X-Pin")):
                 self._json(401, {"erro": "PIN invalido ou tentativas demais"})
                 return
             try:
-                self._json(200, action(self._body()))
+                self._json(200, action(corpo))
             except Exception as exc:
                 logger.exception("falha na pagina de configuracao")
                 self._json(500, {"erro": str(exc)})
@@ -448,23 +461,40 @@ def _test_voice(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _restart(_: dict[str, Any]) -> dict[str, Any]:
-    """Reinicia o servico para a configuracao nova valer."""
+    """Reinicia o servico para a configuracao nova valer.
+
+    Tenta sem `sudo` primeiro (vale quando a pagina roda como root ou ha sessao
+    ativa) e depois com `sudo -n`, que e o caminho no robo instalado: o servico
+    roda como o usuario do robo e, sem sessao grafica, o polkit recusa o
+    `systemctl restart` — em silencio, com codigo de saida 1 e nada no stderr.
+    A regra que libera exatamente este comando e instalada por
+    `scripts/setup-raspberry-pi.sh --service`.
+    """
     import shutil
     import subprocess
 
     if shutil.which("systemctl") is None:
         return {"ok": False, "erro": "sem systemd aqui; reinicie o robo a mao"}
 
-    resultado = subprocess.run(
-        ["systemctl", "restart", "roboteye"],
-        capture_output=True,
-        text=True,
-        timeout=30,
+    tentativas = (
+        ["systemctl", "restart", "roboteye.service"],
+        ["sudo", "-n", "systemctl", "restart", "roboteye.service"],
     )
-    if resultado.returncode != 0:
-        erro = resultado.stderr.strip() or "systemctl recusou"
-        return {"ok": False, "erro": erro}
-    return {"ok": True}
+    ultimo = ""
+    for comando in tentativas:
+        try:
+            resultado = subprocess.run(comando, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError) as exc:
+            ultimo = str(exc)
+            continue
+        if resultado.returncode == 0:
+            return {"ok": True}
+        ultimo = (resultado.stderr or resultado.stdout).strip() or "systemctl recusou"
+
+    return {
+        "ok": False,
+        "erro": f"{ultimo} — rode o setup com --service para liberar o reinicio pela pagina",
+    }
 
 
 def _readable_host(host: str) -> str:

@@ -90,7 +90,20 @@ class SoundDeviceSink:
     def write(self, audio: bytes) -> None:
         if self._stream is None:
             raise SpeechError("write() chamado antes de start()")
-        self._stream.write(audio)
+        try:
+            self._stream.write(audio)
+        except Exception as exc:
+            # Fechar aqui é o que faz a voz voltar sozinha.
+            #
+            # A placa USB deste robô se desconecta e reaparece com outro número
+            # de dispositivo; do lado do ALSA isso vira
+            # `write failed (unrecoverable): No such device`. Sem este `close`,
+            # o stream morto continua guardado, `start()` vê o formato igual e
+            # volta na hora sem reabrir nada — e **toda** fala seguinte falha do
+            # mesmo jeito, para sempre. O robô ficava mudo até alguém reiniciar
+            # o serviço, sem nada além de um erro por frase no log.
+            self.close()
+            raise SpeechError(f"a saida de audio falhou: {exc}") from exc
 
     def stop(self) -> None:
         if self._stream is None:
@@ -166,6 +179,10 @@ class AplaySink:
             self._process.stdin.write(audio)
             self._process.stdin.flush()
         except OSError as exc:
+            # Mesma razão do `SoundDeviceSink.write`: sem soltar o processo
+            # morto, `start()` acha que ainda há um `aplay` de pé e a voz não
+            # volta nunca mais.
+            self.close()
             raise SpeechError(f"aplay encerrou durante a reproducao: {exc}") from exc
 
     def stop(self) -> None:

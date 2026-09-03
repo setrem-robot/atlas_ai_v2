@@ -84,9 +84,18 @@ fi
 NOME_PLACA="$(sed -nE "s/^ *${CARD} \[([^ ]+) *\].*/\1/p" /proc/asound/cards | head -1)"
 if [[ -n "${NOME_PLACA}" ]]; then
     ALVO="hw:CARD=${NOME_PLACA},DEV=0"
+    # O `ctl` (mixer) precisa da mesma proteção que o `pcm`, e por muito tempo
+    # não teve: o áudio era escrito pelo nome e o mixer pelo número. Achado no
+    # robô de produção com a placa USB em `card 0` e o arquivo dizendo `card 2`,
+    # que hoje é uma saída HDMI — todo `amixer` do sistema mexia no volume da
+    # tela em vez do da caixinha, e o robô parecia ter o volume travado.
+    #
+    # Entre aspas porque o ALSA precisa distinguir o nome `Device` de um número.
+    CTL_CARD="\"${NOME_PLACA}\""
     log "identificada pelo nome (${NOME_PLACA}), imune a renumeração"
 else
     ALVO="hw:${CARD},0"
+    CTL_CARD="${CARD}"
     warn "não achei o nome da placa; usando o número, que pode mudar no reboot"
 fi
 
@@ -172,7 +181,7 @@ pcm.roboteye_dsnoop {
 
 ctl.!default {
     type hw
-    card ${CARD}
+    card ${CTL_CARD}
 }
 EOF
 log "${ALSA_CONF}: saída e microfone compartilhados em ${ALVO}"
