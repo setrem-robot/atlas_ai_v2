@@ -37,10 +37,12 @@ from roboteye.speech.base import AudioFormat, SpeechChunk
 #: num formato diferente.
 TAXA = 22050
 
-#: Duas notas subindo. Subir é o que faz o som ser lido como "pode falar" em vez
-#: de "acabou": um par descendente soa como encerramento.
-#: Sol5 e Ré6 — uma quinta justa, que é o intervalo mais estável que existe e
-#: por isso não soa como alarme.
+#: As duas notas dos sinais. Sol5 e Ré6 — uma quinta justa, o intervalo mais
+#: estável que existe, e por isso o que menos soa como alarme.
+#:
+#: A **ordem** é que carrega o significado, e é o par que faz sentido: subindo
+#: se lê como "pode falar", descendo como "pronto, ouvi". Um som sozinho não
+#: diria qual dos dois momentos é — e saber qual é o pedido inteiro aqui.
 NOTA_GRAVE_HZ = 784.0
 NOTA_AGUDA_HZ = 1175.0
 
@@ -84,27 +86,41 @@ def _silencio(duracao_s: float) -> array:
 
 
 @cache
-def _pcm_escutando() -> bytes:
-    som = _nota(NOTA_GRAVE_HZ, DURACAO_NOTA_S)
+def _par(primeira_hz: float, segunda_hz: float) -> bytes:
+    som = _nota(primeira_hz, DURACAO_NOTA_S)
     som.extend(_silencio(PAUSA_ENTRE_NOTAS_S))
-    som.extend(_nota(NOTA_AGUDA_HZ, DURACAO_NOTA_S))
+    som.extend(_nota(segunda_hz, DURACAO_NOTA_S))
     return som.tobytes()
 
 
-def escutando() -> tuple[SpeechChunk, ...]:
-    """O som de "estou ouvindo, pode perguntar".
+def _chunk(pcm: bytes) -> tuple[SpeechChunk, ...]:
+    """Embrulha o PCM no mesmo formato que um motor de voz devolveria.
 
-    Devolve no mesmo formato que um motor de voz devolveria, para o locutor
-    tocá-lo pelo caminho que já existe — um dono só do dispositivo de áudio.
+    É o que permite tocar o sinal pelo caminho que já existe — um dono só do
+    dispositivo de áudio.
     """
     return (
         SpeechChunk(
-            audio=_pcm_escutando(),
+            audio=pcm,
             format=AudioFormat(sample_rate=TAXA, channels=1, sample_width=2),
         ),
     )
 
 
+def escutando() -> tuple[SpeechChunk, ...]:
+    """Subindo: "estou ouvindo, pode perguntar"."""
+    return _chunk(_par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ))
+
+
+def ouvi() -> tuple[SpeechChunk, ...]:
+    """Descendo: "pronto, terminei de ouvir — agora deixa comigo".
+
+    O espelho exato do outro. Dois sons diferentes diriam duas coisas sem
+    relação; o mesmo par invertido é lido de imediato como abre e fecha.
+    """
+    return _chunk(_par(NOTA_AGUDA_HZ, NOTA_GRAVE_HZ))
+
+
 def duracao_s() -> float:
-    """Quanto tempo o sinal dura. Existe para os testes conferirem o teto."""
-    return len(_pcm_escutando()) / 2 / TAXA
+    """Quanto tempo um sinal dura. Os dois têm a mesma duração."""
+    return len(_par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ)) / 2 / TAXA
