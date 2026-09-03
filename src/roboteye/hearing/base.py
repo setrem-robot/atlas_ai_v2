@@ -7,7 +7,7 @@ aqui um `Ouvido` transforma som em texto. Os dois sao protocolos, os dois tem
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -61,4 +61,25 @@ class Ouvido(Protocol):
 
     def close(self) -> None:
         """Libera o microfone. Deve ser idempotente."""
+        ...
+
+
+@runtime_checkable
+class AvisaAoFecharFrase(Protocol):
+    """Ouvido que sabe avisar no instante em que a captura de uma frase fecha.
+
+    Nem todo motor tem esse instante bem definido: o Vosk decide sozinho onde a
+    frase termina, dentro do próprio reconhecimento, e não há um momento
+    separado a anunciar. Por isso isto é um protocolo à parte, e não mais um
+    método no `Ouvido` — quem tem, oferece; quem não tem continua sendo um
+    ouvido completo.
+
+    O aviso chega **antes** da transcrição, e essa é a razão de ele existir: é
+    o instante em que a pessoa pode parar de falar. Esperar o reconhecimento
+    para avisar custaria quase dois segundos num Raspberry Pi, e o aviso
+    chegaria depois de ela já ter desistido de esperar.
+    """
+
+    def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
+        """Registra quem avisar. `None` desliga."""
         ...

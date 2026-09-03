@@ -49,7 +49,7 @@ import contextlib
 import queue
 import time
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import numpy as np
 
@@ -152,10 +152,18 @@ class Microfone:
         #: O que veio antes de o som subir. 300 ms bastam para a primeira sílaba.
         self._antes: deque[np.ndarray] = deque(maxlen=10)
 
+        #: Avisado no instante em que uma frase fecha — antes de transcrever.
+        #: Ver `AvisaAoFecharFrase` em `hearing/base.py`.
+        self._ao_fechar_frase: Callable[[], None] | None = None
+
         self._filtro = PassaAlta(CORTE_GRAVES_HZ, TAXA)
         self._blocos: queue.Queue[np.ndarray | None] = queue.Queue(maxsize=200)
         self._pausado = False
         self._fechado = False
+
+    def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
+        """Registra quem avisar quando a captura de uma frase termina."""
+        self._ao_fechar_frase = callback
 
     def pausar(self) -> None:
         self._pausado = True
@@ -281,6 +289,20 @@ class Microfone:
 
         raise HearingError("o microfone nao grava em nenhuma taxa util (16000, 32000 ou 48000 Hz)")
 
+    def _avisar_que_fechou(self) -> None:
+        """Diz a quem quiser ouvir que a captura de uma frase acabou de fechar.
+
+        Falha em silêncio de propósito: isto é aviso, e quem escuta pode estar
+        tocando um som. Um erro ali não pode fazer a frase recém-capturada se
+        perder — ela é o que a pessoa acabou de dizer.
+        """
+        if self._ao_fechar_frase is None:
+            return
+        try:
+            self._ao_fechar_frase()
+        except Exception as exc:
+            logger.debug("aviso de fim de frase falhou: %s", exc)
+
     def _medir_a_sala(self) -> bool:
         """Escolhe o limiar a partir do ruído que esta sala realmente tem.
 
@@ -382,6 +404,7 @@ class Microfone:
                 trecho, falando = falando, []
                 self._antes.clear()
                 if com_voz >= self._minimo:
+                    self._avisar_que_fechou()
                     yield np.concatenate(trecho)
                 else:
                     logger.debug("so %d blocos com voz; era ruido, nao pergunta", com_voz)

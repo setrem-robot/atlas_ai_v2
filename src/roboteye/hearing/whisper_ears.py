@@ -23,7 +23,7 @@ momento em que a pessoa esta esperando resposta.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from roboteye.hearing.base import HearingError, Transcricao
 from roboteye.hearing.microfone import Microfone
@@ -52,6 +52,10 @@ class WhisperEars:
         self._model_dir = model_dir
         self._modelo = None
         self._microfone = Microfone(device=device)
+
+    def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
+        """Repassa ao microfone quem avisar quando uma frase fecha."""
+        self._microfone.ao_fechar_frase(callback)
 
     # -- ciclo de vida -----------------------------------------------------
     def warm_up(self) -> None:
