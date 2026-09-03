@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from roboteye.core.events import ErrorOccurred, SpeechFinished, SpeechStarted
 from roboteye.speech.base import SpeechError
-from roboteye.speech.speaker import MAX_BATCH_CHARS, Speaker
+from roboteye.speech.speaker import MAX_BATCH_CHARS, Speaker, _Utterance
 
 
 class BrokenEngine:
@@ -177,6 +177,75 @@ class TestSpeaker:
         assert len(engine.spoken) > 1, "juntou tudo e atrasaria o inicio da fala"
         assert all(len(fala) <= MAX_BATCH_CHARS + 80 for fala in engine.spoken)
 
+
+class TestOSilencioSoValeQuandoAcabou:
+    """Quem anuncia silencio precisa olhar os TRES lugares onde uma fala espera.
+
+    A fila nao e o unico: `_held` guarda o que saiu dela e ainda nao foi dito, e
+    `_pronto` guarda o audio ja sintetizado da proxima frase. Anunciar silencio
+    com qualquer um dos dois cheio faz a face parar de falar antes da voz.
+
+    Esta classe existe por um defeito que se manifestava como teste instavel: o
+    caminho da fala ja preparada terminava em `continue` e pulava o `finally`
+    que anuncia o silencio. Quando a ULTIMA fala de uma resposta vinha pronta —
+    o caso comum, porque a sintese se adianta —, o locutor a dizia e voltava a
+    esperar na fila sem nunca ter anunciado nada. `wait_until_idle` esperava
+    para sempre.
+    """
+
+    def test_com_a_fila_vazia_e_nada_pendente_e_silencio(self, make_speaker) -> None:
+        speaker = make_speaker(start=False)
+        speaker._idle.clear()
+
+        speaker._anunciar_silencio_se_acabou()
+
+        assert speaker.wait_until_idle(timeout=0.1)
+        assert not speaker.is_speaking
+
+    def test_uma_fala_ja_sintetizada_segura_o_silencio(self, make_speaker) -> None:
+        """`_pronto` e a proxima frase, com o audio na mao. Ainda ha o que dizer."""
+        speaker = make_speaker(start=False)
+        speaker._idle.clear()
+        speaker._pronto = (_Utterance("a proxima frase", 0), None)
+
+        speaker._anunciar_silencio_se_acabou()
+
+        assert not speaker.wait_until_idle(timeout=0.1)
+
+    def test_uma_fala_retida_segura_o_silencio(self, make_speaker) -> None:
+        """`_held` guarda o que ja saiu da fila e ainda nao foi dito."""
+        speaker = make_speaker(start=False)
+        speaker._idle.clear()
+        speaker._held.append(_Utterance("retida", 0))
+
+        speaker._anunciar_silencio_se_acabou()
+
+        assert not speaker.wait_until_idle(timeout=0.1)
+
+    def test_a_ultima_fala_vindo_pronta_ainda_anuncia_silencio(self, make_speaker, engine) -> None:
+        """O defeito exato, forcado sem depender de temporizacao.
+
+        `_pronto` e o primeiro lugar que o laco olha. Deixando uma fala ali
+        antes de o locutor arrancar, ele passa obrigatoriamente pelo caminho da
+        sintese adiantada — que era justamente o que voltava para a fila sem
+        anunciar nada.
+
+        Com o defeito este teste falha sempre; com a correcao passa sempre. A
+        versao anterior dependia de sorte e reprovava um terco do tempo, que e a
+        pior coisa que um teste pode fazer: acusar sem apontar nada.
+        """
+        speaker = make_speaker(start=False)
+        speaker._idle.clear()
+        speaker._pronto = (_Utterance("ja sintetizada", speaker._state.generation), None)
+
+        speaker.start()
+
+        assert speaker.wait_until_idle(timeout=5), "o locutor nunca anunciou silencio"
+        assert not speaker.is_speaking
+        assert engine.spoken == ["ja sintetizada"]
+
+
+class TestSpeakerEncerramento:
     def test_close_libera_recursos(self, engine, sink, bus) -> None:
         speaker = Speaker(engine, sink, bus)
         speaker.start()

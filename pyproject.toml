@@ -50,9 +50,17 @@ online = [
     "miniaudio>=1.59",
     "sounddevice>=0.4.6",
 ]
-# Reconhecimento de fala offline, em portugues. Wheel para aarch64 existe, e o
-# modelo (52 MB) vem a parte: `./scripts/baixar-modelo-escuta.sh`.
+# Reconhecimento de fala offline, em portugues. O modelo vem a parte:
+# `./scripts/baixar-modelo-escuta.sh`.
+#
+# Os DOIS motores entram aqui, e o `faster-whisper` primeiro porque ele e o
+# padrao (`HearingSettings.backend = "whisper"`). Ele faltava nesta lista, e o
+# efeito so aparecia num cartao novo: `--escuta` instalava o Vosk, o script de
+# baixar o modelo falhava no `import faster_whisper`, o setup seguia com um
+# aviso — e o robo subia com a escuta ligada, no motor padrao, sem a biblioteca
+# dele. Surdo, sem nada explicando por que.
 stt = [
+    "faster-whisper>=1.1",
     "vosk>=0.3.45",
     "sounddevice>=0.4.6",
 ]

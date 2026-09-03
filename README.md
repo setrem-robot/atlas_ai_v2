@@ -30,6 +30,11 @@ Para rodar **só a face na sua máquina**, sem robô nenhum, vá direto para
 
 ---
 
+> **Primeira vez aqui?** Comece por **[`COMO-FUNCIONA.md`](./COMO-FUNCIONA.md)**
+> — um passeio guiado de quinze minutos pela arquitetura, com diagramas. Este
+> README é a referência completa: instalação, configuração, e solução de
+> problemas.
+
 ## Índice
 
 - [O robô hoje](#o-robô-hoje)

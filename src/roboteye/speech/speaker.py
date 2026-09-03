@@ -253,6 +253,15 @@ class Speaker:
                 except SpeechError as exc:
                     logger.error("falha ao falar: %s", exc)
                     self._bus.publish(ErrorOccurred(message=str(exc), source="speech"))
+                finally:
+                    # Este `finally` faltava, e o `continue` abaixo pulava o do
+                    # outro caminho: quando a ULTIMA fala de uma resposta vinha
+                    # pronta (o caso comum, porque a sintese se adianta), o
+                    # locutor a dizia e voltava para o `get()` sem nunca ter
+                    # anunciado silencio. `wait_until_idle` esperava para sempre
+                    # e `is_speaking` ficava preso em True ate alguem enfileirar
+                    # outra coisa.
+                    self._anunciar_silencio_se_acabou()
                 continue
 
             item = self._held.popleft() if self._held else self._queue.get()
@@ -275,16 +284,22 @@ class Speaker:
                 logger.exception("erro inesperado no locutor")
                 self._bus.publish(ErrorOccurred(message=str(exc), source="speech"))
             finally:
-                # `_held` conta junto com a fila: itens ja tirados dela ainda
-                # nao foram ditos, e anunciar silencio com um fim de turno por
-                # tratar faz a face parar de falar antes da voz.
-                if self._queue.empty() and not self._held and self._pronto is None:
-                    self._set_speaking(False)
-                    self._idle.set()
+                self._anunciar_silencio_se_acabou()
 
         self._set_speaking(False)
         self._idle.set()
         logger.debug("locutor encerrado")
+
+    def _anunciar_silencio_se_acabou(self) -> None:
+        """Marca o locutor como ocioso, se nao sobrou nada por dizer.
+
+        `_held` e `_pronto` contam junto com a fila: os dois guardam falas ja
+        tiradas dela e ainda nao ditas, e anunciar silencio com uma delas
+        pendente faz a face parar de falar antes da voz.
+        """
+        if self._queue.empty() and not self._held and self._pronto is None:
+            self._set_speaking(False)
+            self._idle.set()
 
     def _tomar_preparada(self) -> tuple[_Utterance, list[SpeechChunk] | None] | None:
         """A fala adiantada, se houver uma valida esperando."""
