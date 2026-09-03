@@ -1211,6 +1211,25 @@ Sem ventoinha, a IA local leva o Pi a quase 80 °C em trinta segundos e o
 processador começa a reduzir a frequência. Enquanto não houver cooler, prefira a
 IA de rede para conversas longas.
 
+Medido no robô de produção, logo depois de um reinício do serviço: **86,2 °C**,
+e o próprio Pi confirmando que já reduziu a frequência —
+
+```console
+$ vcgencmd get_throttled
+throttled=0xe0000
+```
+
+Os três bits ligados são "já houve corte de frequência", "já houve
+estrangulamento" e "já passou do limite térmico" desde que a máquina ligou. O
+bit de subtensão (`0x10000`) **não** aparece, então a fonte está bem: é calor
+mesmo. Em repouso a temperatura cai para 70–73 °C, que ainda é o patamar em que
+o Pi 5 começa a se conter.
+
+Não há ventoinha instalada — o `/sys/class/hwmon` só lista `cpu_thermal`,
+`rp1_adc` e `rpi_volt`, e nenhum `pwm-fan`. **Um cooler ativo é o item de
+hardware que mais melhora este robô hoje**: a face é o produto, e uma face que
+engasga porque o processador se conteve é visível a olho nu.
+
 ### O áudio é exclusivo
 
 Com o serviço rodando, nenhum outro processo consegue abrir a placa de som — nem
@@ -1409,6 +1428,75 @@ cat /proc/asound/card0/eld#0        # o que o monitor declara aceitar
 Se ali não aparecer `22050` — e normalmente não aparece —, o ALSA precisa
 converter, porque é nessa taxa que o Piper sintetiza. Sem isso a primeira frase
 falha. Veja o `/etc/asound.conf` no [guia de instalação](#do-cartão-em-branco-ao-robô-ligando-sozinho).
+
+#### A Atlas ficou surda e muda, e o Pi esquentou sem ninguém usar nada
+
+**Sintoma:** o robô continua desenhando a face, a página do celular responde, e
+ele simplesmente não escuta mais nem fala mais. A temperatura sobe e fica alta
+com a máquina parada.
+
+**Causa:** a placa de som USB se desconectou e voltou a aparecer com **outro
+número de dispositivo**. Acontece sozinho neste hardware — cabo, porta ou a
+própria C-Media. No `dmesg` fica assim:
+
+```console
+$ sudo dmesg -T | grep -i usb
+[...] usb 1-1: USB disconnect, device number 2
+[...] usb 1-1: new full-speed USB device number 3 using xhci-hcd
+[...] usb 1-1: device descriptor read/64, error -71
+```
+
+**O que acontecia antes da correção**, e vale conhecer porque explica o
+sintoma: a captura era aberta uma vez só, e com o dispositivo morto o PortAudio
+passava a girar no `poll` do ALSA para sempre. Um núcleo inteiro a 100%, medido
+pelo próprio systemd:
+
+```console
+$ systemctl status roboteye
+   roboteye.service: Consumed 24min 29.738s CPU time      # em 23 min de vida
+```
+
+Isso é 105% de média — mais de um núcleo, o tempo todo, sem fazer nada. Do lado
+da saída, o mesmo evento deixava a voz muda para sempre: o stream morto
+continuava guardado, e como `start()` volta na hora quando o formato é o mesmo,
+nada era reaberto (`ALSA write failed (unrecoverable): No such device`, uma vez
+por frase, no log).
+
+**Hoje o robô se recupera sozinho.** A captura tem supervisão: três segundos sem
+**nenhum** bloco — e sala quieta também produz bloco, silêncio é áudio de
+energia baixa — significam dispositivo morto, e a sessão é fechada e reaberta com
+espera crescente. A saída solta o dispositivo no primeiro erro de escrita, e a
+fala seguinte o reabre. Se a placa voltou, o robô volta com ela. No log:
+
+```console
+$ journalctl -u roboteye -f
+WARNING  roboteye.hearing.microfone o microfone parou de entregar audio (nada ha 3s); reabrindo
+INFO     roboteye.hearing.microfone escutando pelo microfone (limiar 0.0450)
+```
+
+Se essas duas linhas aparecerem muitas vezes por dia, o problema é físico —
+troque o cabo ou a porta USB antes de procurar no software.
+
+#### O volume não muda por mais que eu mexa
+
+O mixer pode estar apontado para a placa errada. O número de uma placa muda
+entre reinicializações, e `/etc/asound.conf` gravava o **número** no `ctl` (o
+mixer) enquanto gravava o **nome** no `pcm` (o áudio). Encontrado no robô com o
+dongle USB em `card 0` e o arquivo dizendo `card 2`, que hoje é uma saída HDMI.
+
+O diagnóstico é de uma linha: se o mixer padrão não lista controle nenhum, ele
+está falando com a placa errada.
+
+```console
+$ amixer scontrols
+Simple mixer control 'Speaker',0
+Simple mixer control 'Mic',0
+Simple mixer control 'Auto Gain Control',0
+```
+
+Vazio, ou com nomes que não são esses, quer dizer placa errada. Conserta-se
+rodando `sudo ./scripts/configurar-audio.sh` de novo — ele agora escreve o nome
+da placa também no `ctl`.
 
 #### A voz sai picotada
 

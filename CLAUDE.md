@@ -36,7 +36,21 @@ escuta. Ver `../orquestrador/pi/mosquitto/apt/robo.conf.example`.
 
 O que ainda **não** existe: o RobotEye reagir a `robo/telemetria/bateria`, ou
 falar quando alguém publica em `robo/voz/falar`. Isso é trabalho novo. Veja
-`../MAPA-COMUNICACAO.md` para o mapa completo do que existe hoje.
+[`../orquestrador/MAPA-COMUNICACAO.md`](../orquestrador/MAPA-COMUNICACAO.md)
+para o mapa completo do que existe hoje.
+
+**E o outro lado da ponte não está instalado no robô.** Conferido por SSH: no
+Pi rodam a face, esta ponte BLE e o Mosquitto — nenhum serviço do
+`orquestrador`. Então o que esta ponte publica em `robo/comando/entrada` não é
+consumido por ninguém, e o robô não anda por mais certo que este repositório
+esteja. Antes de procurar defeito aqui, rode no Pi:
+
+```bash
+mosquitto_sub -h 127.0.0.1 -t 'robo/#' -v      # aperte uma direção no app
+```
+
+Se aparecer `robo/comando/entrada` e mais nada, o problema é do outro lado — a
+§0 do mapa explica.
 
 ## Já fortemente orientado a objetos
 
