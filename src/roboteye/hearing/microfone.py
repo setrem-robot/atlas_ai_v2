@@ -341,9 +341,17 @@ class Microfone:
             try:
                 bloco = self._blocos.get(timeout=0.5)
             except queue.Empty:
-                # Pausada, a Atlas está falando e o silêncio na fila é o
-                # esperado — a captura continua viva, só não está enfileirando.
-                if not self._pausado and time.monotonic() - ultimo_bloco > SEM_AUDIO_S:
+                if self._pausado:
+                    # A Atlas está falando, e enquanto ela fala a captura
+                    # descarta o que chega — é a própria voz dela. Não há bloco
+                    # a esperar, então o relógio do vigia **não pode correr**:
+                    # senão toda resposta com mais de três segundos terminava
+                    # com uma reabertura do dispositivo que ninguém pediu, e o
+                    # robô ficava um segundo surdo justo depois de responder,
+                    # que é quando a pessoa costuma emendar a próxima pergunta.
+                    ultimo_bloco = time.monotonic()
+                    continue
+                if time.monotonic() - ultimo_bloco > SEM_AUDIO_S:
                     raise _CapturaParou(f"nada ha {SEM_AUDIO_S:.0f}s") from None
                 continue
             ultimo_bloco = time.monotonic()

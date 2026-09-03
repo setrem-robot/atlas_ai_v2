@@ -260,6 +260,21 @@ PAGE = """<!doctype html>
   </fieldset>
 
   <fieldset>
+    <legend>Escuta</legend>
+    <label for="ROBOTEYE_HEARING_MODEL_SIZE">Reconhecimento de fala</label>
+    <select id="ROBOTEYE_HEARING_MODEL_SIZE">
+      <option value="tiny">rápido (tiny) — ~0,9 s</option>
+      <option value="base">preciso (base) — ~1,9 s</option>
+      <option value="small">mais preciso (small) — pesado no Pi</option>
+    </select>
+    <p class="dica">
+      Quanto o robô demora para entender o que você falou, e o quanto ele acerta.
+      O <b>base</b> pontua melhor e erra menos com voz de criança; o <b>tiny</b>
+      responde um segundo antes. Trocar aqui baixa o modelo novo na primeira vez.
+    </p>
+  </fieldset>
+
+  <fieldset>
     <legend>Face</legend>
     <label for="ROBOTEYE_EYE_COLOR">Cor dos olhos</label>
     <input id="ROBOTEYE_EYE_COLOR" placeholder="#04C9FD">
@@ -297,8 +312,8 @@ PAGE = """<!doctype html>
 let PIN = "";
 const $ = (id) => document.getElementById(id);
 const CAMPOS = ["ROBOTEYE_OLLAMA_HOST","ROBOTEYE_LLM_MODEL","ROBOTEYE_PERSONA","ROBOTEYE_VOICE",
-                "ROBOTEYE_VOICE_FALLBACK","ROBOTEYE_VOICE_GAIN","ROBOTEYE_EYE_COLOR",
-                "ROBOTEYE_FACE_QUALITY","ROBOTEYE_FACE_FULLSCREEN"];
+                "ROBOTEYE_VOICE_FALLBACK","ROBOTEYE_VOICE_GAIN","ROBOTEYE_HEARING_MODEL_SIZE",
+                "ROBOTEYE_EYE_COLOR","ROBOTEYE_FACE_QUALITY","ROBOTEYE_FACE_FULLSCREEN"];
 
 async function api(rota, corpo) {
   const r = await fetch(rota, {

@@ -161,6 +161,15 @@ LLM_BACKENDS: Final = frozenset({"ollama", "echo"})
 TTS_BACKENDS: Final = frozenset({"auto", "piper", "kokoro", "edge", "null"})
 #: Niveis de esforco do desenho da face.
 FACE_QUALITIES: Final = frozenset({"auto", "low", "medium", "high"})
+
+#: Tamanhos de modelo de reconhecimento que fazem sentido neste robô. Lista
+#: fechada porque o `faster-whisper` **baixa** o que pedirem: um erro de
+#: digitação viraria uma tentativa de download de um modelo inexistente, no
+#: arranque, com o robô já ligado e a escuta desligando em silêncio.
+#:
+#: Medidos no Pi 5, 2,5 s de áudio: `tiny` 920 ms, `base` 1930 ms. O `small`
+#: entra porque cabe na mesma escolha, para quem trocar o Pi por algo maior.
+HEARING_MODEL_SIZES: Final = frozenset({"tiny", "base", "small"})
 #: Motores de reconhecimento de fala.
 HEARING_BACKENDS: Final = frozenset({"whisper", "vosk", "null"})
 
@@ -461,7 +470,7 @@ class HearingSettings:
         return cls(
             enabled=_get_bool("HEARING_ENABLED", False),
             backend=_get_choice("HEARING_BACKEND", "whisper", HEARING_BACKENDS),
-            model=_get_str("HEARING_MODEL_SIZE", "base"),
+            model=_get_choice("HEARING_MODEL_SIZE", "base", HEARING_MODEL_SIZES),
             model_path=_resolve_path(_get_str("HEARING_MODEL_DIR", "models/escuta")),
             cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),
             device=_get_str("HEARING_DEVICE", "auto"),

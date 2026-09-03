@@ -32,6 +32,7 @@ from roboteye.llm.factory import create_llm_client
 from roboteye.llm.memory import ConversationMemory
 from roboteye.llm.persona import PersonaStore
 from roboteye.logging_setup import get_logger
+from roboteye.speech import sinal
 from roboteye.speech.base import SpeechError
 from roboteye.speech.envelope import SpeechEnvelope
 from roboteye.speech.factory import create_tts_engine
@@ -175,6 +176,12 @@ class Application:
         self.bus.subscribe(lambda _e: ouvido.pausar(), event_type=SpeechStarted)
         self.bus.subscribe(lambda _e: ouvido.retomar(), event_type=SpeechFinished)
 
+        # Chamar o nome e ficar no silencio e a pior parte de conversar com este
+        # robo: quem falou nao sabe se foi ouvido, entao repete o nome — e a
+        # repeticao chega justo enquanto a primeira ainda esta sendo tratada. Um
+        # som curto fecha esse buraco na hora, sem esperar sintese nenhuma.
+        self.bus.subscribe(self._avisar_que_estou_ouvindo, event_type=ListeningChanged)
+
         self._ouvindo = threading.Thread(target=self._escutar, name="ouvidos", daemon=True)
         self._ouvindo.start()
 
@@ -219,6 +226,22 @@ class Application:
             self.bus.publish(ErrorOccurred(message=str(exc), source="hearing"))
         except Exception:
             logger.exception("a escuta parou")
+
+    def _avisar_que_estou_ouvindo(self, evento: Event) -> None:
+        """Toca o sinal quando a janela de escuta abre. So na abertura.
+
+        Fechar a janela nao merece som: ou veio a pergunta — e a resposta e o
+        aviso —, ou o tempo passou, e um som para "desisti de esperar" so
+        atrapalha quem ja voltou a fazer outra coisa.
+        """
+        if not isinstance(evento, ListeningChanged) or not evento.active:
+            return
+        try:
+            self.speaker.sinalizar(sinal.escutando())
+        except Exception as exc:
+            # O sinal e conforto, nao funcao: falhar aqui nao pode impedir o
+            # robo de ouvir a pergunta que vem em seguida.
+            logger.debug("nao consegui tocar o sinal de escuta: %s", exc)
 
     def _perguntar_se_ficou_no_ar(self) -> None:
         """Diz "Oi?" se chamarem o nome e a pergunta nao vier.
