@@ -32,6 +32,7 @@ class OllamaClient:
         self._model = settings.model
         self._num_predict = settings.max_tokens
         self._num_ctx = settings.num_ctx
+        self._num_thread = settings.num_thread
         #: Mutavel de proposito — ver `set_keep_alive`.
         self._keep_alive = keep_alive if keep_alive is not None else settings.keep_alive
         self._timeout = httpx.Timeout(
@@ -160,6 +161,10 @@ class OllamaClient:
                 # presa no Pi mesmo numa conversa de duas frases.
                 "num_ctx": self._num_ctx,
                 "temperature": 0.8,
+                # Ausente quando vale 0: o Ollama so aceita a chave com um
+                # numero util, e o padrao dele (todos os nucleos) e o certo
+                # numa maquina de mesa.
+                **({"num_thread": self._num_thread} if self._num_thread else {}),
             },
         }
 

@@ -209,6 +209,21 @@ class LLMSettings:
     #: 120 tokens — 2048 sobra, e o padrao de 4096 do Ollama dobra a conta a
     #: troco de espaco que nunca e usado.
     num_ctx: int = 2048
+    #: Quantos nucleos o modelo pode usar. 0 deixa o Ollama decidir, e ele
+    #: decide pegar **todos**.
+    #:
+    #: Isso e o certo numa maquina de mesa dedicada e errado num Raspberry Pi,
+    #: onde os mesmos quatro nucleos desenham a face e reconhecem a fala.
+    #: Medido neste robo, a mesma pergunta ao mesmo modelo:
+    #:
+    #:     sozinho       primeiro token   200 ms   resposta inteira   1,4 s
+    #:     disputando    primeiro token  3300 ms   resposta inteira  24,6 s
+    #:
+    #: A escuta agora para enquanto ele pensa, o que resolve a maior parte da
+    #: disputa. Este teto e a segunda camada: a face desenha o tempo todo, e um
+    #: modelo que toma a maquina inteira faz a animacao engasgar bem no momento
+    #: em que a pessoa esta esperando resposta.
+    num_thread: int = 0
     #: Quanto tempo o modelo fica na memoria depois de responder, no formato do
     #: Ollama ("5m", "30s", "0"). Vale para o `host` principal, que costuma ser
     #: a maquina de mesa — onde memoria sobra.
@@ -244,6 +259,7 @@ class LLMSettings:
             fallback_model=_get_str("LLM_FALLBACK_MODEL", ""),
             probe_interval=_get_float("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
             num_ctx=_get_int("LLM_NUM_CTX", 2048, minimum=256),
+            num_thread=_get_int("LLM_NUM_THREAD", 0, minimum=0),
             keep_alive=_get_str("LLM_KEEP_ALIVE", "5m"),
             fallback_keep_alive=_get_str("LLM_FALLBACK_KEEP_ALIVE", "0"),
         )
