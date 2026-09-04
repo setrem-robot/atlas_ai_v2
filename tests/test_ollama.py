@@ -14,9 +14,9 @@ from roboteye.llm.ollama import OllamaClient
 MENSAGENS = [ChatMessage(role="user", content="olá")]
 
 
-def cliente_com(handler) -> OllamaClient:
+def cliente_com(handler, **ajustes) -> OllamaClient:
     """Cria um cliente cujo transporte é controlado pelo teste."""
-    client = OllamaClient(LLMSettings(host="http://fake:11434", model="teste"))
+    client = OllamaClient(LLMSettings(host="http://fake:11434", model="teste", **ajustes))
     client._client = httpx.Client(
         base_url="http://fake:11434",
         transport=httpx.MockTransport(handler),
@@ -207,3 +207,29 @@ class TestMemoria:
             collect(client.stream_reply(MENSAGENS))
 
         assert self._capturar(acao, keep_alive="0")["keep_alive"] == "5m"
+
+
+class TestTetoDeNucleos:
+    """Quantos nucleos o modelo pode tomar da maquina.
+
+    Num Raspberry Pi os mesmos quatro nucleos desenham a face e reconhecem a
+    fala. Medido no robo, a mesma pergunta ao mesmo modelo: sozinho, primeiro
+    token em 200 ms; disputando, 3300 ms e a resposta inteira em 24,6 s.
+    """
+
+    def _opcoes_enviadas(self, **ajustes) -> dict:
+        capturado: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            capturado.update(json.loads(request.content))
+            return httpx.Response(200, content=ndjson({"message": {"content": "ok"}, "done": True}))
+
+        collect(cliente_com(handler, **ajustes).stream_reply(MENSAGENS))
+        return capturado["options"]
+
+    def test_por_padrao_nao_manda_teto(self) -> None:
+        """Sem numero util, o Ollama decide — e numa maquina de mesa ele acerta."""
+        assert "num_thread" not in self._opcoes_enviadas()
+
+    def test_o_teto_configurado_chega_ao_modelo(self) -> None:
+        assert self._opcoes_enviadas(num_thread=3)["num_thread"] == 3

@@ -23,6 +23,7 @@ from roboteye.core.events import (
     SpeechFinished,
     SpeechHeard,
     SpeechStarted,
+    ThinkingStarted,
 )
 from roboteye.face.app import FaceApp
 from roboteye.hearing import (
@@ -71,6 +72,12 @@ class Application:
     #: A janela de "fui chamada ha pouco". Nasce em `_escutar`; o sinal de fim
     #: de captura a consulta para nao apitar quando e a sala que esta falando.
     _conversa: Conversa | None = None
+    #: Se o sinal de "peguei sua pergunta" ja saiu neste turno. Ver
+    #: `_avisar_que_peguei_a_pergunta`.
+    _avisei_do_fim: bool = False
+    #: Rede de seguranca da pausa da escuta. Um microfone que fica pausado e um
+    #: robo surdo — pior que um lento —, entao a pausa tem prazo de validade.
+    _destravar_escuta: threading.Timer | None = None
 
     # -- construcao --------------------------------------------------------
     @classmethod
@@ -183,7 +190,25 @@ class Application:
         # Os eventos de fala ja existem — so faltava alguem escutar por eles.
         ouvido = self.ears
         self.bus.subscribe(lambda _e: ouvido.pausar(), event_type=SpeechStarted)
-        self.bus.subscribe(lambda _e: ouvido.retomar(), event_type=SpeechFinished)
+        self.bus.subscribe(lambda _e: self._voltar_a_escutar(), event_type=SpeechFinished)
+
+        # **Pensar e transcrever nao cabem juntos em quatro nucleos.**
+        #
+        # O Ollama usa todos os nucleos que encontra e o reconhecimento pede
+        # tres; somando a face, sao oito threads disputando quatro. Medido neste
+        # Pi, a mesma pergunta ao mesmo modelo:
+        #
+        #     sozinho              primeiro token   200 ms   resposta   1,4 s
+        #     disputando           primeiro token  3300 ms   resposta  24,6 s
+        #
+        # Dez vezes mais lento — e foi assim que uma resposta estourou o teto de
+        # 60 s e o robo nao respondeu nada. A escuta para enquanto ela pensa: o
+        # robo ja esta comprometido com a pergunta que recebeu, e transcrever a
+        # sala nesse meio-tempo custa justamente a resposta.
+        self.bus.subscribe(self._parar_de_escutar_para_pensar, event_type=ThinkingStarted)
+        # Um turno que falha nao passa por `SpeechFinished`: a escuta voltaria
+        # so no proximo, e ate la o robo estaria surdo.
+        self.bus.subscribe(lambda _e: self._voltar_a_escutar(), event_type=ErrorOccurred)
 
         # Chamar o nome e ficar no silencio e a pior parte de conversar com este
         # robo: quem falou nao sabe se foi ouvido, entao repete o nome — e a
@@ -240,6 +265,7 @@ class Application:
                 logger.info("ouvi: %s", pergunta)
                 self._cancelar_pergunta()
                 self.bus.publish(ListeningChanged(active=False))
+                self._avisar_que_peguei_a_pergunta()
                 self.assistant.submit(pergunta)
         except HearingError as exc:
             logger.warning("escuta indisponivel: %s", exc)
@@ -263,6 +289,53 @@ class Application:
             # robo de ouvir a pergunta que vem em seguida.
             logger.debug("nao consegui tocar o sinal de escuta: %s", exc)
 
+    def _parar_de_escutar_para_pensar(self, _evento: Event) -> None:
+        """Cala o microfone enquanto ela pensa, com prazo de validade.
+
+        A pausa em si e o que devolve os nucleos ao modelo. O prazo e a rede de
+
+        seguranca: os eventos cobrem os caminhos conhecidos, mas um microfone
+        que fica pausado e um robo surdo — e um robo surdo e pior que um lento.
+        O relogio garante que a escuta volta mesmo que um caminho novo esqueca
+        de avisar. O prazo e o do proprio modelo, com folga: se ele estourou, ja
+        nao ha resposta a proteger.
+        """
+        if self.ears is not None:
+            self.ears.pausar()
+        self._cancelar_destravamento()
+        timer = threading.Timer(self.settings.llm.timeout + 15.0, self._voltar_a_escutar)
+        timer.daemon = True
+        self._destravar_escuta = timer
+        timer.start()
+
+    def _cancelar_destravamento(self) -> None:
+        if self._destravar_escuta is not None:
+            self._destravar_escuta.cancel()
+            self._destravar_escuta = None
+
+    def _voltar_a_escutar(self) -> None:
+        """Fim do turno: a escuta volta e o proximo sinal fica liberado."""
+        self._cancelar_destravamento()
+        self._avisei_do_fim = False
+        if self.ears is not None:
+            self.ears.retomar()
+
+    def _avisar_que_peguei_a_pergunta(self) -> None:
+        """O sinal de "peguei, estou pensando", quando ele ainda nao saiu.
+
+        No caminho de duas etapas ("Atlas" ... pergunta) ele ja saiu la atras,
+        no fim da captura — 1,9 s antes, porque nao esperou a transcricao. Mas
+        quem pergunta tudo de uma vez ("Atlas, qual seu nome?") nao abre janela
+        nenhuma, e nao ouvia sinal algum: a primeira coisa que chegava era a
+        resposta, e ate ela o robo parecia nao ter escutado.
+        """
+        if self._avisei_do_fim:
+            return
+        try:
+            self.speaker.sinalizar(sinal.ouvi())
+        except Exception as exc:
+            logger.debug("nao consegui tocar o sinal de pergunta recebida: %s", exc)
+
     def _avisar_que_terminei_de_ouvir(self) -> None:
         """Toca o sinal de fecho quando a captura de uma frase termina.
 
@@ -279,6 +352,7 @@ class Application:
             return
         try:
             self.speaker.sinalizar(sinal.ouvi())
+            self._avisei_do_fim = True
         except Exception as exc:
             logger.debug("nao consegui tocar o sinal de fim de escuta: %s", exc)
 
@@ -321,6 +395,7 @@ class Application:
         """Encerra tudo na ordem inversa da criacao."""
         logger.debug("encerrando aplicacao")
         self._cancelar_pergunta()
+        self._cancelar_destravamento()
         if self.ears is not None:
             self.ears.close()
         self.assistant.close()
