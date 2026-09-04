@@ -170,6 +170,13 @@ FACE_QUALITIES: Final = frozenset({"auto", "low", "medium", "high"})
 #: Medidos no Pi 5, 2,5 s de áudio: `tiny` 920 ms, `base` 1930 ms. O `small`
 #: entra porque cabe na mesma escolha, para quem trocar o Pi por algo maior.
 HEARING_MODEL_SIZES: Final = frozenset({"tiny", "base", "small"})
+
+#: Tamanho padrao da janela de contexto. Constante, e nao um numero repetido:
+#: ele estava escrito em dois lugares — no campo da dataclass e no `from_env` —
+#: e mudar so um deles nao mudou nada, porque quem monta a configuracao de
+#: verdade e o `from_env`. O robo continuou com 2048 e o aviso do arranque foi
+#: quem denunciou.
+DEFAULT_NUM_CTX: Final = 4096
 #: Motores de reconhecimento de fala.
 HEARING_BACKENDS: Final = frozenset({"whisper", "vosk", "null"})
 
@@ -215,7 +222,7 @@ class LLMSettings:
     #: 4096 e o que faz persona, historico e resposta caberem juntos. Custa
     #: memoria, e a alternativa honesta e mais barata continua sendo encurtar a
     #: persona — ver o aviso em `PersonaStore`.
-    num_ctx: int = 4096
+    num_ctx: int = DEFAULT_NUM_CTX
     #: Quantos nucleos o modelo pode usar. 0 deixa o Ollama decidir, e ele
     #: decide pegar **todos**.
     #:
@@ -265,7 +272,7 @@ class LLMSettings:
             fallback_host=_get_str("LLM_FALLBACK_HOST", "").rstrip("/"),
             fallback_model=_get_str("LLM_FALLBACK_MODEL", ""),
             probe_interval=_get_float("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
-            num_ctx=_get_int("LLM_NUM_CTX", 2048, minimum=256),
+            num_ctx=_get_int("LLM_NUM_CTX", DEFAULT_NUM_CTX, minimum=256),
             num_thread=_get_int("LLM_NUM_THREAD", 0, minimum=0),
             keep_alive=_get_str("LLM_KEEP_ALIVE", "5m"),
             fallback_keep_alive=_get_str("LLM_FALLBACK_KEEP_ALIVE", "0"),
