@@ -25,6 +25,8 @@ def create_ears(settings: HearingSettings) -> Ouvido | None:
                 device=resolver_entrada(settings.device),
                 cpu_threads=settings.cpu_threads,
                 model_dir=str(settings.model_path),
+                # 0 quer dizer "meça a sala": o microfone entende `None`.
+                limiar=settings.limiar or None,
             )
         case "vosk":
             from roboteye.hearing.vosk_ears import VoskEars
