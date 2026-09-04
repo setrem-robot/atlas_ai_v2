@@ -35,8 +35,13 @@ DEFAULT_PROBE_INTERVAL = 10.0
 #: responde**. Nao e o mesmo que o `fallback_keep_alive` da configuracao, que
 #: vale para o estado normal (rede de pe, reserva fora da memoria).
 #:
-#: `-1` e "nao descarregue". Eram cinco minutos, e cinco minutos jogavam fora
-#: justamente o que este modulo se esforca para conseguir. Descarregar o modelo
+#: Qualquer duracao negativa e "nao descarregue" para o Ollama. **Com
+#: unidade**: ele le este campo como duracao do Go, e `"-1"` sozinho e
+#: recusado com `time: missing unit in duration "-1"` e um 400 na requisicao
+#: inteira. Nao e o `keep_alive` que falha — e a pergunta.
+#:
+#: Eram cinco minutos, e cinco minutos jogavam fora justamente o que este
+#: modulo se esforca para conseguir. Descarregar o modelo
 #: leva junto o **cache do prompt**, e reler o prompt custa mais que responder:
 #: medido neste robo, com a persona de 1968 tokens,
 #:
@@ -52,7 +57,7 @@ DEFAULT_PROBE_INTERVAL = 10.0
 #:
 #: O custo e um giga e pouco de RAM preso enquanto a rede estiver fora. Num Pi
 #: de 8 GB com 4,4 livres, e o lado certo da troca.
-KEEP_ALIVE_EM_USO = "-1"
+KEEP_ALIVE_EM_USO = "-1s"
 
 
 class FallbackLLMClient:
