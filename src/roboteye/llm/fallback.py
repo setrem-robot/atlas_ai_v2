@@ -34,7 +34,25 @@ DEFAULT_PROBE_INTERVAL = 10.0
 #: Quanto tempo o modelo de reserva fica residente **enquanto ele e quem
 #: responde**. Nao e o mesmo que o `fallback_keep_alive` da configuracao, que
 #: vale para o estado normal (rede de pe, reserva fora da memoria).
-KEEP_ALIVE_EM_USO = "5m"
+#:
+#: `-1` e "nao descarregue". Eram cinco minutos, e cinco minutos jogavam fora
+#: justamente o que este modulo se esforca para conseguir. Descarregar o modelo
+#: leva junto o **cache do prompt**, e reler o prompt custa mais que responder:
+#: medido neste robo, com a persona de 1968 tokens,
+#:
+#:     prompt processing   512/1968   39 tokens/s
+#:     prompt processing  1024/1968   34 tokens/s
+#:     [GIN] 500 | 1m0s | POST "/api/chat"
+#:
+#: sessenta segundos **sem chegar ao primeiro token** — o tempo limite estourou
+#: ainda na leitura. Quem paga isso e sempre a pergunta seguinte a uma pausa de
+#: cinco minutos, que e exatamente a primeira pergunta de quem chegou perto do
+#: robo. O `warm_up` do arranque ja aquece esse cache; descarregar depois e
+#: refazer o trabalho no pior momento possivel.
+#:
+#: O custo e um giga e pouco de RAM preso enquanto a rede estiver fora. Num Pi
+#: de 8 GB com 4,4 livres, e o lado certo da troca.
+KEEP_ALIVE_EM_USO = "-1"
 
 
 class FallbackLLMClient:
