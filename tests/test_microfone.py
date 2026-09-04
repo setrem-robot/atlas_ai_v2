@@ -85,3 +85,62 @@ class TestPausa:
         mic.retomar()
         frases = escutar(mic, voz(20) + silencio(15))
         assert len(frases) == 1
+
+
+class TestAFraseQueNaoFechava:
+    """Voz oscilando em volta do limiar não pode segurar a gravação aberta.
+
+    Visto no robô de produção, uma pergunta curta virando uma captura de 15
+    segundos — o teto — com o reconhecimento descartando dez deles como
+    não-fala:
+
+        Processing audio with duration 00:15.000
+        VAD filter removed 00:10.288 of audio
+        ouvi: qual seu nome? Atlas, qual seu nome
+
+    Quinze segundos de espera antes de a transcrição sequer começar, e duas
+    perguntas grudadas numa só. A causa era `quieto = 0` a cada bloco isolado
+    acima do limiar: as sílabas cruzavam, as pausas não, e a contagem de
+    silêncio nunca chegava ao fim.
+    """
+
+    def blocos_alternados(self, quantos: int) -> list[np.ndarray]:
+        """Um bloco acima do limiar a cada quatro — o padrão que travava tudo.
+
+        É o que uma voz baixa produz quando o limiar ficou alto demais: picos
+        de sílaba passando, o resto não.
+        """
+        saida = []
+        for i in range(quantos):
+            volume = 0.2 if i % 4 == 0 else 0.001
+            saida.append(np.full(BLOCO, volume, dtype=np.float32))
+        return saida
+
+    def test_picos_isolados_nao_seguram_a_gravacao(self, mic: Microfone) -> None:
+        # `maximo_s=1.0` na fixture: 33 blocos. Sem a correção, os picos
+        # isolados impedem o fechamento e a frase só sai no teto.
+        frases = escutar(mic, voz(6) + self.blocos_alternados(60) + silencio(15))
+
+        assert frases, "nada saiu"
+        assert len(frases[0]) < 33 * BLOCO, (
+            "a frase foi até o teto: um pico isolado ainda está zerando o silêncio"
+        )
+
+    def test_uma_pausa_de_verdade_continua_fechando_a_frase(self, mic: Microfone) -> None:
+        """A correção não pode deixar a frase fechar tarde demais."""
+        frases = escutar(mic, voz(20) + silencio(15))
+        assert len(frases) == 1
+
+    def test_uma_virgula_continua_nao_partindo_a_frase(self, mic: Microfone) -> None:
+        """O motivo de `silencio_s` ser 0,8: "Atlas, quantos alunos tem?"."""
+        frases = escutar(mic, voz(10) + silencio(4) + voz(10) + silencio(15))
+        assert len(frases) == 1
+
+    def test_dois_blocos_seguidos_ainda_contam_como_fala(self, mic: Microfone) -> None:
+        """Sílaba de verdade tem mais que um bloco de 30 ms."""
+        pares = []
+        for _ in range(15):
+            pares += [np.full(BLOCO, 0.2, dtype=np.float32)] * 2
+            pares += [np.full(BLOCO, 0.001, dtype=np.float32)] * 2
+        frases = escutar(mic, voz(6) + pares + silencio(15))
+        assert frases, "fala com pausas curtas entre sílabas foi descartada"

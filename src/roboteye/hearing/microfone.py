@@ -71,6 +71,24 @@ BLOCO = 480
 #: 300; cortar em 150 tira o zumbido inteiro sem tocar na fala.
 CORTE_GRAVES_HZ = 150.0
 
+#: Quantos blocos seguidos acima do limiar contam como "ainda falando".
+#:
+#: Um bloco solto nao conta, e essa e a diferenca entre uma frase que fecha e
+#: uma que nao fecha. Zerar a contagem de silencio a cada bloco isolado parece
+#: inofensivo ate a voz de quem fala ficar perto do limiar: as silabas cruzam,
+#: as pausas nao, e a contagem de silencio nunca chega ao fim. Visto no robo —
+#: uma pergunta curta virou uma captura de 15 segundos, o teto, com o
+#: reconhecimento descartando 10 deles como nao-fala:
+#:
+#:     Processing audio with duration 00:15.000
+#:     VAD filter removed 00:10.288 of audio
+#:
+#: Quinze segundos de espera antes de a transcricao sequer comecar. Dois blocos
+#: seguidos (60 ms) e pouco para atrapalhar uma silaba de verdade e o bastante
+#: para um estalo, uma respiracao ou um pico do ar-condicionado nao segurarem a
+#: gravacao aberta.
+VOZ_PARA_CONTINUAR = 2
+
 #: Quanto tempo sem **nenhum** bloco significa que a captura morreu.
 #:
 #: Sala quieta também produz bloco: silêncio é áudio de energia baixa, não
@@ -136,7 +154,7 @@ class Microfone:
         limiar: float | None = None,
         silencio_s: float = 0.8,
         minimo_s: float = 0.4,
-        maximo_s: float = 15.0,
+        maximo_s: float = 10.0,
     ) -> None:
         self._device = device
         #: Acima disto conta como fala. None faz medir a sala no arranque.
@@ -147,7 +165,9 @@ class Microfone:
         #: Curto demais é ruído — uma porta, uma cadeira, uma tosse.
         self._minimo = int(minimo_s * TAXA / BLOCO)
         #: Teto de segurança: sem ele, um ruído contínuo (um ventilador ligando)
-        #: gravaria para sempre e nada seria transcrito.
+        #: gravaria para sempre e nada seria transcrito. Bater nele é sinal de
+        #: que algo está errado — ninguém faz uma pergunta de dez segundos a um
+        #: robô —, e por isso ele avisa no log quando acontece.
         self._maximo = int(maximo_s * TAXA / BLOCO)
         #: O que veio antes de o som subir. 300 ms bastam para a primeira sílaba.
         self._antes: deque[np.ndarray] = deque(maxlen=10)
@@ -353,6 +373,8 @@ class Microfone:
     def _cortar_em_frases(self) -> Iterator[np.ndarray]:
         falando: list[np.ndarray] = []
         quieto = 0
+        #: Blocos acima do limiar em sequência. Ver `VOZ_PARA_CONTINUAR`.
+        voz_seguida = 0
         #: Blocos com voz de verdade. E este numero, e nao o tamanho do trecho,
         #: que decide se houve pergunta: o preambulo guardado antes da fala
         #: sozinho ja passaria do minimo, e um estalo de porta viraria pergunta.
@@ -391,21 +413,40 @@ class Microfone:
                     self._antes.clear()
                     quieto = 0
                     com_voz = 1
+                    voz_seguida = 1
                 continue
 
             falando.append(bloco)
             if tem_voz:
-                quieto = 0
                 com_voz += 1
+                voz_seguida += 1
+                # Só uma sequência conta como "ainda falando". Ver
+                # `VOZ_PARA_CONTINUAR`: um bloco solto zerando o silêncio é o
+                # que fazia a frase nunca fechar.
+                if voz_seguida >= VOZ_PARA_CONTINUAR:
+                    quieto = 0
             else:
+                voz_seguida = 0
                 quieto += 1
 
-            if quieto >= self._silencio or len(falando) >= self._maximo:
+            no_teto = len(falando) >= self._maximo
+            if quieto >= self._silencio or no_teto:
                 trecho, falando = falando, []
                 self._antes.clear()
+                segundos = len(trecho) * BLOCO / TAXA
+                if no_teto:
+                    logger.warning(
+                        "frase cortada no teto de %.0fs (só %.1fs com voz) — "
+                        "o limiar de %.4f pode estar alto para esta sala",
+                        segundos,
+                        com_voz * BLOCO / TAXA,
+                        self._limiar,
+                    )
                 if com_voz >= self._minimo:
                     self._avisar_que_fechou()
+                    logger.info("frase de %.1fs (%.1fs com voz)", segundos, com_voz * BLOCO / TAXA)
                     yield np.concatenate(trecho)
                 else:
                     logger.debug("so %d blocos com voz; era ruido, nao pergunta", com_voz)
                 com_voz = 0
+                voz_seguida = 0

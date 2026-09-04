@@ -464,6 +464,13 @@ class HearingSettings:
     model: str = "base"
     #: Onde os modelos ficam. O Whisper baixa o seu na primeira vez.
     model_path: Path = field(default_factory=lambda: MODELS_DIR / "escuta")
+    #: Acima disto conta como fala. 0 mede a sala no arranque, que e o padrao e
+    #: acerta na maioria das salas. Um numero fixo existe para quando ele erra:
+    #: a medicao e feita uma vez, logo depois da saudacao, e uma sala que estava
+    #: barulhenta naquele instante deixa o robo surdo pelo resto do dia. Visto
+    #: neste robo, o limiar medido variando entre arranques: 0.036, 0.041,
+    #: 0.045, 0.057 — e nos mais altos ele passou a nao fechar as frases.
+    limiar: float = 0.0
     #: Nucleos para transcrever. Um fica de fora para a face nao engasgar.
     cpu_threads: int = 3
     #: Microfone. "auto" procura uma placa USB; ver `speech/devices.py`.
@@ -488,6 +495,7 @@ class HearingSettings:
             backend=_get_choice("HEARING_BACKEND", "whisper", HEARING_BACKENDS),
             model=_get_choice("HEARING_MODEL_SIZE", "base", HEARING_MODEL_SIZES),
             model_path=_resolve_path(_get_str("HEARING_MODEL_DIR", "models/escuta")),
+            limiar=_get_float("HEARING_LIMIAR", 0.0, minimum=0.0),
             cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),
             device=_get_str("HEARING_DEVICE", "auto"),
             wake_word=_get_str("WAKE_WORD", "atlas"),
