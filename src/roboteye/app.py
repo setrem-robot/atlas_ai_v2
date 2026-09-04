@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass
 from types import TracebackType
 
-from roboteye.config import Settings
+from roboteye.config import LLMSettings, Settings, is_arm
 from roboteye.core.assistant import Assistant
 from roboteye.core.events import (
     ErrorOccurred,
@@ -88,6 +88,7 @@ class Application:
         persona_store = PersonaStore(settings.llm.persona_dir, settings.llm.persona)
         persona = persona_store.load(settings.llm.reply_language)
         logger.info("persona %r carregada (%d fatos aprendidos)", persona.name, len(persona.facts))
+        _conferir_o_tamanho_da_persona(persona.system_prompt(), settings.llm)
 
         memory = ConversationMemory(
             persona.system_prompt(),
@@ -468,6 +469,79 @@ class Application:
         finally:
             console.stop()
             self.shutdown()
+
+
+#: Aproximacao de tokens a partir de caracteres. Nao vale contar de verdade
+#: aqui: exigiria carregar o tokenizador do modelo no arranque, e a conta so
+#: precisa acertar a ordem de grandeza.
+#:
+#: 3,7 e o que este texto de fato deu, e nao a regra de bolso de 4: a persona
+#: de 7198 caracteres virou ~1950 tokens no `gemma3:1b` (o Ollama registrou
+#: 1968 com a pergunta junto). Portugues com acento rende menos caractere por
+#: token que ingles, e usar 4 subestimava o prompt em quase 10% — justo na
+#: direcao que faz o aviso nao aparecer.
+_CARACTERES_POR_TOKEN = 3.7
+
+#: Quantos tokens de prompt o robo le por segundo quando o cache esta frio.
+#: Medido neste Pi 5 com o `gemma3:1b`, nas tres marcas que o Ollama registra:
+#: 39, 34 e 32 tokens/s. Numa maquina de mesa e uma ordem de grandeza mais
+#: rapido, e por isso o aviso so vale a pena onde ele doi.
+_TOKENS_POR_SEGUNDO_NO_PI = 35.0
+_TOKENS_POR_SEGUNDO_NO_RESTO = 600.0
+
+#: A partir de quantos segundos de leitura a persona vira o problema.
+#:
+#: Trinta, e nao quinze: num Pi qualquer prompt custa cerca de um segundo por
+#: 35 tokens quando o cache esfria, e ate uma persona modesta de ~500 tokens
+#: gasta quinze. Avisar sobre ela seria avisar sempre, e um aviso que aparece
+#: sempre ensina a ser ignorado. Trinta segundos ja e o dobro do normal — ali a
+#: persona virou de fato a coisa mais cara do arranque.
+#:
+#: Para o caso comum, a resposta certa nao e encurtar a persona: e nao deixar o
+#: cache esfriar. Ver `KEEP_ALIVE_EM_USO` em `llm/fallback.py`.
+_SEGUNDOS_QUE_PREOCUPAM = 30.0
+
+
+def _conferir_o_tamanho_da_persona(prompt: str, llm: LLMSettings) -> None:
+    """Avisa quando ler a persona custa mais que responder.
+
+    Um prompt grande nao da erro: da **lentidao**, e de um jeito que nao aponta
+    para ele. Cada vez que o cache do modelo esfria, o prompt inteiro e relido
+    antes de a resposta comecar. Medido neste robo, com 1968 tokens:
+
+        prompt processing  512/1968   39 tokens/s
+        [GIN] 500 | 1m0s | POST "/api/chat"
+
+    Sessenta segundos sem chegar ao primeiro token. Quem investiga isso olha o
+    modelo, a rede e a voz — tudo menos o arquivo de texto da personalidade.
+    Esta linha e para o log dizer de uma vez.
+
+    O aviso e sobre **tempo**, e nao sobre fracao da janela: a mesma persona
+    que trava um Raspberry Pi passa despercebida numa maquina de mesa, e um
+    aviso que aparece nas duas ensina a ignora-lo.
+    """
+    tokens = int(len(prompt) / _CARACTERES_POR_TOKEN)
+    taxa = _TOKENS_POR_SEGUNDO_NO_PI if is_arm() else _TOKENS_POR_SEGUNDO_NO_RESTO
+    segundos = tokens / taxa
+
+    # Nao cabe junto com a resposta: o Ollama passa a deslocar a janela no meio
+    # da geracao, que e caro e piora o texto.
+    transborda = tokens + llm.max_tokens > llm.num_ctx
+
+    if segundos < _SEGUNDOS_QUE_PREOCUPAM and not transborda:
+        logger.debug("persona ocupa ~%d tokens de %d", tokens, llm.num_ctx)
+        return
+
+    logger.warning(
+        "a persona ocupa ~%d dos %d tokens de contexto. Cada vez que o cache do "
+        "modelo esfriar, le-la custa ~%.0fs antes da primeira palavra da "
+        "resposta%s — encurtar persona/%s.md e o que mais acelera este robo.",
+        tokens,
+        llm.num_ctx,
+        segundos,
+        ", e ela nao cabe junto com a resposta" if transborda else "",
+        llm.persona,
+    )
 
 
 def _stop_on_shutdown(face: FaceApp):
