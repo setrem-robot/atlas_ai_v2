@@ -45,13 +45,14 @@ class WhisperEars:
         idioma: str = "pt",
         cpu_threads: int = 3,
         model_dir: str | None = None,
+        limiar: float | None = None,
     ) -> None:
         self._nome_modelo = modelo
         self._idioma = idioma
         self._cpu_threads = cpu_threads
         self._model_dir = model_dir
         self._modelo = None
-        self._microfone = Microfone(device=device)
+        self._microfone = Microfone(device=device, limiar=limiar)
 
     def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
         """Repassa ao microfone quem avisar quando uma frase fecha."""
