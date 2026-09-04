@@ -254,7 +254,13 @@ class Application:
                     )
                 )
                 if pergunta is None:
-                    logger.debug("ouvi %r, mas nao era comigo", transcricao.texto)
+                    # INFO, e nao debug: "o robo nao me escuta" e a queixa mais
+                    # comum, e sem esta linha nao ha como saber se ele nao
+                    # ouviu, ouviu errado, ou ouviu e achou que nao era com ele
+                    # — tres problemas diferentes, com tres consertos
+                    # diferentes. So aparece quando houve transcricao de
+                    # verdade, entao uma sala quieta nao enche o log.
+                    logger.info("ouvi %r, mas nao era comigo", transcricao.texto)
                     # Chamada sem pergunta ("Atlas!") abre a janela: a face
                     # mostra que esta esperando, que e o unico jeito de quem
                     # falou saber que foi ouvido antes de fazer a pergunta.
@@ -284,6 +290,7 @@ class Application:
             return
         try:
             self.speaker.sinalizar(sinal.escutando())
+            logger.info("sinal: estou ouvindo, pode perguntar")
         except Exception as exc:
             # O sinal e conforto, nao funcao: falhar aqui nao pode impedir o
             # robo de ouvir a pergunta que vem em seguida.
@@ -333,6 +340,7 @@ class Application:
             return
         try:
             self.speaker.sinalizar(sinal.ouvi())
+            logger.info("sinal: peguei sua pergunta")
         except Exception as exc:
             logger.debug("nao consegui tocar o sinal de pergunta recebida: %s", exc)
 
@@ -353,6 +361,7 @@ class Application:
         try:
             self.speaker.sinalizar(sinal.ouvi())
             self._avisei_do_fim = True
+            logger.info("sinal: terminei de ouvir")
         except Exception as exc:
             logger.debug("nao consegui tocar o sinal de fim de escuta: %s", exc)
 
