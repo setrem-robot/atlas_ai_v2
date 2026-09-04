@@ -9,7 +9,7 @@ import pytest
 from roboteye.config import LLMSettings
 from roboteye.llm.base import ChatMessage, LLMError
 from roboteye.llm.factory import create_llm_client
-from roboteye.llm.fallback import FallbackLLMClient
+from roboteye.llm.fallback import KEEP_ALIVE_EM_USO, FallbackLLMClient
 from roboteye.llm.ollama import OllamaClient
 
 PERGUNTA = (ChatMessage(role="user", content="ola"),)
@@ -205,7 +205,11 @@ class TestMemoriaDaReserva:
         _esperar_memoria(cliente)
 
         assert local.aquecido_com == list(persona)
-        assert local.keep_alive == "5m"
+        # `-1` e "nao descarregue". Cinco minutos jogavam fora justamente o que
+        # este aquecimento conquista: descarregar leva junto o cache do prompt,
+        # e reler a persona custa mais que responder. Medido no robo, com 1968
+        # tokens, o tempo limite de 60 s estourou sem chegar ao primeiro token.
+        assert local.keep_alive == KEEP_ALIVE_EM_USO == "-1"
 
     def test_a_rede_de_volta_devolve_a_memoria(self) -> None:
         rede, local = IAFalsa("rede"), IAResidente("local")

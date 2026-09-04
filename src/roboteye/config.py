@@ -204,11 +204,18 @@ class LLMSettings:
     probe_interval: float = 10.0
     #: Tamanho da janela de contexto, em tokens. E o que mais pesa na memoria
     #: do robo depois do proprio modelo: o Ollama reserva o cache de atencao
-    #: pelo tamanho declarado, nao pelo texto que chega. Este robo conversa com
-    #: ~500 tokens de persona, oito mensagens curtas de historico e respostas de
-    #: 120 tokens — 2048 sobra, e o padrao de 4096 do Ollama dobra a conta a
-    #: troco de espaco que nunca e usado.
-    num_ctx: int = 2048
+    #: pelo tamanho declarado, nao pelo texto que chega.
+    #:
+    #: Eram 2048, escolhidos supondo "~500 tokens de persona". A persona real
+    #: deste robo tem **1800**, e com a pergunta o prompt chega a 1968 — 96% da
+    #: janela. Somando a resposta (220 tokens), o contexto transbordava e o
+    #: Ollama passava a deslocar a janela no meio da geracao, que e caro e
+    #: piora a resposta.
+    #:
+    #: 4096 e o que faz persona, historico e resposta caberem juntos. Custa
+    #: memoria, e a alternativa honesta e mais barata continua sendo encurtar a
+    #: persona — ver o aviso em `PersonaStore`.
+    num_ctx: int = 4096
     #: Quantos nucleos o modelo pode usar. 0 deixa o Ollama decidir, e ele
     #: decide pegar **todos**.
     #:

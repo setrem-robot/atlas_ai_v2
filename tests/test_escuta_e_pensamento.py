@@ -194,3 +194,69 @@ class TestOSinalDePerguntaRecebida:
         app._avisar_que_peguei_a_pergunta()
 
         assert len(tocados) == 1
+
+
+class TestOAvisoDaPersonaGrande:
+    """Um prompt grande não dá erro: dá lentidão, e de um jeito que não aponta
+    para ele.
+
+    Cada vez que o cache do modelo esfria, o prompt inteiro é relido antes de a
+    resposta começar — e num Raspberry Pi isso corre a ~35 tokens/s. Medido
+    neste robô, com 1968 tokens de persona:
+
+        prompt processing  512/1968   39 tokens/s
+        [GIN] 500 | 1m0s | POST "/api/chat"
+
+    Sessenta segundos sem chegar ao primeiro token. Quem investiga olha o
+    modelo, a rede e a voz — tudo menos o arquivo de texto da personalidade.
+    """
+
+    def _avisos(
+        self, caplog, caracteres: int, num_ctx: int = 4096, max_tokens: int = 220, *, no_pi=True
+    ) -> list[str]:
+        import logging
+
+        from roboteye import app as app_mod
+        from roboteye.config import LLMSettings
+
+        # O aviso e sobre tempo, e o tempo depende da maquina: a mesma persona
+        # que trava um Pi passa despercebida numa maquina de mesa.
+        original = app_mod.is_arm
+        app_mod.is_arm = lambda: no_pi
+        try:
+            with caplog.at_level(logging.WARNING, logger="roboteye.app"):
+                app_mod._conferir_o_tamanho_da_persona(
+                    "x" * caracteres, LLMSettings(num_ctx=num_ctx, max_tokens=max_tokens)
+                )
+        finally:
+            app_mod.is_arm = original
+        return [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+
+    def test_uma_persona_curta_nao_avisa(self, caplog) -> None:
+        # ~500 tokens numa janela de 4096: era a suposição original do projeto.
+        assert self._avisos(caplog, caracteres=2000) == []
+
+    def test_a_persona_deste_robo_avisa(self, caplog) -> None:
+        """7198 caracteres, medidos no robô: ~1950 tokens, ~55s de leitura fria."""
+        avisos = self._avisos(caplog, caracteres=7198)
+        assert len(avisos) == 1
+        assert "persona" in avisos[0]
+
+    def test_o_aviso_diz_quanto_custa_em_segundos(self, caplog) -> None:
+        """Um aviso que só diz "está grande" não faz ninguém agir."""
+        aviso = self._avisos(caplog, caracteres=7198)[0]
+        assert "s antes da primeira" in aviso, aviso
+        assert "encurtar persona/" in aviso, aviso
+
+    def test_avisa_que_nao_cabe_junto_com_a_resposta(self, caplog) -> None:
+        """1800 de persona + 220 de resposta não cabem em 2048.
+
+        Era a configuração que travou o robô: o Ollama passa a deslocar a
+        janela no meio da geração, que é caro e piora o texto.
+        """
+        aviso = self._avisos(caplog, caracteres=7198, num_ctx=2048)[0]
+        assert "nao cabe junto com a resposta" in aviso, aviso
+
+    def test_numa_maquina_de_mesa_a_mesma_persona_nao_assusta(self, caplog) -> None:
+        """Um aviso que aparece onde não dói ensina a ser ignorado."""
+        assert self._avisos(caplog, caracteres=7198, no_pi=False) == []
