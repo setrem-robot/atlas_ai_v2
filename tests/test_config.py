@@ -98,3 +98,33 @@ class TestSettings:
         assert isinstance(settings.llm, LLMSettings)
         assert isinstance(settings.voice, VoiceSettings)
         assert isinstance(settings.face, FaceSettings)
+
+
+class TestOPadraoValeOndeImporta:
+    """Um padrão escrito em dois lugares é um padrão que muda pela metade.
+
+    `num_ctx` tinha o valor repetido no campo da dataclass e no `from_env`.
+    Mudar só o campo não mudou nada no robô — quem monta a configuração de
+    verdade é o `from_env` —, e quem denunciou foi o aviso do arranque, dizendo
+    2048 depois de o padrão já ter "virado" 4096.
+    """
+
+    def test_o_padrao_da_classe_e_o_do_ambiente_sao_o_mesmo(self, monkeypatch) -> None:
+        from roboteye.config import DEFAULT_NUM_CTX, LLMSettings, Settings
+
+        monkeypatch.delenv("ROBOTEYE_LLM_NUM_CTX", raising=False)
+
+        assert LLMSettings().num_ctx == DEFAULT_NUM_CTX
+        assert Settings.from_env(env_file=None).llm.num_ctx == DEFAULT_NUM_CTX
+
+    def test_a_persona_deste_robo_cabe_no_padrao(self) -> None:
+        """~1950 tokens de persona + 220 de resposta precisam caber juntos.
+
+        Com 2048 não cabiam, e o Ollama passava a deslocar a janela no meio da
+        geração — caro, e piora o texto.
+        """
+        from roboteye.config import DEFAULT_NUM_CTX
+
+        persona_deste_robo = 1950
+        resposta = 220
+        assert persona_deste_robo + resposta < DEFAULT_NUM_CTX
