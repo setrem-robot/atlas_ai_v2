@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Sequence
 
 import pytest
@@ -209,7 +210,7 @@ class TestMemoriaDaReserva:
         # este aquecimento conquista: descarregar leva junto o cache do prompt,
         # e reler a persona custa mais que responder. Medido no robo, com 1968
         # tokens, o tempo limite de 60 s estourou sem chegar ao primeiro token.
-        assert local.keep_alive == KEEP_ALIVE_EM_USO == "-1"
+        assert local.keep_alive == KEEP_ALIVE_EM_USO
 
     def test_a_rede_de_volta_devolve_a_memoria(self) -> None:
         rede, local = IAFalsa("rede"), IAResidente("local")
@@ -259,3 +260,40 @@ class TestFactory:
 
 def _explodir(messages: Sequence[ChatMessage] = ()) -> None:
     raise RuntimeError("modelo nao carregou")
+
+
+class TestOFormatoDoKeepAlive:
+    """O Ollama le `keep_alive` como duracao do Go, e recusa a requisicao
+    inteira quando nao consegue.
+
+    Nao e o campo que falha: e a pergunta. Um valor sem unidade derruba toda
+    conversa com 400, e o robo fica sem responder nada — foi o que aconteceu
+    com `"-1"`:
+
+        {"error":"time: missing unit in duration \"-1\""}
+
+    Os dubles de HTTP dos outros testes aceitam qualquer coisa, entao o formato
+    nao aparece ali. Esta classe cobre o contrato que o Ollama de fato impoe.
+    """
+
+    #: A gramatica de `time.ParseDuration`: numero com unidade, opcionalmente
+    #: negativo e com casas decimais.
+    DURACAO = re.compile(r"^-?\d+(\.\d+)?(ns|us|µs|ms|s|m|h)$")
+
+    def test_o_valor_em_uso_tem_unidade(self) -> None:
+        assert self.DURACAO.match(KEEP_ALIVE_EM_USO), (
+            f"{KEEP_ALIVE_EM_USO!r} nao e uma duracao que o Ollama aceite"
+        )
+
+    def test_e_negativo_para_nao_descarregar(self) -> None:
+        """Duracao negativa e como o Ollama entende "mantenha carregado"."""
+        assert KEEP_ALIVE_EM_USO.startswith("-")
+
+    def test_os_padroes_da_configuracao_tambem_tem_unidade(self) -> None:
+        from roboteye.config import LLMSettings
+
+        padrao = LLMSettings()
+        for valor in (padrao.keep_alive, padrao.fallback_keep_alive):
+            assert self.DURACAO.match(valor) or valor in {"0", ""}, (
+                f"{valor!r} nao e uma duracao que o Ollama aceite"
+            )
