@@ -107,8 +107,68 @@ ESPERA_INICIAL_S = 1.0
 ESPERA_MAXIMA_S = 15.0
 
 
-class _CapturaParou(Exception):
-    """O dispositivo deixou de entregar áudio. Interna: quem trata é `frases()`."""
+class CapturaParou(Exception):
+    """O dispositivo deixou de entregar áudio.
+
+    Quem trata é o laço de supervisão de quem abriu a captura — `frases()` aqui,
+    `escutar()` no `vosk_ears`. Os dois motores de escuta abrem o mesmo
+    microfone e sofrem a mesma desconexão, então a exceção mora aqui, junto das
+    constantes que definem quando ela é levantada.
+    """
+
+
+#: Nome antigo, de quando só o Whisper passava por aqui.
+_CapturaParou = CapturaParou
+
+
+def negociar_taxa(sd, device: str | int | None, *, bloco: int = BLOCO) -> tuple[int, int]:
+    """Descobre em que taxa dá para gravar, e de quanto é a conversão.
+
+    Só taxas múltiplas de 16 kHz entram na lista: a conversão vira uma média de
+    N amostras, exata e barata. Uma taxa qualquer exigiria reamostragem de
+    verdade, e nenhuma placa comum obriga a isso.
+
+    **Isto não é zelo defensivo.** A placa deste robô (C-Media, USB) grava só a
+    44,1 e 48 kHz, e com `dsnoop` no caminho — necessário para a caixinha e o
+    microfone dividirem a mesma placa — ela deixa de anunciar 16 kHz. Abrir
+    direto na taxa que o reconhecimento pede morre com `Invalid sample rate`, e
+    o robô sobe sem ouvidos.
+
+    É módulo e não método porque os dois motores de escuta precisam: o Whisper
+    pelo `Microfone`, o Vosk direto. Um deles ficou sem isso por um tempo, e o
+    efeito foi exatamente esse — o microfone não abria.
+    """
+    for taxa in (TAXA, 32000, 48000):
+        fator = taxa // TAXA
+        try:
+            with sd.InputStream(
+                samplerate=taxa,
+                blocksize=bloco * fator,
+                device=device,
+                dtype="float32",
+                channels=1,
+            ):
+                pass
+        except Exception:
+            continue
+        if fator > 1:
+            logger.info("o microfone grava a %d Hz; convertendo para %d", taxa, TAXA)
+        return taxa, fator
+
+    raise HearingError("o microfone nao grava em nenhuma taxa util (16000, 32000 ou 48000 Hz)")
+
+
+def reduzir(bloco: np.ndarray, fator: int) -> np.ndarray:
+    """Converte para 16 kHz tirando a média de cada grupo de `fator` amostras.
+
+    Média, e não descarte de amostras: descartar rebate as frequências altas
+    para dentro da fala, e o reconhecimento piora justamente nas vozes agudas —
+    as das crianças, que são quem vai falar com este robô.
+    """
+    if fator <= 1:
+        return bloco
+    n = (len(bloco) // fator) * fator
+    return bloco[:n].reshape(-1, fator).mean(axis=1)
 
 
 class PassaAlta:
@@ -251,20 +311,13 @@ class Microfone:
             # Enquanto a Atlas fala, tudo o que chega é a própria voz dela.
             if self._pausado:
                 return
-            bloco = entrada[:, 0]
-            if fator > 1:
-                # Média de cada grupo, não descarte de amostras: descartar
-                # rebate as frequências altas para dentro da fala e o
-                # reconhecimento piora justamente nas vozes agudas — as das
-                # crianças, que são quem vai falar com este robô.
-                n = (len(bloco) // fator) * fator
-                bloco = bloco[:n].reshape(-1, fator).mean(axis=1)
+            bloco = reduzir(entrada[:, 0], fator)
             # O filtro entra aqui, antes de tudo: o mesmo áudio limpo é o que
             # alimenta a medição de energia e o reconhecimento.
             with contextlib.suppress(queue.Full):
                 self._blocos.put_nowait(self._filtro.aplicar(bloco))
 
-        taxa, fator = self._negociar_taxa(sd)
+        taxa, fator = negociar_taxa(sd, self._device)
         with sd.InputStream(
             samplerate=taxa,
             blocksize=BLOCO * fator,
@@ -282,32 +335,6 @@ class Microfone:
                 self._calibrar = not self._medir_a_sala()
             logger.info("escutando pelo microfone (limiar %.4f)", self._limiar)
             yield from self._cortar_em_frases()
-
-    def _negociar_taxa(self, sd) -> tuple[int, int]:
-        """Descobre em que taxa dá para gravar, e de quanto é a conversão.
-
-        Só taxas múltiplas de 16 kHz entram na lista: a conversão vira uma média
-        de N amostras, exata e barata. Uma taxa qualquer exigiria reamostragem
-        de verdade, e nenhuma placa comum obriga a isso.
-        """
-        for taxa in (TAXA, 32000, 48000):
-            fator = taxa // TAXA
-            try:
-                with sd.InputStream(
-                    samplerate=taxa,
-                    blocksize=BLOCO * fator,
-                    device=self._device,
-                    dtype="float32",
-                    channels=1,
-                ):
-                    pass
-            except Exception:
-                continue
-            if fator > 1:
-                logger.info("o microfone grava a %d Hz; convertendo para %d", taxa, TAXA)
-            return taxa, fator
-
-        raise HearingError("o microfone nao grava em nenhuma taxa util (16000, 32000 ou 48000 Hz)")
 
     def _avisar_que_fechou(self) -> None:
         """Diz a quem quiser ouvir que a captura de uma frase acabou de fechar.
