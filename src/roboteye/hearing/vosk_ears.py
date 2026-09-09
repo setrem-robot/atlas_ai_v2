@@ -78,6 +78,24 @@ logger = get_logger(__name__)
 #: Quanto o `float32` do PortAudio vale em `int16`, que é o que o Vosk lê.
 ESCALA_INT16 = 32767.0
 
+#: Silêncio empurrado ao reconhecedor antes de a fala poder começar.
+#:
+#: **O Vosk não reconhece a primeira palavra se o áudio começa nela.** Medido
+#: aqui, a mesma frase sintetizada, com e sem meio segundo de silêncio na
+#: frente:
+#:
+#:     "Atlas"                            ""    →  "atlas"
+#:     "Atlas, quanto e dois mais dois?"  "quanto e dois mais dois"
+#:                                        →  "atlas quanto e dois mais dois"
+#:
+#: O decodificador precisa de alguns quadros para fixar o contexto acústico e a
+#: adaptação de ivector; sem eles, come o começo. Numa sala isso não aparece,
+#: porque silêncio é o que mais chega ao microfone — **mas aparece ao retomar
+#: depois de a Atlas falar**, que é justo quando a pessoa vai perguntar. E a
+#: palavra comida seria o nome dela: o robô ouviria a pergunta inteira e
+#: concluiria que não era com ele.
+SILENCIO_DE_PARTIDA_S = 0.5
+
 
 class VoskEars:
     """Ouve o microfone e devolve o que foi dito, em português."""
@@ -135,7 +153,24 @@ class VoskEars:
     def retomar(self) -> None:
         if self._pausado.is_set():
             logger.debug("escuta retomada")
+            # Enquanto pausado nada foi entregue ao reconhecedor, então para ele
+            # a fala que vem agora começa no primeiro quadro do universo — e ele
+            # comeria o "Atlas". Ver `SILENCIO_DE_PARTIDA_S`.
+            self._preparar_o_ouvido()
         self._pausado.clear()
+
+    def _preparar_o_ouvido(self) -> None:
+        """Enfileira o silêncio que dá contexto ao reconhecedor.
+
+        Barato de propósito: alimentar o Vosk enquanto a Atlas fala manteria o
+        contexto sozinho, mas gastaria um núcleo decodificando silêncio durante
+        toda a resposta — e devolver núcleos enquanto ela pensa foi justamente o
+        que tirou o primeiro token de 3300 ms para 200 ms.
+        """
+        mudo = self._para_int16(np.zeros(BLOCO, dtype=np.float32))
+        for _ in range(int(SILENCIO_DE_PARTIDA_S * TAXA / BLOCO)):
+            with contextlib.suppress(queue.Full):
+                self._blocos.put_nowait(mudo)
 
     def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
         """Registra quem avisar quando uma frase fecha. `None` desliga.
@@ -230,6 +265,9 @@ class VoskEars:
             channels=1,
             callback=alimentar,
         ):
+            # Também na abertura: quem fala assim que o robô sobe não teria
+            # silêncio nenhum antes da primeira palavra.
+            self._preparar_o_ouvido()
             logger.info("escutando pelo microfone (vosk, decodificando enquanto voce fala)")
             yield from self._reconhecer(reconhecedor)
 

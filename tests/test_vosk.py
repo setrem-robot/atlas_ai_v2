@@ -21,8 +21,8 @@ import numpy as np
 import pytest
 
 from roboteye.hearing.base import AvisaAoFecharFrase, HearingError
-from roboteye.hearing.microfone import BLOCO, CapturaParou
-from roboteye.hearing.vosk_ears import VoskEars
+from roboteye.hearing.microfone import BLOCO, TAXA, CapturaParou
+from roboteye.hearing.vosk_ears import SILENCIO_DE_PARTIDA_S, VoskEars
 
 
 class ReconhecedorFalso:
@@ -125,6 +125,85 @@ class TestOAvisoDeFimDeFrase:
         ears._blocos.put(None)
 
         assert len(list(ears._reconhecer(ReconhecedorFalso(a_cada=3)))) == 1
+
+
+class TestOSilencioQueDaContextoAoReconhecedor:
+    """O Vosk come a primeira palavra se o áudio começa nela.
+
+    Medido com o modelo real e fala sintetizada, entregando o áudio ao
+    reconhecedor sem nada antes:
+
+        "Atlas"                            ->  ""
+        "Atlas, quanto e dois mais dois?"  ->  "quanto e dois mais dois"
+        "Atlas, qual o seu nome?"          ->  "qual o seu nome"
+
+    Com meio segundo de silêncio na frente, os três saem inteiros. Numa sala
+    isso nunca aparece — silêncio é o que mais chega ao microfone. **Aparece ao
+    retomar depois de a Atlas falar**, porque enquanto pausada nada é entregue
+    ao reconhecedor: para ele a fala seguinte começa no primeiro quadro que
+    existe. E a palavra comida é o nome dela, então o robô ouviria a pergunta
+    inteira e concluiria que não era com ele.
+    """
+
+    def test_retomar_enfileira_silencio_antes_da_fala(self) -> None:
+        ears = ouvido()
+        ears.pausar()
+
+        ears.retomar()
+
+        assert ears._blocos.qsize() > 0, "o reconhecimento recomecaria direto na fala"
+
+    def test_o_silencio_e_silencio_mesmo(self) -> None:
+        """Ruído no lugar do silêncio seria pior que não ter nada."""
+        ears = ouvido()
+        ears.pausar()
+        ears.retomar()
+
+        bloco = ears._blocos.get_nowait()
+        assert set(np.frombuffer(bloco, dtype=np.int16)) == {0}
+
+    def test_meio_segundo_e_o_que_foi_medido(self) -> None:
+        ears = ouvido()
+        ears.pausar()
+        ears.retomar()
+
+        blocos = ears._blocos.qsize()
+        segundos = blocos * BLOCO / TAXA
+        assert segundos == pytest.approx(SILENCIO_DE_PARTIDA_S, abs=0.05), (
+            f"{blocos} blocos = {segundos:.2f}s; a medida que corrigiu o defeito foi "
+            f"{SILENCIO_DE_PARTIDA_S}s"
+        )
+
+    def test_retomar_sem_ter_pausado_nao_enche_a_fila(self) -> None:
+        """`retomar` é idempotente, e o `app` chama em mais de um evento.
+
+        Sem a guarda, um turno com erro (que publica `ErrorOccurred` e
+        `SpeechFinished`) empilharia silêncio na frente da próxima pergunta.
+        """
+        ears = ouvido()
+
+        ears.retomar()
+        ears.retomar()
+
+        assert ears._blocos.empty()
+
+    def test_a_fila_cheia_nao_trava_quem_retoma(self) -> None:
+        """`retomar` roda na thread do barramento de eventos.
+
+        Se ela bloqueasse numa fila cheia, a Atlas terminaria de falar e o robô
+        inteiro pararia ali.
+        """
+        ears = ouvido()
+        ears.pausar()
+        while True:
+            try:
+                ears._blocos.put_nowait(b"\x00" * BLOCO)
+            except queue.Full:
+                break
+
+        ears.retomar()  # não deve levantar nem bloquear
+
+        assert ears._blocos.full()
 
 
 class TestONuncaFicarSurdo:
