@@ -5,11 +5,16 @@
 # É um download separado porque só serve a quem vai plugar um microfone — não
 # faz sentido em toda instalação.
 #
+# Sem argumento baixa o modelo do motor que o projeto usa por padrão (Vosk).
+# Baixar o outro é útil para poder trocar sem rede depois — o `.env` escolhe
+# qual roda, e trocar com o modelo já no disco é reiniciar o serviço.
+#
 # Uso:
-#   ./scripts/baixar-modelo-escuta.sh              Whisper "base" (padrão)
-#   ./scripts/baixar-modelo-escuta.sh --tiny       Whisper "tiny", mais rápido
-#   ./scripts/baixar-modelo-escuta.sh --vosk       Vosk pequeno (52 MB, leve)
+#   ./scripts/baixar-modelo-escuta.sh              Vosk pequeno, 52 MB (padrão)
 #   ./scripts/baixar-modelo-escuta.sh --grande     Vosk grande (1,6 GB)
+#   ./scripts/baixar-modelo-escuta.sh --whisper    Whisper "base"
+#   ./scripts/baixar-modelo-escuta.sh --tiny       Whisper "tiny", mais rápido
+#   ./scripts/baixar-modelo-escuta.sh --ambos      os dois, para trocar sem rede
 #   ./scripts/baixar-modelo-escuta.sh --forcar     baixa de novo por cima
 
 set -uo pipefail
@@ -17,7 +22,11 @@ set -uo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ESCUTA_DIR="${REPO_DIR}/models/escuta"
 DESTINO="${ESCUTA_DIR}/vosk-pt"
-USAR_VOSK=false
+#: O padrão acompanha `ROBOTEYE_HEARING_BACKEND`, que é `vosk`. Se um dia eles
+#: divergirem, quem instalar do zero sobe com o motor certo e o modelo do outro
+#: — e o robô falha com "modelo de escuta ausente" só na primeira pergunta.
+USAR_VOSK=true
+USAR_WHISPER=false
 TAMANHO="base"
 
 # O pequeno transcreve mais rápido que o tempo real num Pi 5 e acerta o
@@ -36,10 +45,12 @@ fail() { echo "[erro] $*" >&2; exit 1; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --vosk)    USAR_VOSK=true; shift ;;
-        --tiny)    TAMANHO="tiny"; shift ;;
         --grande)  URL="${URL_GRANDE}"; USAR_VOSK=true; shift ;;
+        --whisper) USAR_WHISPER=true; USAR_VOSK=false; shift ;;
+        --tiny)    USAR_WHISPER=true; USAR_VOSK=false; TAMANHO="tiny"; shift ;;
+        --ambos)   USAR_WHISPER=true; USAR_VOSK=true; shift ;;
         --forcar)  FORCAR=true; shift ;;
-        -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         *)         fail "opção desconhecida: $1 (use --help)" ;;
     esac
 done

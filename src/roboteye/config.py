@@ -470,9 +470,19 @@ class HearingSettings:
     #: Desligada por padrao: um microfone aberto e uma decisao de quem monta o
     #: robo, nao algo que se liga sozinho ao instalar.
     enabled: bool = False
-    #: "whisper" entende muito melhor que "vosk" — e a diferenca decide quando
-    #: quem fala com o robo sao criancas. Ver `hearing/whisper_ears.py`.
-    backend: str = "whisper"
+    #: A escolha e entre **entender melhor** e **responder antes**, e nao ha
+    #: opcao que ganhe nas duas:
+    #:
+    #:     vosk      decodifica enquanto a pessoa fala; ao parar, o texto ja
+    #:               existe. Erra mais: "quanto os alunos pena".
+    #:     whisper   so comeca depois da frase inteira, a 0,59x do tempo real
+    #:               num Pi — quase 2 s de silencio antes de o LLM receber
+    #:               qualquer coisa. Entende muito melhor.
+    #:
+    #: O padrao e `vosk` porque esses 2 s eram a maior parcela isolada do tempo
+    #: de resposta, e porque quem espera calado na frente do robo conclui que
+    #: ele quebrou. Trocar e uma variavel: `ROBOTEYE_HEARING_BACKEND=whisper`.
+    backend: str = "vosk"
     #: Tamanho do modelo Whisper: "tiny" (mais rapido) ou "base" (melhor). Num
     #: Pi 5, medidos a 0,35x e 0,59x do tempo real.
     model: str = "base"
@@ -506,7 +516,7 @@ class HearingSettings:
     def from_env(cls) -> HearingSettings:
         return cls(
             enabled=_get_bool("HEARING_ENABLED", False),
-            backend=_get_choice("HEARING_BACKEND", "whisper", HEARING_BACKENDS),
+            backend=_get_choice("HEARING_BACKEND", "vosk", HEARING_BACKENDS),
             model=_get_choice("HEARING_MODEL_SIZE", "base", HEARING_MODEL_SIZES),
             model_path=_resolve_path(_get_str("HEARING_MODEL_DIR", "models/escuta")),
             limiar=_get_float("HEARING_LIMIAR", 0.0, minimum=0.0),

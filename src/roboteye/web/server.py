@@ -64,6 +64,10 @@ EDITABLE = (
     "ROBOTEYE_VOICE_FALLBACK",
     "ROBOTEYE_VOICE_GAIN",
     "ROBOTEYE_VOICE_LENGTH_SCALE",
+    # Os dois motores de escuta trocam resposta rapida por entender melhor, e
+    # qual dos dois serve depende da sala e de quem esta falando. Editavel aqui
+    # para a troca ser um toque no celular, e nao um SSH no meio de uma demo.
+    "ROBOTEYE_HEARING_BACKEND",
     "ROBOTEYE_HEARING_MODEL_SIZE",
     "ROBOTEYE_PERSONA",
     "ROBOTEYE_REPLY_LANGUAGE",

@@ -33,7 +33,7 @@ flowchart TB
     end
 
     subgraph CEREBRO["O TURNO DE CONVERSA"]
-        STT["Reconhecimento<br/>hearing/whisper_ears.py"]
+        STT["Reconhecimento<br/>hearing/vosk_ears.py"]
         GATILHO["Foi comigo?<br/>hearing/gatilho.py"]
         ASSIST["Assistant<br/>core/assistant.py"]
         MEM["Historico + persona<br/>llm/memory.py · llm/persona.py"]
@@ -85,8 +85,8 @@ Alguém diz *“Atlas, quantos alunos tem a Setrem?”*. Isto é o que acontece:
 
 | # | Onde | O que acontece |
 |---|---|---|
-| 1 | `hearing/microfone.py` | A placa entrega blocos de 30 ms. Um passa-alta tira o zumbido, e a energia de cada bloco é comparada com um limiar **medido na sala no arranque**. O som subiu → começa a gravar; ficou quieto o bastante → fecha a frase. |
-| 2 | `hearing/whisper_ears.py` | O trecho fechado vai para o `faster-whisper`, que devolve texto, quanto demorou e o quanto confiou. |
+| 1 | `hearing/vosk_ears.py` | A placa entrega blocos de 30 ms; um passa-alta tira o zumbido. Cada bloco é entregue ao Vosk **na hora**, e é o próprio Vosk quem diz quando a frase terminou. Quando a pessoa para de falar, o texto **já está pronto**. |
+| 2 | — | *(No caminho do Whisper este é um passo separado e caro: o `microfone.py` corta a frase por energia, e só então o `whisper_ears.py` transcreve o trecho inteiro — a 0,59x do tempo real, quase 2 s de silêncio. Ver [§4](#4-as-pastas-uma-a-uma).)* |
 | 3 | `hearing/gatilho.py` | O texto começa com o nome dela? Então a pergunta é o resto. Dizer só *“Atlas!”* abre uma **janela de 8 segundos** em que a frase seguinte é aceita sem o nome — que é como as pessoas realmente falam. |
 | 4 | `app.py::_escutar` | Publica `SpeechHeard` no barramento (para a tela de depuração ver até o que foi ignorado) e entrega a pergunta ao `Assistant`. |
 | 5 | `core/assistant.py` | **Interrompe a fala em curso** — quem fala por último é a pessoa —, guarda a pergunta no histórico e publica `ThinkingStarted`. A face muda de expressão. |
@@ -136,10 +136,25 @@ Também é quem decide os **modos de execução**:
 
 ### `hearing/` — os ouvidos
 
-`Ouvido` é a interface; há duas implementações (`whisper_ears.py`,
-`vosk_ears.py`) e uma fábrica (`factory.py`). O trabalho difícil está em
-**`microfone.py`**, que decide *onde uma frase começa e termina* — o Whisper não
-tem opinião sobre isso.
+`Ouvido` é a interface; há duas implementações e uma fábrica (`factory.py`). A
+escolha entre elas é **a maior decisão de tempo de resposta do robô inteiro**, e
+não existe opção que ganhe nos dois lados:
+
+| | `vosk_ears.py` — o padrão | `whisper_ears.py` |
+|---|---|---|
+| **Quando reconhece** | enquanto a pessoa fala | só depois da frase inteira |
+| **Espera depois do último som** | ~0 — o texto já existe | **~1,9 s** num Pi (`base` a 0,59x do tempo real) |
+| **Quem decide o fim da frase** | o próprio Vosk | `microfone.py`, por energia |
+| **A mesma frase, no mesmo microfone** | *“quanto os alunos pena”* | *“Atlas, quantos alunos tem o curso de engenharia de computação?”* |
+
+Trocar é uma variável — `ROBOTEYE_HEARING_BACKEND` — ou um toque na página de
+configuração. **Se a Atlas passar a entender errado com frequência, é este o
+botão**; se voltar a demorar, também.
+
+O **`microfone.py`** existe por causa do Whisper: é ele que decide *onde uma
+frase começa e termina*, porque o Whisper não tem opinião sobre isso. O Vosk não
+passa por ele — mas reusa dele a negociação de taxa da placa, a conversão para
+16 kHz e o passa-alta, que são propriedades do microfone e não do motor.
 
 Três detalhes desse arquivo decidem se a escuta funciona ou irrita:
 
