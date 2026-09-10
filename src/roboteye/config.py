@@ -331,6 +331,15 @@ class VoiceSettings:
     #: muda o volume, e este e o ajuste para compensar. Nao ha risco de estourar:
     #: o acabamento limita o sinal antes de mandar para a placa.
     gain: float = 1.0
+    #: Acima desta frequencia (Hz) o audio e atenuado. 0 desliga, e e o padrao.
+    #:
+    #: Existe porque as vozes nao ocupam a mesma faixa. Medida a mesma frase
+    #: neste robo, a energia acima de 8 kHz: `francisca` 15,4%, `dii` 0,04%.
+    #: Numa caixinha pequena esse brilho todo sai como chiado, e quem ouve
+    #: descreve a voz como "bugada" — nao e defeito de sintese nem de
+    #: reamostragem, as duas foram descartadas por medida. 6500 foi o valor
+    #: escolhido de ouvido neste robo, entre quatro variantes.
+    treble_hz: float = 0.0
 
     @classmethod
     def from_env(cls) -> VoiceSettings:
@@ -363,6 +372,7 @@ class VoiceSettings:
             audio_device=_get_str("AUDIO_DEVICE", "auto"),
             fallback=_get_str("VOICE_FALLBACK", "auto").lower(),
             gain=_get_float("VOICE_GAIN", 1.0, minimum=0.0),
+            treble_hz=_get_float("VOICE_TREBLE_HZ", 0.0, minimum=0.0),
         )
 
     def for_voice(self, key: str) -> VoiceSettings:
