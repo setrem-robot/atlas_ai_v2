@@ -49,6 +49,25 @@ def _get_optional_str(name: str) -> str | None:
     return _raw(name)
 
 
+def _get_texto(name: str, default: str) -> str:
+    """Como `_get_str`, mas **vazio quer dizer vazio**.
+
+    Alguns textos tem um significado proprio quando estao em branco: sem palavra
+    de despertar o robo responde a tudo, sem saudacao ele sobe calado. `_raw`
+    trata vazio como ausente — o que e certo para um host ou um caminho, e
+    errado aqui: `ROBOTEYE_WAKE_WORD=` voltava a valer "atlas".
+
+    O efeito era mudo e caro. O robo continuava exigindo o nome, o log dizia
+    `ouvi '...', mas nao era comigo`, e quem tinha acabado de desligar a palavra
+    no `.env` procurava o defeito no reconhecimento — que estava funcionando.
+
+    A diferenca esta em consultar o ambiente direto: `None` (a variavel nao
+    existe) cai no padrao; `""` (existe e esta vazia) e uma escolha, e vale.
+    """
+    bruto = os.environ.get(ENV_PREFIX + name)
+    return default if bruto is None else bruto.strip()
+
+
 def _get_bool(name: str, default: bool) -> bool:
     raw = _raw(name)
     if raw is None:
@@ -266,7 +285,7 @@ class LLMSettings:
             history_messages=_get_int("LLM_HISTORY", 8, minimum=0),
             reply_language=_get_str("REPLY_LANGUAGE", default_language).lower(),
             max_tokens=_get_int("LLM_MAX_TOKENS", 120, minimum=16),
-            saudacao=_get_str("SAUDACAO", "Oi oi, acordei!"),
+            saudacao=_get_texto("SAUDACAO", "Oi oi, acordei!"),
             persona=_get_str("PERSONA", "atlas"),
             persona_dir=_resolve_path(_get_str("PERSONA_DIR", "persona")),
             fallback_host=_get_str("LLM_FALLBACK_HOST", "").rstrip("/"),
@@ -532,9 +551,9 @@ class HearingSettings:
             limiar=_get_float("HEARING_LIMIAR", 0.0, minimum=0.0),
             cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),
             device=_get_str("HEARING_DEVICE", "auto"),
-            wake_word=_get_str("WAKE_WORD", "atlas"),
+            wake_word=_get_texto("WAKE_WORD", "atlas"),
             janela_s=_get_float("WAKE_JANELA", 8.0, minimum=0.0),
-            resposta_ao_chamado=_get_str("WAKE_RESPOSTA", "Oi?"),
+            resposta_ao_chamado=_get_texto("WAKE_RESPOSTA", "Oi?"),
             espera_do_chamado_s=_get_float("WAKE_ESPERA", 3.0, minimum=0.5),
         )
 
