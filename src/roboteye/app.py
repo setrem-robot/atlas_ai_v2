@@ -112,7 +112,7 @@ class Application:
             bus=bus,
             envelope=envelope,
             language=settings.voice.language,
-            polish=AudioPolish(gain=settings.voice.gain),
+            polish=AudioPolish(gain=settings.voice.gain, treble_hz=settings.voice.treble_hz),
         )
         assistant = Assistant(
             llm=llm,
