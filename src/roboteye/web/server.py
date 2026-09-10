@@ -69,6 +69,7 @@ EDITABLE = (
     # para a troca ser um toque no celular, e nao um SSH no meio de uma demo.
     "ROBOTEYE_HEARING_BACKEND",
     "ROBOTEYE_HEARING_MODEL_SIZE",
+    "ROBOTEYE_HEARING_VOSK_MODEL",
     "ROBOTEYE_PERSONA",
     "ROBOTEYE_REPLY_LANGUAGE",
     "ROBOTEYE_FACE_FULLSCREEN",
