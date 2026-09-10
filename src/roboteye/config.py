@@ -513,8 +513,21 @@ class HearingSettings:
     #: ele quebrou. Trocar e uma variavel: `ROBOTEYE_HEARING_BACKEND=whisper`.
     backend: str = "vosk"
     #: Tamanho do modelo Whisper: "tiny" (mais rapido) ou "base" (melhor). Num
-    #: Pi 5, medidos a 0,35x e 0,59x do tempo real.
+    #: Pi 5, medidos a 0,35x e 0,59x do tempo real. Nao afeta o vosk.
     model: str = "base"
+    #: Pasta do modelo do Vosk, dentro de `model_path`. Baixe com
+    #: `./scripts/baixar-modelo-escuta.sh` (pequeno) ou `--grande`.
+    #:
+    #: Medidos neste Pi, a mesma fala pelos dois:
+    #:
+    #:     vosk-pt          52 MB no disco    76 MB de RAM   0,38-0,45x t.real
+    #:     vosk-pt-grande  2,6 GB no disco  2536 MB de RAM   0,05x t.real
+    #:
+    #: O grande e **mais rapido**, nao mais lento: fecha a frase em 34-55 ms
+    #: contra 83-681 ms, e gasta oito vezes menos CPU. O que ele custa e
+    #: memoria. Num Pi de 8 GB cabe junto com o Ollama (que usa ~1,3 GB), mas e
+    #: a primeira coisa a rever se algo comecar a ser morto por falta dela.
+    vosk_model: str = "vosk-pt"
     #: Onde os modelos ficam. O Whisper baixa o seu na primeira vez.
     model_path: Path = field(default_factory=lambda: MODELS_DIR / "escuta")
     #: Acima disto conta como fala. 0 mede a sala no arranque, que e o padrao e
@@ -547,6 +560,7 @@ class HearingSettings:
             enabled=_get_bool("HEARING_ENABLED", False),
             backend=_get_choice("HEARING_BACKEND", "vosk", HEARING_BACKENDS),
             model=_get_choice("HEARING_MODEL_SIZE", "base", HEARING_MODEL_SIZES),
+            vosk_model=_get_str("HEARING_VOSK_MODEL", "vosk-pt"),
             model_path=_resolve_path(_get_str("HEARING_MODEL_DIR", "models/escuta")),
             limiar=_get_float("HEARING_LIMIAR", 0.0, minimum=0.0),
             cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),

@@ -33,7 +33,7 @@ def create_ears(settings: HearingSettings) -> Ouvido | None:
             from roboteye.speech.devices import resolver_entrada
 
             return VoskEars(
-                settings.model_path / "vosk-pt",
+                settings.model_path / settings.vosk_model,
                 device=resolver_entrada(settings.device),
             )
         case other:  # pragma: no cover - config.py ja valida
