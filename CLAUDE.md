@@ -43,11 +43,13 @@ falar quando alguém publica em `robo/voz/falar`. Isso é trabalho novo. Veja
 [`../orquestrador/MAPA-COMUNICACAO.md`](../orquestrador/MAPA-COMUNICACAO.md)
 para o mapa completo do que existe hoje.
 
-**E o outro lado da ponte não está instalado no robô.** Conferido por SSH: no
-Pi rodam a face, esta ponte BLE e o Mosquitto — nenhum serviço do
-`orquestrador`. Então o que esta ponte publica em `robo/comando/entrada` não é
-consumido por ninguém, e o robô não anda por mais certo que este repositório
-esteja. Antes de procurar defeito aqui, rode no Pi:
+**E o outro lado da ponte não está instalado no robô.** Conferido por SSH (12/09/2026):
+no Pi rodam a face, esta ponte BLE, o Mosquitto e o serviço `telemetria` do
+`orquestrador` (a saúde do Pi → `robo/telemetria/sistema`). Mas o `orquestrador`
+(o roteador) e o `motores` **não** estão instalados, então o que esta ponte
+publica em `robo/comando/entrada` não é consumido por ninguém, e o robô não anda
+por mais certo que este repositório esteja. Antes de procurar defeito aqui, rode
+no Pi:
 
 ```bash
 mosquitto_sub -h 127.0.0.1 -t 'robo/#' -v      # aperte uma direção no app

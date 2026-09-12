@@ -300,9 +300,10 @@ sequenceDiagram
 | Nome do tópico MQTT | `ble/mqtt.py` | `robo_common/topics.py` |
 | Teto de uma linha | `MAX_LINHA = 512` | `MAX_LINE` no ESP32 |
 
-> ⚠️ **A ponte publica, mas hoje ninguém consome.** Os serviços do
-> `orquestrador` não estão instalados no Pi. O comando chega em
-> `robo/comando/entrada` e para ali — o robô aceita e não se move. Ver a §0 do
+> ⚠️ **A ponte publica, mas hoje ninguém consome o comando.** Do `orquestrador`,
+> só a `telemetria` (a saúde do Pi) está instalada no Pi; o roteador e o
+> `motores` não. O comando chega em `robo/comando/entrada` e para ali — o robô
+> aceita e não se move. Ver a §0 do
 > [mapa](../orquestrador/MAPA-COMUNICACAO.md).
 
 ---
