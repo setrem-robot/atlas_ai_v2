@@ -87,15 +87,15 @@ def spell(value: int, *, feminine: bool = False) -> str:
     if value < 0:
         return f"menos {spell(-value, feminine=feminine)}"
     if value < 20:
-        return _agree(UNITS[value], feminine)
+        return agree(UNITS[value], feminine)
     if value < 100:
-        return _spell_tens(value, feminine)
+        return spellTens(value, feminine)
     if value < 1000:
-        return _spell_hundreds(value, feminine)
-    return _spell_large(value, feminine)
+        return spellHundreds(value, feminine)
+    return spellLarge(value, feminine)
 
 
-def spell_decimal(whole: int, fraction: str, *, feminine: bool = False) -> str:
+def spellDecimal(whole: int, fraction: str, *, feminine: bool = False) -> str:
     """Escreve um numero com virgula: `3,5` vira "tres virgula cinco".
 
     Os digitos depois da virgula sao lidos um a um, que e como se le em voz alta
@@ -107,12 +107,12 @@ def spell_decimal(whole: int, fraction: str, *, feminine: bool = False) -> str:
     return f"{spell(whole, feminine=feminine)} virgula {digits}"
 
 
-def spell_year(value: int) -> str:
+def spellYear(value: int) -> str:
     """Escreve um ano. Anos sao lidos como numeros inteiros em portugues."""
     return spell(value)
 
 
-def spell_ordinal(value: int, *, feminine: bool = False) -> str:
+def spellOrdinal(value: int, *, feminine: bool = False) -> str:
     """Escreve um ordinal ate 10, que cobre o que aparece em conversa."""
     names = (
         "primeiro",
@@ -135,7 +135,7 @@ def spell_ordinal(value: int, *, feminine: bool = False) -> str:
 # ---------------------------------------------------------------------------
 # Interno
 # ---------------------------------------------------------------------------
-def _agree(word: str, feminine: bool) -> str:
+def agree(word: str, feminine: bool) -> str:
     """Concorda uma palavra com o genero pedido."""
     if not feminine:
         return word
@@ -146,23 +146,23 @@ def _agree(word: str, feminine: bool) -> str:
     return word
 
 
-def _spell_tens(value: int, feminine: bool) -> str:
+def spellTens(value: int, feminine: bool) -> str:
     tens, unit = divmod(value, 10)
     if unit == 0:
         return TENS[tens]
-    return f"{TENS[tens]} e {_agree(UNITS[unit], feminine)}"
+    return f"{TENS[tens]} e {agree(UNITS[unit], feminine)}"
 
 
-def _spell_hundreds(value: int, feminine: bool) -> str:
+def spellHundreds(value: int, feminine: bool) -> str:
     hundreds, rest = divmod(value, 100)
     if value == 100:
         return "cem"
     if rest == 0:
-        return _agree(HUNDREDS[hundreds], feminine)
-    return f"{_agree(HUNDREDS[hundreds], feminine)} e {spell(rest, feminine=feminine)}"
+        return agree(HUNDREDS[hundreds], feminine)
+    return f"{agree(HUNDREDS[hundreds], feminine)} e {spell(rest, feminine=feminine)}"
 
 
-def _spell_large(value: int, feminine: bool) -> str:
+def spellLarge(value: int, feminine: bool) -> str:
     """Monta o numero por grupos de mil, do maior para o menor."""
     groups: list[int] = []
     remaining = value
@@ -175,12 +175,12 @@ def _spell_large(value: int, feminine: bool) -> str:
         group = groups[index]
         if group == 0:
             continue
-        parts.append(_name_group(group, index, feminine))
+        parts.append(nameGroup(group, index, feminine))
 
-    return _join(parts, groups)
+    return join(parts, groups)
 
 
-def _name_group(group: int, index: int, feminine: bool) -> str:
+def nameGroup(group: int, index: int, feminine: bool) -> str:
     """Nomeia um grupo de tres digitos com a sua ordem de grandeza."""
     if index == 0:
         return spell(group, feminine=feminine)
@@ -196,7 +196,7 @@ def _name_group(group: int, index: int, feminine: bool) -> str:
     return f"{spell(group)} {scale}"
 
 
-def _join(parts: list[str], groups: list[int]) -> str:
+def join(parts: list[str], groups: list[int]) -> str:
     """Junta os grupos com o "e" nos lugares em que o portugues o exige.
 
     A regra que quase todo mundo erra: o ultimo grupo entra com "e" quando ele e

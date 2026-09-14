@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass
 from types import TracebackType
 
-from roboteye.config import LLMSettings, Settings, is_arm
+from roboteye.config import LLMSettings, Settings, isArm
 from roboteye.core.assistant import Assistant
 from roboteye.core.events import (
     ErrorOccurred,
@@ -30,25 +30,25 @@ from roboteye.hearing import (
     AvisaAoFecharFrase,
     HearingError,
     Ouvido,
-    create_ears,
-    dirigido_ao_robo,
+    createEars,
+    dirigidoAoRobo,
 )
 from roboteye.hearing.gatilho import Conversa
 from roboteye.llm.base import LLMClient
-from roboteye.llm.factory import create_llm_client
+from roboteye.llm.factory import createLlmClient
 from roboteye.llm.memory import ConversationMemory
 from roboteye.llm.persona import PersonaStore
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech import sinal
 from roboteye.speech.base import SpeechError
 from roboteye.speech.envelope import SpeechEnvelope
-from roboteye.speech.factory import create_tts_engine
-from roboteye.speech.player import create_audio_sink
+from roboteye.speech.factory import createTtsEngine
+from roboteye.speech.player import createAudioSink
 from roboteye.speech.polish import AudioPolish
 from roboteye.speech.speaker import Speaker
 from roboteye.ui.console import ConsoleChat
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -66,18 +66,18 @@ class Application:
     envelope: SpeechEnvelope
     #: None quando a escuta esta desligada, que e o padrao.
     ears: Ouvido | None = None
-    _ouvindo: threading.Thread | None = None
+    ouvindo: threading.Thread | None = None
     #: Relogio do "Oi?" — armado ao ser chamada, cancelado quando a pergunta vem.
-    _chamado: threading.Timer | None = None
+    chamado: threading.Timer | None = None
     #: A janela de "fui chamada ha pouco". Nasce em `_escutar`; o sinal de fim
     #: de captura a consulta para nao apitar quando e a sala que esta falando.
-    _conversa: Conversa | None = None
+    conversa: Conversa | None = None
     #: Se o sinal de "peguei sua pergunta" ja saiu neste turno. Ver
     #: `_avisar_que_peguei_a_pergunta`.
-    _avisei_do_fim: bool = False
+    aviseiDoFim: bool = False
     #: Rede de seguranca da pausa da escuta. Um microfone que fica pausado e um
     #: robo surdo — pior que um lento —, entao a pausa tem prazo de validade.
-    _destravar_escuta: threading.Timer | None = None
+    destravarEscuta: threading.Timer | None = None
 
     # -- construcao --------------------------------------------------------
     @classmethod
@@ -85,20 +85,20 @@ class Application:
         """Instancia todos os subsistemas sem ainda carregar modelos."""
         bus = EventBus()
 
-        persona_store = PersonaStore(settings.llm.persona_dir, settings.llm.persona)
-        persona = persona_store.load(settings.llm.reply_language)
+        personaStore = PersonaStore(settings.llm.personaDir, settings.llm.persona)
+        persona = personaStore.load(settings.llm.replyLanguage)
         logger.info("persona %r carregada (%d fatos aprendidos)", persona.name, len(persona.facts))
-        _conferir_o_tamanho_da_persona(persona.system_prompt(), settings.llm)
+        conferirOTamanhoDaPersona(persona.systemPrompt(), settings.llm)
 
         memory = ConversationMemory(
-            persona.system_prompt(),
-            max_messages=settings.llm.history_messages,
+            persona.systemPrompt(),
+            maxMessages=settings.llm.historyMessages,
         )
 
-        llm = create_llm_client(settings.llm)
+        llm = createLlmClient(settings.llm)
         envelope = SpeechEnvelope()
 
-        def announce_voice_switch(message: str) -> None:
+        def announceVoiceSwitch(message: str) -> None:
             # Aviso, nao erro: a fala continua, entao a face nao deve ficar brava
             # nem interromper o que esta dizendo. Mas precisa aparecer — trocar
             # de voz em silencio faz quem ouve procurar o problema na
@@ -107,20 +107,20 @@ class Application:
             bus.publish(Notice(message=message, source="speech"))
 
         speaker = Speaker(
-            engine=create_tts_engine(settings.voice, on_voice_switch=announce_voice_switch),
-            sink=create_audio_sink(settings.voice),
+            engine=createTtsEngine(settings.voice, onVoiceSwitch=announceVoiceSwitch),
+            sink=createAudioSink(settings.voice),
             bus=bus,
             envelope=envelope,
             language=settings.voice.language,
-            polish=AudioPolish(gain=settings.voice.gain, treble_hz=settings.voice.treble_hz),
+            polish=AudioPolish(gain=settings.voice.gain, trebleHz=settings.voice.trebleHz),
         )
         assistant = Assistant(
             llm=llm,
             memory=memory,
             speaker=speaker,
             bus=bus,
-            persona=persona_store,
-            language=settings.llm.reply_language,
+            persona=personaStore,
+            language=settings.llm.replyLanguage,
         )
 
         return cls(
@@ -131,18 +131,18 @@ class Application:
             speaker=speaker,
             assistant=assistant,
             envelope=envelope,
-            ears=create_ears(settings.hearing),
+            ears=createEars(settings.hearing),
         )
 
     # -- ciclo de vida -----------------------------------------------------
-    def start(self, *, warm_up: bool = True) -> None:
+    def start(self, *, warmUp: bool = True) -> None:
         """Sobe as threads de trabalho e, opcionalmente, pre-carrega a voz."""
         self.speaker.start()
         self.assistant.start()
 
-        if warm_up:
+        if warmUp:
             try:
-                self.speaker.warm_up()
+                self.speaker.warmUp()
             except SpeechError as exc:
                 logger.warning("voz indisponivel: %s", exc)
                 self.bus.publish(ErrorOccurred(message=str(exc), source="speech"))
@@ -151,16 +151,16 @@ class Application:
             # esperando o modelo subir na GPU. Vai junto a persona, que e o que
             # a conversa vai usar de verdade — ver `OllamaClient.warm_up`.
             threading.Thread(
-                target=self.llm.warm_up,
-                args=(self.assistant.memory.build_prompt(),),
+                target=self.llm.warmUp,
+                args=(self.assistant.memory.buildPrompt(),),
                 name="llm-warmup",
                 daemon=True,
             ).start()
 
-        self._abrir_ouvidos()
-        self._dar_bom_dia()
+        self.abrirOuvidos()
+        self.darBomDia()
 
-    def _dar_bom_dia(self) -> None:
+    def darBomDia(self) -> None:
         """Fala a primeira frase, se houver uma configurada.
 
         Numa thread porque a sintese da primeira frase carrega o motor de voz, e
@@ -172,7 +172,7 @@ class Application:
 
         def falar() -> None:
             try:
-                self.assistant.say_directly(frase)
+                self.assistant.sayDirectly(frase)
             except Exception as exc:
                 # Sem passar pelo LLM: e uma frase fixa, e ela precisa sair
                 # mesmo com a IA fora do ar. Falhando, o robo sobe calado — o
@@ -181,17 +181,17 @@ class Application:
 
         threading.Thread(target=falar, name="saudacao", daemon=True).start()
 
-    def _abrir_ouvidos(self) -> None:
+    def abrirOuvidos(self) -> None:
         """Poe o robo para escutar, se houver microfone configurado."""
-        if self.ears is None or self._ouvindo is not None:
+        if self.ears is None or self.ouvindo is not None:
             return
 
         # A Atlas nao pode se ouvir: o microfone esta a centimetros da caixinha,
         # e sem isto ela transcreve a propria voz e responde a si mesma, em laco.
         # Os eventos de fala ja existem — so faltava alguem escutar por eles.
         ouvido = self.ears
-        self.bus.subscribe(lambda _e: ouvido.pausar(), event_type=SpeechStarted)
-        self.bus.subscribe(lambda _e: self._voltar_a_escutar(), event_type=SpeechFinished)
+        self.bus.subscribe(lambda e: ouvido.pausar(), eventType=SpeechStarted)
+        self.bus.subscribe(lambda e: self.voltarAEscutar(), eventType=SpeechFinished)
 
         # **Pensar e transcrever nao cabem juntos em quatro nucleos.**
         #
@@ -206,16 +206,16 @@ class Application:
         # 60 s e o robo nao respondeu nada. A escuta para enquanto ela pensa: o
         # robo ja esta comprometido com a pergunta que recebeu, e transcrever a
         # sala nesse meio-tempo custa justamente a resposta.
-        self.bus.subscribe(self._parar_de_escutar_para_pensar, event_type=ThinkingStarted)
+        self.bus.subscribe(self.pararDeEscutarParaPensar, eventType=ThinkingStarted)
         # Um turno que falha nao passa por `SpeechFinished`: a escuta voltaria
         # so no proximo, e ate la o robo estaria surdo.
-        self.bus.subscribe(lambda _e: self._voltar_a_escutar(), event_type=ErrorOccurred)
+        self.bus.subscribe(lambda e: self.voltarAEscutar(), eventType=ErrorOccurred)
 
         # Chamar o nome e ficar no silencio e a pior parte de conversar com este
         # robo: quem falou nao sabe se foi ouvido, entao repete o nome — e a
         # repeticao chega justo enquanto a primeira ainda esta sendo tratada. Um
         # som curto fecha esse buraco na hora, sem esperar sintese nenhuma.
-        self.bus.subscribe(self._avisar_que_estou_ouvindo, event_type=ListeningChanged)
+        self.bus.subscribe(self.avisarQueEstouOuvindo, eventType=ListeningChanged)
 
         # E o outro lado do par: um som ao fechar a captura da frase seguinte,
         # para quem perguntou saber que pode parar de falar. Vem do microfone e
@@ -223,24 +223,24 @@ class Application:
         # quase dois segundos, e o aviso chegaria depois de a pessoa ja ter
         # desistido de esperar.
         if isinstance(ouvido, AvisaAoFecharFrase):
-            ouvido.ao_fechar_frase(self._avisar_que_terminei_de_ouvir)
+            ouvido.aoFecharFrase(self.avisarQueTermineiDeOuvir)
 
-        self._ouvindo = threading.Thread(target=self._escutar, name="ouvidos", daemon=True)
-        self._ouvindo.start()
+        self.ouvindo = threading.Thread(target=self.escutar, name="ouvidos", daemon=True)
+        self.ouvindo.start()
 
-    def _escutar(self) -> None:
+    def escutar(self) -> None:
         """Roda a escuta e entrega ao assistente o que foi dirigido ao robo."""
         assert self.ears is not None
         # Chamar o nome abre uma janela em que a frase seguinte e aceita sem
         # ele — que e como as pessoas falam: "Atlas!" ... "quanto e dois mais dois?"
-        conversa = Conversa(self.settings.hearing.janela_s)
+        conversa = Conversa(self.settings.hearing.janelaS)
         # Guardada tambem no objeto: quem avisa o fim da captura roda a partir
         # do microfone e precisa saber se a janela esta aberta.
-        self._conversa = conversa
+        self.conversa = conversa
         try:
             for transcricao in self.ears.escutar():
-                pergunta = dirigido_ao_robo(
-                    transcricao.texto, self.settings.hearing.wake_word, conversa=conversa
+                pergunta = dirigidoAoRobo(
+                    transcricao.texto, self.settings.hearing.wakeWord, conversa=conversa
                 )
                 # Publicado para toda transcricao, dirigida ou nao: a tela de
                 # debug mostra ate o que o robo ouviu e ignorou, que e metade do
@@ -251,7 +251,7 @@ class Application:
                         accepted=pergunta,
                         ms=transcricao.ms,
                         confidence=transcricao.confianca,
-                        no_speech=transcricao.sem_fala,
+                        noSpeech=transcricao.semFala,
                     )
                 )
                 if pergunta is None:
@@ -267,12 +267,12 @@ class Application:
                     # falou saber que foi ouvido antes de fazer a pergunta.
                     if conversa.aberta():
                         self.bus.publish(ListeningChanged(active=True))
-                        self._perguntar_se_ficou_no_ar()
+                        self.perguntarSeFicouNoAr()
                     continue
                 logger.info("ouvi: %s", pergunta)
-                self._cancelar_pergunta()
+                self.cancelarPergunta()
                 self.bus.publish(ListeningChanged(active=False))
-                self._avisar_que_peguei_a_pergunta()
+                self.avisarQuePegueiAPergunta()
                 self.assistant.submit(pergunta)
         except HearingError as exc:
             logger.warning("escuta indisponivel: %s", exc)
@@ -280,7 +280,7 @@ class Application:
         except Exception:
             logger.exception("a escuta parou")
 
-    def _avisar_que_estou_ouvindo(self, evento: Event) -> None:
+    def avisarQueEstouOuvindo(self, evento: Event) -> None:
         """Toca o sinal quando a janela de escuta abre. So na abertura.
 
         Fechar a janela nao merece som: ou veio a pergunta — e a resposta e o
@@ -297,7 +297,7 @@ class Application:
             # robo de ouvir a pergunta que vem em seguida.
             logger.debug("nao consegui tocar o sinal de escuta: %s", exc)
 
-    def _parar_de_escutar_para_pensar(self, _evento: Event) -> None:
+    def pararDeEscutarParaPensar(self, evento: Event) -> None:
         """Cala o microfone enquanto ela pensa, com prazo de validade.
 
         A pausa em si e o que devolve os nucleos ao modelo. O prazo e a rede de
@@ -310,25 +310,25 @@ class Application:
         """
         if self.ears is not None:
             self.ears.pausar()
-        self._cancelar_destravamento()
-        timer = threading.Timer(self.settings.llm.timeout + 15.0, self._voltar_a_escutar)
+        self.cancelarDestravamento()
+        timer = threading.Timer(self.settings.llm.timeout + 15.0, self.voltarAEscutar)
         timer.daemon = True
-        self._destravar_escuta = timer
+        self.destravarEscuta = timer
         timer.start()
 
-    def _cancelar_destravamento(self) -> None:
-        if self._destravar_escuta is not None:
-            self._destravar_escuta.cancel()
-            self._destravar_escuta = None
+    def cancelarDestravamento(self) -> None:
+        if self.destravarEscuta is not None:
+            self.destravarEscuta.cancel()
+            self.destravarEscuta = None
 
-    def _voltar_a_escutar(self) -> None:
+    def voltarAEscutar(self) -> None:
         """Fim do turno: a escuta volta e o proximo sinal fica liberado."""
-        self._cancelar_destravamento()
-        self._avisei_do_fim = False
+        self.cancelarDestravamento()
+        self.aviseiDoFim = False
         if self.ears is not None:
             self.ears.retomar()
 
-    def _avisar_que_peguei_a_pergunta(self) -> None:
+    def avisarQuePegueiAPergunta(self) -> None:
         """O sinal de "peguei, estou pensando", quando ele ainda nao saiu.
 
         No caminho de duas etapas ("Atlas" ... pergunta) ele ja saiu la atras,
@@ -337,7 +337,7 @@ class Application:
         nenhuma, e nao ouvia sinal algum: a primeira coisa que chegava era a
         resposta, e ate ela o robo parecia nao ter escutado.
         """
-        if self._avisei_do_fim:
+        if self.aviseiDoFim:
             return
         try:
             self.speaker.sinalizar(sinal.ouvi())
@@ -345,7 +345,7 @@ class Application:
         except Exception as exc:
             logger.debug("nao consegui tocar o sinal de pergunta recebida: %s", exc)
 
-    def _avisar_que_terminei_de_ouvir(self) -> None:
+    def avisarQueTermineiDeOuvir(self) -> None:
         """Toca o sinal de fecho quando a captura de uma frase termina.
 
         **So com a janela aberta.** Um microfone aberto numa sala fecha uma
@@ -357,55 +357,55 @@ class Application:
         este sinal: a janela so abre quando o nome vem sozinho. Nesse caso o
         aviso e a propria resposta, que chega logo.
         """
-        if self._conversa is None or not self._conversa.aberta():
+        if self.conversa is None or not self.conversa.aberta():
             return
         try:
             self.speaker.sinalizar(sinal.ouvi())
-            self._avisei_do_fim = True
+            self.aviseiDoFim = True
             logger.info("sinal: terminei de ouvir")
         except Exception as exc:
             logger.debug("nao consegui tocar o sinal de fim de escuta: %s", exc)
 
-    def _perguntar_se_ficou_no_ar(self) -> None:
+    def perguntarSeFicouNoAr(self) -> None:
         """Diz "Oi?" se chamarem o nome e a pergunta nao vier.
 
         Ser chamada e nao responder nada parece robo quebrado — e quem chamou
         repete o nome, em vez de perguntar. Um "Oi?" fecha esse silencio.
         """
-        frase = self.settings.hearing.resposta_ao_chamado.strip()
+        frase = self.settings.hearing.respostaAoChamado.strip()
         if not frase:
             return
 
-        self._cancelar_pergunta()
+        self.cancelarPergunta()
         timer = threading.Timer(
-            self.settings.hearing.espera_do_chamado_s,
-            self._dizer_oi,
+            self.settings.hearing.esperaDoChamadoS,
+            self.dizerOi,
             args=(frase,),
         )
         timer.daemon = True
-        self._chamado = timer
+        self.chamado = timer
         timer.start()
 
-    def _cancelar_pergunta(self) -> None:
-        if self._chamado is not None:
-            self._chamado.cancel()
-            self._chamado = None
+    def cancelarPergunta(self) -> None:
+        if self.chamado is not None:
+            self.chamado.cancel()
+            self.chamado = None
 
-    def _dizer_oi(self, frase: str) -> None:
+    def dizerOi(self, frase: str) -> None:
         # A pergunta pode ter chegado enquanto o relogio corria; responder
         # "Oi?" por cima dela seria falar junto com quem perguntou.
-        if self.assistant.is_busy:
+        if self.assistant.isBusy:
             return
         try:
-            self.assistant.say_directly(frase)
+            self.assistant.sayDirectly(frase)
         except Exception as exc:
             logger.debug("nao consegui responder ao chamado: %s", exc)
 
     def shutdown(self) -> None:
         """Encerra tudo na ordem inversa da criacao."""
         logger.debug("encerrando aplicacao")
-        self._cancelar_pergunta()
-        self._cancelar_destravamento()
+        self.cancelarPergunta()
+        self.cancelarDestravamento()
         if self.ears is not None:
             self.ears.close()
         self.assistant.close()
@@ -416,14 +416,14 @@ class Application:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
+        excType: type[BaseException] | None,
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
         self.shutdown()
 
     # -- modos de execucao -------------------------------------------------
-    def run_chat(self) -> None:
+    def runChat(self) -> None:
         """Somente terminal: sem janela, sem pygame."""
         self.start()
         console = ConsoleChat(self.assistant, self.bus)
@@ -432,7 +432,7 @@ class Application:
         finally:
             self.shutdown()
 
-    def run_face(self) -> None:
+    def runFace(self) -> None:
         """A face animada, sem chat no terminal.
 
         Aquece assim mesmo. Antes nao aquecia — sem entrada de texto nao havia
@@ -449,10 +449,10 @@ class Application:
         finally:
             self.shutdown()
 
-    def run_interactive(self) -> None:
+    def runInteractive(self) -> None:
         """Face na thread principal e chat de texto em segundo plano."""
         if not self.settings.face.enabled:
-            self.run_chat()
+            self.runChat()
             return
 
         self.start()
@@ -461,9 +461,9 @@ class Application:
         console = ConsoleChat(self.assistant, self.bus)
 
         # Fechar a janela deve encerrar o chat, e vice-versa.
-        self.bus.subscribe(_stop_on_shutdown(face), event_type=Shutdown)
+        self.bus.subscribe(stopOnShutdown(face), eventType=Shutdown)
 
-        console.start_background()
+        console.startBackground()
         try:
             face.run()
         finally:
@@ -502,7 +502,7 @@ _TOKENS_POR_SEGUNDO_NO_RESTO = 600.0
 _SEGUNDOS_QUE_PREOCUPAM = 30.0
 
 
-def _conferir_o_tamanho_da_persona(prompt: str, llm: LLMSettings) -> None:
+def conferirOTamanhoDaPersona(prompt: str, llm: LLMSettings) -> None:
     """Avisa quando ler a persona custa mais que responder.
 
     Um prompt grande nao da erro: da **lentidao**, e de um jeito que nao aponta
@@ -521,15 +521,15 @@ def _conferir_o_tamanho_da_persona(prompt: str, llm: LLMSettings) -> None:
     aviso que aparece nas duas ensina a ignora-lo.
     """
     tokens = int(len(prompt) / _CARACTERES_POR_TOKEN)
-    taxa = _TOKENS_POR_SEGUNDO_NO_PI if is_arm() else _TOKENS_POR_SEGUNDO_NO_RESTO
+    taxa = _TOKENS_POR_SEGUNDO_NO_PI if isArm() else _TOKENS_POR_SEGUNDO_NO_RESTO
     segundos = tokens / taxa
 
     # Nao cabe junto com a resposta: o Ollama passa a deslocar a janela no meio
     # da geracao, que e caro e piora o texto.
-    transborda = tokens + llm.max_tokens > llm.num_ctx
+    transborda = tokens + llm.maxTokens > llm.numCtx
 
     if segundos < _SEGUNDOS_QUE_PREOCUPAM and not transborda:
-        logger.debug("persona ocupa ~%d tokens de %d", tokens, llm.num_ctx)
+        logger.debug("persona ocupa ~%d tokens de %d", tokens, llm.numCtx)
         return
 
     logger.warning(
@@ -537,15 +537,15 @@ def _conferir_o_tamanho_da_persona(prompt: str, llm: LLMSettings) -> None:
         "modelo esfriar, le-la custa ~%.0fs antes da primeira palavra da "
         "resposta%s — encurtar persona/%s.md e o que mais acelera este robo.",
         tokens,
-        llm.num_ctx,
+        llm.numCtx,
         segundos,
         ", e ela nao cabe junto com a resposta" if transborda else "",
         llm.persona,
     )
 
 
-def _stop_on_shutdown(face: FaceApp):
+def stopOnShutdown(face: FaceApp):
     def handler(_: Event) -> None:
-        face.request_stop()
+        face.requestStop()
 
     return handler

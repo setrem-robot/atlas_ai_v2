@@ -12,14 +12,14 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING, Any, Protocol
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import AudioFormat, SpeechError
-from roboteye.speech.devices import AUTO, resolver_saida
+from roboteye.speech.devices import AUTO, resolverSaida
 
 if TYPE_CHECKING:
     from roboteye.config import VoiceSettings
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 class AudioSink(Protocol):
@@ -27,7 +27,7 @@ class AudioSink(Protocol):
 
     name: str
 
-    def start(self, audio_format: AudioFormat) -> None:
+    def start(self, audioFormat: AudioFormat) -> None:
         """Prepara a reproducao para um formato. Reabre se o formato mudou."""
         ...
 
@@ -53,12 +53,12 @@ class SoundDeviceSink:
     name = "sounddevice"
 
     def __init__(self, device: str | int | None = None) -> None:
-        self._device = device
-        self._stream: Any | None = None
-        self._format: AudioFormat | None = None
+        self.device = device
+        self.stream: Any | None = None
+        self.format: AudioFormat | None = None
 
-    def start(self, audio_format: AudioFormat) -> None:
-        if self._stream is not None and self._format == audio_format:
+    def start(self, audioFormat: AudioFormat) -> None:
+        if self.stream is not None and self.format == audioFormat:
             return
 
         self.close()
@@ -68,30 +68,30 @@ class SoundDeviceSink:
         except (ImportError, OSError) as exc:  # pragma: no cover - depende do ambiente
             raise SpeechError(f"sounddevice indisponivel: {exc}") from exc
 
-        if audio_format.sample_width != 2:
+        if audioFormat.sampleWidth != 2:
             raise SpeechError(
-                f"apenas PCM de 16 bits e suportado (recebi {audio_format.sample_width * 8} bits)"
+                f"apenas PCM de 16 bits e suportado (recebi {audioFormat.sampleWidth * 8} bits)"
             )
 
         try:
-            self._stream = sd.RawOutputStream(
-                samplerate=audio_format.sample_rate,
-                channels=audio_format.channels,
+            self.stream = sd.RawOutputStream(
+                samplerate=audioFormat.sampleRate,
+                channels=audioFormat.channels,
                 dtype="int16",
-                device=self._device,
+                device=self.device,
             )
-            self._stream.start()
+            self.stream.start()
         except Exception as exc:
-            self._stream = None
+            self.stream = None
             raise SpeechError(f"nao foi possivel abrir o dispositivo de audio: {exc}") from exc
 
-        self._format = audio_format
+        self.format = audioFormat
 
     def write(self, audio: bytes) -> None:
-        if self._stream is None:
+        if self.stream is None:
             raise SpeechError("write() chamado antes de start()")
         try:
-            self._stream.write(audio)
+            self.stream.write(audio)
         except Exception as exc:
             # Fechar aqui é o que faz a voz voltar sozinha.
             #
@@ -106,7 +106,7 @@ class SoundDeviceSink:
             raise SpeechError(f"a saida de audio falhou: {exc}") from exc
 
     def stop(self) -> None:
-        if self._stream is None:
+        if self.stream is None:
             return
 
         # abort() descarta o buffer; stop() esperaria o audio pendente terminar.
@@ -114,21 +114,21 @@ class SoundDeviceSink:
         # enquanto ainda ha dados na placa. Nesse caso descartamos o stream: o
         # proximo start() o reabre limpo, que e exatamente o efeito desejado.
         try:
-            self._stream.abort()
-            self._stream.start()
+            self.stream.abort()
+            self.stream.start()
         except Exception:
             logger.debug("driver recusou abortar o stream; reabrindo", exc_info=True)
             self.close()
 
     def close(self) -> None:
-        if self._stream is not None:
+        if self.stream is not None:
             try:
-                self._stream.stop()
-                self._stream.close()
+                self.stream.stop()
+                self.stream.close()
             except Exception:
                 logger.debug("erro ao fechar o stream de audio", exc_info=True)
-            self._stream = None
-        self._format = None
+            self.stream = None
+        self.format = None
 
 
 # ---------------------------------------------------------------------------
@@ -140,12 +140,12 @@ class AplaySink:
     name = "aplay"
 
     def __init__(self, device: str | None = None) -> None:
-        self._device = device
-        self._process: subprocess.Popen[bytes] | None = None
-        self._format: AudioFormat | None = None
+        self.device = device
+        self.process: subprocess.Popen[bytes] | None = None
+        self.format: AudioFormat | None = None
 
-    def start(self, audio_format: AudioFormat) -> None:
-        if self._process is not None and self._format == audio_format:
+    def start(self, audioFormat: AudioFormat) -> None:
+        if self.process is not None and self.format == audioFormat:
             return
 
         self.close()
@@ -156,28 +156,28 @@ class AplaySink:
             "-t",
             "raw",
             "-f",
-            f"S{audio_format.sample_width * 8}_LE",
+            f"S{audioFormat.sampleWidth * 8}_LE",
             "-r",
-            str(audio_format.sample_rate),
+            str(audioFormat.sampleRate),
             "-c",
-            str(audio_format.channels),
+            str(audioFormat.channels),
         ]
-        if self._device:
-            command += ["-D", self._device]
+        if self.device:
+            command += ["-D", self.device]
 
         try:
-            self._process = subprocess.Popen(command, stdin=subprocess.PIPE)
+            self.process = subprocess.Popen(command, stdin=subprocess.PIPE)
         except OSError as exc:
             raise SpeechError(f"nao foi possivel iniciar o aplay: {exc}") from exc
 
-        self._format = audio_format
+        self.format = audioFormat
 
     def write(self, audio: bytes) -> None:
-        if self._process is None or self._process.stdin is None:
+        if self.process is None or self.process.stdin is None:
             raise SpeechError("write() chamado antes de start()")
         try:
-            self._process.stdin.write(audio)
-            self._process.stdin.flush()
+            self.process.stdin.write(audio)
+            self.process.stdin.flush()
         except OSError as exc:
             # Mesma razão do `SoundDeviceSink.write`: sem soltar o processo
             # morto, `start()` acha que ainda há um `aplay` de pé e a voz não
@@ -187,21 +187,21 @@ class AplaySink:
 
     def stop(self) -> None:
         # aplay nao permite descartar o buffer: reiniciamos o processo.
-        audio_format = self._format
+        audioFormat = self.format
         self.close()
-        if audio_format is not None:
-            self.start(audio_format)
+        if audioFormat is not None:
+            self.start(audioFormat)
 
     def close(self) -> None:
-        if self._process is not None:
+        if self.process is not None:
             try:
-                if self._process.stdin is not None:
-                    self._process.stdin.close()
-                self._process.wait(timeout=2)
+                if self.process.stdin is not None:
+                    self.process.stdin.close()
+                self.process.wait(timeout=2)
             except (OSError, subprocess.TimeoutExpired):
-                self._process.kill()
-            self._process = None
-        self._format = None
+                self.process.kill()
+            self.process = None
+        self.format = None
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ class NullSink:
 
     name = "null"
 
-    def start(self, audio_format: AudioFormat) -> None:
+    def start(self, audioFormat: AudioFormat) -> None:
         return None
 
     def write(self, audio: bytes) -> None:
@@ -228,12 +228,12 @@ class NullSink:
 # ---------------------------------------------------------------------------
 # Selecao
 # ---------------------------------------------------------------------------
-def create_audio_sink(settings: VoiceSettings) -> AudioSink:
+def createAudioSink(settings: VoiceSettings) -> AudioSink:
     """Escolhe a melhor saida disponivel no sistema."""
     if settings.engine == "null":
         return NullSink()
 
-    device = resolver_saida(settings.audio_device)
+    device = resolverSaida(settings.audioDevice)
 
     try:
         import sounddevice  # noqa: F401
@@ -247,7 +247,7 @@ def create_audio_sink(settings: VoiceSettings) -> AudioSink:
         # O `aplay` fala em nome de dispositivo ALSA (`plughw:2,0`), nao no
         # indice que o sounddevice usa; um numero aqui nao significaria nada
         # para ele, entao so o que veio escrito na configuracao serve.
-        pedido = settings.audio_device
+        pedido = settings.audioDevice
         return AplaySink(None if pedido == AUTO else pedido)
 
     logger.warning("nenhuma saida de audio disponivel; a voz sera silenciosa")

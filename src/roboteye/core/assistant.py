@@ -21,14 +21,14 @@ from roboteye.core.events import (
     ThinkingStarted,
     UserMessage,
 )
-from roboteye.core.text import stream_sentences, truncate
+from roboteye.core.text import streamSentences, truncate
 from roboteye.llm.base import LLMClient, LLMError
 from roboteye.llm.memory import ConversationMemory
 from roboteye.llm.persona import PersonaStore
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.speaker import Speaker
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 class Assistant:
@@ -44,38 +44,38 @@ class Assistant:
         persona: PersonaStore | None = None,
         language: str = "en",
     ) -> None:
-        self._llm = llm
-        self._memory = memory
-        self._speaker = speaker
-        self._bus = bus
-        self._persona = persona
-        self._language = language
+        self.llm = llm
+        self.memoryStore = memory
+        self.speaker = speaker
+        self.bus = bus
+        self.persona = persona
+        self.language = language
 
-        self._inbox: queue.Queue[str | None] = queue.Queue()
-        self._thread: threading.Thread | None = None
-        self._busy = threading.Event()
-        self._closing = threading.Event()
+        self.inbox: queue.Queue[str | None] = queue.Queue()
+        self.thread: threading.Thread | None = None
+        self.busy = threading.Event()
+        self.closing = threading.Event()
 
     # -- ciclo de vida -----------------------------------------------------
     def start(self) -> None:
         """Inicia a thread do assistente. Idempotente."""
-        if self._thread is not None:
+        if self.thread is not None:
             return
-        self._thread = threading.Thread(target=self._run, name="assistant", daemon=True)
-        self._thread.start()
+        self.thread = threading.Thread(target=self.run, name="assistant", daemon=True)
+        self.thread.start()
 
     def close(self, *, timeout: float = 5.0) -> None:
-        if self._thread is None:
+        if self.thread is None:
             return
 
         # Sinaliza antes do join: se o modelo ainda estiver respondendo, fechar o
         # cliente HTTP aborta o stream de proposito, e o erro daí decorrente nao
         # deve virar uma mensagem de falha na tela do usuario.
-        self._closing.set()
-        self._inbox.put(None)
-        self._thread.join(timeout=timeout)
-        self._thread = None
-        self._llm.close()
+        self.closing.set()
+        self.inbox.put(None)
+        self.thread.join(timeout=timeout)
+        self.thread = None
+        self.llm.close()
 
     def __enter__(self) -> Assistant:
         self.start()
@@ -92,130 +92,130 @@ class Assistant:
             return
 
         # Barge-in: quem fala por ultimo e o usuario.
-        self._speaker.interrupt()
-        self._bus.publish(UserMessage(text=message))
-        self._inbox.put(message)
+        self.speaker.interrupt()
+        self.bus.publish(UserMessage(text=message))
+        self.inbox.put(message)
 
-    def say_directly(self, text: str) -> None:
+    def sayDirectly(self, text: str) -> None:
         """Faz o robo falar um texto fixo, sem passar pelo modelo.
 
         Usado para saudacoes e falas ociosas.
         """
-        self._bus.publish(AssistantReply(text=text))
-        self._speaker.say(text)
-        self._speaker.end_turn()
+        self.bus.publish(AssistantReply(text=text))
+        self.speaker.say(text)
+        self.speaker.endTurn()
 
     def interrupt(self) -> None:
         """Cala a fala em andamento sem descartar o historico."""
-        self._speaker.interrupt()
+        self.speaker.interrupt()
 
     @property
     def memory(self) -> ConversationMemory:
         """Historico da conversa (usado pelo comando `/limpar`)."""
-        return self._memory
+        return self.memoryStore
 
     # -- ensinar -----------------------------------------------------------
     def teach(self, fact: str) -> bool:
         """Ensina um fato, que passa a valer da proxima resposta em diante."""
-        if self._persona is None:
+        if self.persona is None:
             return False
-        if not self._persona.remember(fact):
+        if not self.persona.remember(fact):
             return False
-        self.reload_persona()
+        self.reloadPersona()
         return True
 
     def forget(self, needle: str) -> int:
         """Esquece os fatos que contenham `needle`. Devolve quantos sairam."""
-        if self._persona is None:
+        if self.persona is None:
             return 0
-        removidos = self._persona.forget(needle)
+        removidos = self.persona.forget(needle)
         if removidos:
-            self.reload_persona()
+            self.reloadPersona()
         return removidos
 
     def facts(self) -> tuple[str, ...]:
         """Tudo que ela aprendeu ate agora."""
-        return self._persona.load_facts() if self._persona else ()
+        return self.persona.loadFacts() if self.persona else ()
 
-    def reload_persona(self) -> None:
+    def reloadPersona(self) -> None:
         """Rele a persona do disco e troca o prompt de sistema em uso.
 
         Permite editar o arquivo com o robo rodando e ver o efeito na proxima
         resposta, sem reiniciar nada.
         """
-        if self._persona is None:
+        if self.persona is None:
             return
-        persona = self._persona.load(self._language)
-        self._memory.replace_system_prompt(persona.system_prompt())
+        persona = self.persona.load(self.language)
+        self.memoryStore.replaceSystemPrompt(persona.systemPrompt())
         logger.info("persona recarregada (%d fatos)", len(persona.facts))
 
     @property
-    def is_busy(self) -> bool:
-        return self._busy.is_set()
+    def isBusy(self) -> bool:
+        return self.busy.is_set()
 
     # -- thread ------------------------------------------------------------
-    def _run(self) -> None:
-        logger.debug("assistente iniciado (llm=%s)", self._llm.name)
+    def run(self) -> None:
+        logger.debug("assistente iniciado (llm=%s)", self.llm.name)
         while True:
-            message = self._inbox.get()
+            message = self.inbox.get()
             if message is None:
                 break
 
             # Se o usuario mandou varias mensagens de uma vez, responde so a ultima.
-            message = self._latest(message)
+            message = self.latest(message)
 
-            self._busy.set()
+            self.busy.set()
             try:
-                self._handle_turn(message)
+                self.handleTurn(message)
             except LLMError as exc:
-                self._report(exc, source="llm")
+                self.report(exc, source="llm")
             except Exception as exc:
-                self._report(exc, source="assistant")
+                self.report(exc, source="assistant")
             finally:
-                self._busy.clear()
+                self.busy.clear()
 
         logger.debug("assistente encerrado")
 
-    def _report(self, exc: Exception, *, source: str) -> None:
+    def report(self, exc: Exception, *, source: str) -> None:
         """Registra uma falha do turno, exceto quando ela vem do encerramento."""
-        if self._closing.is_set():
+        if self.closing.is_set():
             # Fechar o cliente HTTP durante um stream levanta erro de socket:
             # e o mecanismo de cancelamento, nao um problema a relatar.
             logger.debug("falha durante o encerramento, ignorada: %s", exc)
             return
 
         logger.error("falha em %s: %s", source, exc)
-        self._bus.publish(ErrorOccurred(message=str(exc), source=source))
+        self.bus.publish(ErrorOccurred(message=str(exc), source=source))
 
-    def _latest(self, message: str) -> str:
+    def latest(self, message: str) -> str:
         """Descarta mensagens enfileiradas mais antigas, mantendo a ultima."""
         while True:
             try:
-                queued = self._inbox.get_nowait()
+                queued = self.inbox.get_nowait()
             except queue.Empty:
                 return message
             if queued is None:
-                self._inbox.put(None)
+                self.inbox.put(None)
                 return message
             message = queued
 
-    def _handle_turn(self, message: str) -> None:
+    def handleTurn(self, message: str) -> None:
         logger.info("usuario: %s", truncate(message))
-        self._memory.add_user(message)
-        self._bus.publish(ThinkingStarted())
+        self.memoryStore.addUser(message)
+        self.bus.publish(ThinkingStarted())
 
         spoken: list[str] = []
-        for sentence in stream_sentences(self._llm.stream_reply(self._memory.build_prompt())):
+        for sentence in streamSentences(self.llm.streamReply(self.memoryStore.buildPrompt())):
             spoken.append(sentence)
-            self._speaker.say(sentence)
+            self.speaker.say(sentence)
 
         reply = " ".join(spoken).strip()
         if not reply:
             logger.warning("o modelo devolveu uma resposta vazia")
-            self._speaker.end_turn()
+            self.speaker.endTurn()
             return
 
-        self._memory.add_assistant(reply)
-        self._bus.publish(AssistantReply(text=reply))
-        self._speaker.end_turn()
+        self.memoryStore.addAssistant(reply)
+        self.bus.publish(AssistantReply(text=reply))
+        self.speaker.endTurn()
         logger.info("assistente: %s", truncate(reply))

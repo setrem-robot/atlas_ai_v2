@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from roboteye.core.normalize_pt import normalize
+from roboteye.core.normalizePt import normalize
 
 
 class TestDinheiro:
@@ -18,10 +18,10 @@ class TestDinheiro:
             ("R$1.500,00", "mil e quinhentos reais"),
         ],
     )
-    def test_moeda(self, entrada: str, esperado: str) -> None:
+    def testMoeda(self, entrada: str, esperado: str) -> None:
         assert normalize(entrada) == esperado
 
-    def test_dinheiro_vem_antes_do_decimal(self) -> None:
+    def testDinheiroVemAntesDoDecimal(self) -> None:
         """Se a regra dos decimais rodasse antes, sairia "vinte e cinco vírgula noventa reais"."""
         assert "virgula" not in normalize("R$ 25,90")
 
@@ -37,10 +37,10 @@ class TestHoras:
             ("23:59", "vinte e tres e cinquenta e nove"),
         ],
     )
-    def test_hora(self, entrada: str, esperado: str) -> None:
+    def testHora(self, entrada: str, esperado: str) -> None:
         assert normalize(entrada) == esperado
 
-    def test_hora_invalida_fica_como_esta(self) -> None:
+    def testHoraInvalidaFicaComoEsta(self) -> None:
         """25:00 não é hora; melhor não inventar do que remontar errado."""
         assert normalize("25:00") == "25:00"
 
@@ -59,10 +59,10 @@ class TestOutrasFormas:
             ("2ª", "segunda"),
         ],
     )
-    def test_formas(self, entrada: str, esperado: str) -> None:
+    def testFormas(self, entrada: str, esperado: str) -> None:
         assert normalize(entrada) == esperado
 
-    def test_abreviacoes(self) -> None:
+    def testAbreviacoes(self) -> None:
         assert normalize("Dr. Silva") == "doutor Silva"
         assert normalize("Sra. Costa") == "senhora Costa"
 
@@ -77,22 +77,22 @@ class TestNumerosSoltos:
             ("-7", "menos sete"),
         ],
     )
-    def test_numeros(self, entrada: str, esperado: str) -> None:
+    def testNumeros(self, entrada: str, esperado: str) -> None:
         assert normalize(entrada) == esperado
 
 
 class TestFrasesInteiras:
-    def test_frase_com_varias_formas(self) -> None:
+    def testFraseComVariasFormas(self) -> None:
         texto = "Sao 15:30 e a temperatura esta em 23°C, com 40% de umidade."
         assert normalize(texto) == (
             "Sao quinze e trinta e a temperatura esta em vinte e tres graus, "
             "com quarenta por cento de umidade."
         )
 
-    def test_texto_sem_numero_fica_intacto(self) -> None:
+    def testTextoSemNumeroFicaIntacto(self) -> None:
         texto = "A prova era amanha, mas voce ja sabia disso."
         assert normalize(texto) == texto
 
-    def test_nao_mexe_em_palavra_que_contem_abreviacao(self) -> None:
+    def testNaoMexeEmPalavraQueContemAbreviacao(self) -> None:
         """ "sra" dentro de outra palavra não é "senhora"."""
         assert normalize("compras.") == "compras."

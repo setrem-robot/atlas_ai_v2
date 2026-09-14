@@ -31,7 +31,7 @@ from roboteye.face import easing
 from roboteye.face.easing import Tween
 from roboteye.face.expressions import IDLE_WEIGHTS, Expression
 from roboteye.face.layout import LOOK_RANGE
-from roboteye.face.shapes import EyeShape, preset_for
+from roboteye.face.shapes import EyeShape, presetFor
 
 # --- transicao de expressao --------------------------------------------------
 MORPH_DURATION = 0.38
@@ -158,7 +158,7 @@ class EyeFrame:
     right: EyeShape
 
 
-def close_lids(shape: EyeShape, blink: float) -> EyeShape:
+def closeLids(shape: EyeShape, blink: float) -> EyeShape:
     """Leva as palpebras de onde estao ate a posicao de olho fechado.
 
     Interpolar ate o alvo, em vez de somar a cobertura, e o que faz a piscada
@@ -177,107 +177,107 @@ def close_lids(shape: EyeShape, blink: float) -> EyeShape:
     A inclinacao afrouxa junto, pelo mesmo motivo: um olho fechado nao tem canto
     caido. Mantida ate o fim, ela fechava a raiva em diagonal, como um corte.
     """
-    bottom_target = max(CLOSED_BOTTOM_LID, shape.bottom_lid)
-    top_target = CLOSED_COVERAGE - bottom_target
+    bottomTarget = max(CLOSED_BOTTOM_LID, shape.bottomLid)
+    topTarget = CLOSED_COVERAGE - bottomTarget
 
-    closed = shape.with_lids(
-        top=shape.top_lid + (top_target - shape.top_lid) * blink,
-        bottom=shape.bottom_lid + (bottom_target - shape.bottom_lid) * blink,
+    closed = shape.withLids(
+        top=shape.topLid + (topTarget - shape.topLid) * blink,
+        bottom=shape.bottomLid + (bottomTarget - shape.bottomLid) * blink,
     )
-    return replace(closed, top_lid_slant=shape.top_lid_slant * (1.0 - blink))
+    return replace(closed, topLidSlant=shape.topLidSlant * (1.0 - blink))
 
 
 class EyeAnimator:
     """Produz o movimento dos olhos, quadro a quadro."""
 
-    def __init__(self, *, idle_animations: bool = True, rng: random.Random | None = None) -> None:
-        self._rng = rng or random.Random()
-        self._idle_animations = idle_animations
+    def __init__(self, *, idleAnimations: bool = True, rng: random.Random | None = None) -> None:
+        self.rng = rng or random.Random()
+        self.idleAnimations = idleAnimations
 
         # -- o que ela sente e o que ela faz --------------------------------
-        self._mood = Expression.NEUTRAL
-        self._activity: Expression | None = None
-        self._sleeping = False
+        self.mood = Expression.NEUTRAL
+        self.activityAtual: Expression | None = None
+        self.sleeping = False
 
         # -- transicao de forma ---------------------------------------------
-        self._left_from = preset_for(Expression.NEUTRAL)
-        self._right_from = self._left_from
-        self._left_to = self._left_from
-        self._right_to = self._left_from
-        self._morph = Tween(1.0, easing.ease_in_out_cubic)
+        self.leftFrom = presetFor(Expression.NEUTRAL)
+        self.rightFrom = self.leftFrom
+        self.leftTo = self.leftFrom
+        self.rightTo = self.leftFrom
+        self.morph = Tween(1.0, easing.easeInOutCubic)
 
         # -- olhar -----------------------------------------------------------
-        self._gaze_x = Tween(0.0, easing.ease_out_cubic)
-        self._gaze_y = Tween(0.0, easing.ease_out_cubic)
-        self._micro_x = Tween(0.0, easing.ease_out_quad)
-        self._micro_y = Tween(0.0, easing.ease_out_quad)
-        self._follow_x = 0.0
-        self._follow_y = 0.0
+        self.gazeX = Tween(0.0, easing.easeOutCubic)
+        self.gazeY = Tween(0.0, easing.easeOutCubic)
+        self.microX = Tween(0.0, easing.easeOutQuad)
+        self.microY = Tween(0.0, easing.easeOutQuad)
+        self.followX = 0.0
+        self.followY = 0.0
 
         # -- piscada ----------------------------------------------------------
-        self._blink = Tween(0.0, easing.ease_in_quad)
-        self._blink_phase = "open"
-        self._hold_left = 0.0
-        self._queued_blinks = 0
+        self.blink = Tween(0.0, easing.easeInQuad)
+        self.blinkPhase = "open"
+        self.holdLeft = 0.0
+        self.queuedBlinks = 0
 
         # -- fala -------------------------------------------------------------
-        self._speech_pop = Tween(1.0, easing.ease_out_back)
+        self.speechPop = Tween(1.0, easing.easeOutBack)
         #: Ultima amplitude medida do audio, ou None se ninguem esta medindo.
-        self._speech_level: float | None = None
+        self.speechLevel: float | None = None
         #: A mesma amplitude depois de suavizada, que e a que move o olho.
-        self._speech_smoothed = 0.0
+        self.speechSmoothed = 0.0
 
         # -- relogios ----------------------------------------------------------
-        self._clock = 0.0
-        self._mood_clock = 0.0
-        self._activity_clock = 0.0
-        self._next_blink = self._sample(BLINK_INTERVAL)
-        self._blink_clock = 0.0
-        self._next_gaze = self._sample(GAZE_HOLD)
-        self._gaze_clock = 0.0
-        self._next_micro = self._sample(MICRO_INTERVAL)
-        self._micro_clock = 0.0
-        self._next_mood = self._sample(IDLE_EXPRESSION_INTERVAL)
-        self._idle_clock = 0.0
+        self.clock = 0.0
+        self.moodClock = 0.0
+        self.activityClock = 0.0
+        self.nextBlink = self.sample(BLINK_INTERVAL)
+        self.blinkClock = 0.0
+        self.nextGaze = self.sample(GAZE_HOLD)
+        self.gazeClock = 0.0
+        self.nextMicro = self.sample(MICRO_INTERVAL)
+        self.microClock = 0.0
+        self.nextMood = self.sample(IDLE_EXPRESSION_INTERVAL)
+        self.idleClock = 0.0
 
     # -----------------------------------------------------------------------
     # Comandos
     # -----------------------------------------------------------------------
-    def set_mood(self, expression: Expression) -> None:
+    def setMood(self, expression: Expression) -> None:
         """Define o humor de repouso. Expressoes de atividade sao ignoradas."""
-        if not expression.is_mood or expression == self._mood:
+        if not expression.isMood or expression == self.mood:
             return
-        self._mood = expression
-        self._mood_clock = 0.0
-        self._retarget(MORPH_DURATION)
+        self.mood = expression
+        self.moodClock = 0.0
+        self.retarget(MORPH_DURATION)
 
-    def set_activity(self, activity: Expression | None) -> None:
+    def setActivity(self, activity: Expression | None) -> None:
         """Marca que ela esta pensando, falando, ou nenhum dos dois."""
-        if activity is not None and not activity.is_activity:
+        if activity is not None and not activity.isActivity:
             raise ValueError(f"{activity} nao e uma atividade valida")
-        if activity == self._activity:
+        if activity == self.activityAtual:
             return
 
-        previous = self._activity
-        self._activity = activity
-        self._activity_clock = 0.0
+        previous = self.activityAtual
+        self.activityAtual = activity
+        self.activityClock = 0.0
 
         if activity is not None:
-            self._sleeping = False
+            self.sleeping = False
 
         if activity is Expression.THINKING:
-            self._begin_thinking()
+            self.beginThinking()
         elif activity is Expression.SPEAKING:
-            self._begin_speaking()
+            self.beginSpeaking()
         elif activity is Expression.LISTENING:
-            self._begin_listening()
+            self.beginListening()
         elif previous is not None:
             # Voltou ao repouso: o olhar desce de volta ao centro.
-            self._look_at(0.0, 0.0, duration=0.22)
+            self.lookAt(0.0, 0.0, duration=0.22)
 
-        self._retarget(MORPH_DURATION_FAST if activity else MORPH_DURATION)
+        self.retarget(MORPH_DURATION_FAST if activity else MORPH_DURATION)
 
-    def set_speech_level(self, level: float | None) -> None:
+    def setSpeechLevel(self, level: float | None) -> None:
         """Informa a amplitude do audio que esta tocando, de 0 a 1.
 
         `None` significa "ninguem esta medindo" — nao "silencio". A diferenca
@@ -285,54 +285,54 @@ class EyeAnimator:
         cair no movimento sintetico, senao a face fica imovel enquanto fala num
         motor que nao produz PCM.
         """
-        self._speech_level = None if level is None else min(1.0, max(0.0, level))
+        self.speechLevel = None if level is None else min(1.0, max(0.0, level))
 
-    def blink_now(self) -> None:
+    def blinkNow(self) -> None:
         """Forca uma piscada imediata.
 
         Dormindo, nao ha o que piscar: os olhos ja estao fechados, e a palpebra
         descer sobre um olho fechado nao le como piscar, le como defeito.
         """
-        if self._sleeping:
+        if self.sleeping:
             return
-        if self._blink_phase == "open":
-            self._start_blink()
+        if self.blinkPhase == "open":
+            self.startBlink()
 
     def sleep(self) -> None:
-        if self._sleeping:
+        if self.sleeping:
             return
-        self._sleeping = True
-        self._activity = None
+        self.sleeping = True
+        self.activityAtual = None
         # Uma piscada dobrada sorteada um instante antes de dormir ficaria na
         # fila e dispararia com ela ja dormindo. A fila morre aqui.
-        self._queued_blinks = 0
-        self._look_at(0.0, 0.0, duration=0.4)
-        self._retarget(SLEEP_DURATION)
+        self.queuedBlinks = 0
+        self.lookAt(0.0, 0.0, duration=0.4)
+        self.retarget(SLEEP_DURATION)
 
     def wake(self) -> None:
-        if not self._sleeping:
+        if not self.sleeping:
             return
-        self._sleeping = False
-        self._queued_blinks = WAKE_BLINKS
-        self._retarget(MORPH_DURATION)
+        self.sleeping = False
+        self.queuedBlinks = WAKE_BLINKS
+        self.retarget(MORPH_DURATION)
 
-    def toggle_sleep(self) -> None:
-        self.wake() if self._sleeping else self.sleep()
+    def toggleSleep(self) -> None:
+        self.wake() if self.sleeping else self.sleep()
 
     @property
-    def is_sleeping(self) -> bool:
-        return self._sleeping
+    def isSleeping(self) -> bool:
+        return self.sleeping
 
     @property
     def activity(self) -> Expression | None:
         """A atividade imposta agora (pensar, falar, ouvir), ou None."""
-        return self._activity
+        return self.activityAtual
 
     @property
-    def current_expression(self) -> Expression:
-        if self._sleeping:
+    def currentExpression(self) -> Expression:
+        if self.sleeping:
             return Expression.SLEEP
-        return self._activity or self._mood
+        return self.activityAtual or self.mood
 
     # -----------------------------------------------------------------------
     # Passo de animacao
@@ -340,54 +340,54 @@ class EyeAnimator:
     def update(self, dt: float) -> EyeFrame:
         """Avanca a animacao em `dt` segundos e devolve o quadro resultante."""
         dt = max(0.0, min(dt, 0.1))  # uma travada longa nao teleporta a face
-        self._clock += dt
-        self._mood_clock += dt
-        self._activity_clock += dt
+        self.clock += dt
+        self.moodClock += dt
+        self.activityClock += dt
 
-        self._update_mood(dt)
-        self._update_gaze(dt)
-        self._update_blink(dt)
+        self.updateMood(dt)
+        self.updateGaze(dt)
+        self.updateBlink(dt)
 
-        self._morph.update(dt)
-        self._speech_pop.update(dt)
+        self.morph.update(dt)
+        self.speechPop.update(dt)
 
-        left = self._left_from.lerp(self._left_to, self._morph.value)
-        right = self._right_from.lerp(self._right_to, self._morph.value)
+        left = self.leftFrom.lerp(self.leftTo, self.morph.value)
+        right = self.rightFrom.lerp(self.rightTo, self.morph.value)
 
-        left, right = self._apply_life(left, right, dt)
+        left, right = self.applyLife(left, right, dt)
 
-        return EyeFrame(expression=self.current_expression, left=left, right=right)
+        return EyeFrame(expression=self.currentExpression, left=left, right=right)
 
     # -----------------------------------------------------------------------
     # Camadas de movimento
     # -----------------------------------------------------------------------
-    def _apply_life(self, left: EyeShape, right: EyeShape, dt: float) -> tuple[EyeShape, EyeShape]:
+    def applyLife(self, left: EyeShape, right: EyeShape, dt: float) -> tuple[EyeShape, EyeShape]:
         """Sobrepoe a forma de repouso tudo aquilo que se mexe."""
-        blink = self._blink.value
-        breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * self._clock)
+        blink = self.blink.value
+        breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * self.clock)
 
         height = 1.0
         width = 1.0
         lift = breath * BREATH_DRIFT
 
-        if not self._sleeping:
+        if not self.sleeping:
             height *= 1.0 + breath * BREATH_HEIGHT
 
         # -- piscar: a palpebra desce, o olho nao encolhe --------------------
         if blink > 0.001:
-            left = close_lids(left, blink)
-            right = close_lids(right, blink)
+            left = closeLids(left, blink)
+            right = closeLids(right, blink)
             width *= 1.0 + blink * BLINK_BULGE
             lift += blink * BLINK_DIP
 
         # -- falar: o olho pulsa junto com a voz ------------------------------
-        if self._activity is Expression.SPEAKING:
-            envelope = self._speech_drive(dt)
+        if self.activityAtual is Expression.SPEAKING:
+            envelope = self.speechDrive(dt)
             height *= 1.0 + envelope * SPEECH_HEIGHT
             width *= 1.0 - envelope * SPEECH_WIDTH
             lift -= envelope * SPEECH_LIFT
 
-        pop = self._speech_pop.value
+        pop = self.speechPop.value
         height *= pop
         width *= pop
 
@@ -395,55 +395,55 @@ class EyeAnimator:
         right = right.scaled(width=width, height=height)
 
         # -- olhar, com o direito atrasado em relacao ao esquerdo ------------
-        gaze_x = self._gaze_x.value + self._micro_x.value
-        gaze_y = self._gaze_y.value + self._micro_y.value
-        self._follow_x = easing.approach(self._follow_x, gaze_x, dt, FOLLOW_RATE)
-        self._follow_y = easing.approach(self._follow_y, gaze_y, dt, FOLLOW_RATE)
+        gazeX = self.gazeX.value + self.microX.value
+        gazeY = self.gazeY.value + self.microY.value
+        self.followX = easing.approach(self.followX, gazeX, dt, FOLLOW_RATE)
+        self.followY = easing.approach(self.followY, gazeY, dt, FOLLOW_RATE)
 
-        left = left.moved(gaze_x, gaze_y + lift)
-        right = right.moved(self._follow_x, self._follow_y + lift)
+        left = left.moved(gazeX, gazeY + lift)
+        right = right.moved(self.followX, self.followY + lift)
 
         # -- curiosidade: o olho do lado para onde ela olha cresce -----------
-        left, right = self._apply_curiosity(left, right, gaze_x)
+        left, right = self.applyCuriosity(left, right, gazeX)
 
         # -- sacudidas passageiras -------------------------------------------
-        left, right = self._apply_shake(left, right)
+        left, right = self.applyShake(left, right)
 
         return left, right
 
-    def _apply_curiosity(
-        self, left: EyeShape, right: EyeShape, gaze_x: float
+    def applyCuriosity(
+        self, left: EyeShape, right: EyeShape, gazeX: float
     ) -> tuple[EyeShape, EyeShape]:
         """O olho mais proximo da borda para onde ela olha fica maior.
 
         Truque emprestado do RoboEyes: sugere interesse, e quebra a simetria que
         faria os dois olhos parecerem um so objeto duplicado.
         """
-        amount = min(1.0, abs(gaze_x) / LOOK_RANGE)
+        amount = min(1.0, abs(gazeX) / LOOK_RANGE)
         if amount < 0.05:
             return left, right
 
         grow = 1.0 + CURIOUS_GAIN * amount
         shrink = 1.0 - CURIOUS_LOSS * amount
 
-        if gaze_x < 0:
+        if gazeX < 0:
             return left.scaled(height=grow), right.scaled(height=shrink)
         return left.scaled(height=shrink), right.scaled(height=grow)
 
-    def _apply_shake(self, left: EyeShape, right: EyeShape) -> tuple[EyeShape, EyeShape]:
+    def applyShake(self, left: EyeShape, right: EyeShape) -> tuple[EyeShape, EyeShape]:
         """Riso sacode na vertical; tontura, na horizontal e fora de fase."""
-        if self._activity is not None:
+        if self.activityAtual is not None:
             return left, right
 
-        if self._mood is Expression.LAUGH and self._mood_clock < LAUGH_DURATION:
-            decay = 1.0 - self._mood_clock / LAUGH_DURATION
-            offset = math.sin(2.0 * math.pi * LAUGH_FREQUENCY * self._mood_clock)
+        if self.mood is Expression.LAUGH and self.moodClock < LAUGH_DURATION:
+            decay = 1.0 - self.moodClock / LAUGH_DURATION
+            offset = math.sin(2.0 * math.pi * LAUGH_FREQUENCY * self.moodClock)
             offset *= LAUGH_AMPLITUDE * decay
             return left.moved(dy=offset), right.moved(dy=offset)
 
-        if self._mood is Expression.DIZZY and self._mood_clock < DIZZY_DURATION:
-            decay = 1.0 - self._mood_clock / DIZZY_DURATION
-            phase = 2.0 * math.pi * DIZZY_FREQUENCY * self._mood_clock
+        if self.mood is Expression.DIZZY and self.moodClock < DIZZY_DURATION:
+            decay = 1.0 - self.moodClock / DIZZY_DURATION
+            phase = 2.0 * math.pi * DIZZY_FREQUENCY * self.moodClock
             amplitude = DIZZY_AMPLITUDE * decay
             return (
                 left.moved(dx=math.sin(phase) * amplitude),
@@ -452,7 +452,7 @@ class EyeAnimator:
 
         return left, right
 
-    def _speech_drive(self, dt: float) -> float:
+    def speechDrive(self, dt: float) -> float:
         """O que move o olho enquanto ela fala, de -1 a 1.
 
         Prefere a amplitude medida do audio; so cai nas senoides quando nao ha
@@ -460,19 +460,19 @@ class EyeAnimator:
         subida rapida e descida lenta, que e o que impede o olho de tremer a
         cada quadro e o que da peso ao movimento.
         """
-        measured = self._speech_level
+        measured = self.speechLevel
         if measured is None:
-            return self._synthetic_envelope(self._activity_clock)
+            return self.syntheticEnvelope(self.activityClock)
 
         target = measured**SPEECH_CURVE
-        rate = SPEECH_ATTACK if target > self._speech_smoothed else SPEECH_RELEASE
-        self._speech_smoothed = easing.approach(self._speech_smoothed, target, dt, rate)
+        rate = SPEECH_ATTACK if target > self.speechSmoothed else SPEECH_RELEASE
+        self.speechSmoothed = easing.approach(self.speechSmoothed, target, dt, rate)
 
         # De 0..1 para -1..1: em silencio o olho descansa um pouco abaixo do
         # repouso, e nos picos sobe acima dele.
-        return self._speech_smoothed * 2.0 - 1.0
+        return self.speechSmoothed * 2.0 - 1.0
 
-    def _synthetic_envelope(self, t: float) -> float:
+    def syntheticEnvelope(self, t: float) -> float:
         """Curva de -1 a 1 que imita o ritmo irregular da fala."""
         return sum(
             amplitude * math.sin(2.0 * math.pi * frequency * t + phase)
@@ -482,179 +482,179 @@ class EyeAnimator:
     # -----------------------------------------------------------------------
     # Agendas
     # -----------------------------------------------------------------------
-    def _update_mood(self, dt: float) -> None:
+    def updateMood(self, dt: float) -> None:
         """Encerra humores passageiros e sorteia novos quando ela esta ociosa."""
-        if self._mood.is_transient:
-            limit = LAUGH_DURATION if self._mood is Expression.LAUGH else DIZZY_DURATION
-            if self._mood_clock >= limit:
+        if self.mood.isTransient:
+            limit = LAUGH_DURATION if self.mood is Expression.LAUGH else DIZZY_DURATION
+            if self.moodClock >= limit:
                 seguinte = (
-                    Expression.HAPPY if self._mood is Expression.LAUGH else Expression.NEUTRAL
+                    Expression.HAPPY if self.mood is Expression.LAUGH else Expression.NEUTRAL
                 )
-                self.set_mood(seguinte)
+                self.setMood(seguinte)
 
-        if not self._idle_animations or self._activity is not None or self._sleeping:
+        if not self.idleAnimations or self.activityAtual is not None or self.sleeping:
             return
 
-        self._idle_clock += dt
-        if self._idle_clock >= self._next_mood:
-            self._idle_clock = 0.0
-            self._next_mood = self._sample(IDLE_EXPRESSION_INTERVAL)
-            self.set_mood(self._weighted_mood())
+        self.idleClock += dt
+        if self.idleClock >= self.nextMood:
+            self.idleClock = 0.0
+            self.nextMood = self.sample(IDLE_EXPRESSION_INTERVAL)
+            self.setMood(self.weightedMood())
 
-    def _update_gaze(self, dt: float) -> None:
-        self._gaze_x.update(dt)
-        self._gaze_y.update(dt)
-        self._micro_x.update(dt)
-        self._micro_y.update(dt)
+    def updateGaze(self, dt: float) -> None:
+        self.gazeX.update(dt)
+        self.gazeY.update(dt)
+        self.microX.update(dt)
+        self.microY.update(dt)
 
-        if self._sleeping:
+        if self.sleeping:
             return
 
         # Sacada: salta para um novo ponto de fixacao e espera la.
-        self._gaze_clock += dt
-        hold = self._next_gaze
-        if self._gaze_clock >= hold:
-            self._gaze_clock = 0.0
-            self._next_gaze = self._sample(
-                GAZE_HOLD_THINKING if self._activity is Expression.THINKING else GAZE_HOLD
+        self.gazeClock += dt
+        hold = self.nextGaze
+        if self.gazeClock >= hold:
+            self.gazeClock = 0.0
+            self.nextGaze = self.sample(
+                GAZE_HOLD_THINKING if self.activityAtual is Expression.THINKING else GAZE_HOLD
             )
-            target_x, target_y = self._next_fixation()
-            self._look_at(target_x, target_y)
+            targetX, targetY = self.nextFixation()
+            self.lookAt(targetX, targetY)
 
         # Microssacada: o olho nunca fica de fato imovel.
-        self._micro_clock += dt
-        if self._micro_clock >= self._next_micro:
-            self._micro_clock = 0.0
-            self._next_micro = self._sample(MICRO_INTERVAL)
-            self._micro_x.to(self._rng.uniform(-1, 1) * MICRO_AMPLITUDE, MICRO_DURATION)
-            self._micro_y.to(self._rng.uniform(-1, 1) * MICRO_AMPLITUDE * 0.6, MICRO_DURATION)
+        self.microClock += dt
+        if self.microClock >= self.nextMicro:
+            self.microClock = 0.0
+            self.nextMicro = self.sample(MICRO_INTERVAL)
+            self.microX.to(self.rng.uniform(-1, 1) * MICRO_AMPLITUDE, MICRO_DURATION)
+            self.microY.to(self.rng.uniform(-1, 1) * MICRO_AMPLITUDE * 0.6, MICRO_DURATION)
 
-    def _update_blink(self, dt: float) -> None:
-        self._blink.update(dt)
+    def updateBlink(self, dt: float) -> None:
+        self.blink.update(dt)
 
-        if self._blink_phase == "closing" and self._blink.done:
+        if self.blinkPhase == "closing" and self.blink.done:
             # Uma pausa curta com o olho fechado, antes de reabrir. Sem ela a
             # palpebra inverte o sentido no mesmo quadro, e o olho percebe isso
             # como um repique.
-            self._blink_phase = "held"
-            self._hold_left = BLINK_HOLD
+            self.blinkPhase = "held"
+            self.holdLeft = BLINK_HOLD
             return
 
-        if self._blink_phase == "held":
-            self._hold_left -= dt
-            if self._hold_left <= 0.0:
-                self._blink_phase = "opening"
+        if self.blinkPhase == "held":
+            self.holdLeft -= dt
+            if self.holdLeft <= 0.0:
+                self.blinkPhase = "opening"
                 # A palpebra parte do repouso, entao a curva precisa arrancar do
                 # zero: com uma curva de saida ela sairia na velocidade maxima
                 # logo apos a pausa, e isso se ve como um repuxao.
-                self._blink.to(0.0, BLINK_OPEN_DURATION, easing.ease_in_out_cubic)
+                self.blink.to(0.0, BLINK_OPEN_DURATION, easing.easeInOutCubic)
             return
 
-        if self._blink_phase == "opening" and self._blink.done:
-            self._blink_phase = "open"
-            self._blink_clock = 0.0
-            if self._queued_blinks > 0 and not self._sleeping:
-                self._queued_blinks -= 1
-                self._start_blink()
+        if self.blinkPhase == "opening" and self.blink.done:
+            self.blinkPhase = "open"
+            self.blinkClock = 0.0
+            if self.queuedBlinks > 0 and not self.sleeping:
+                self.queuedBlinks -= 1
+                self.startBlink()
             return
 
-        if self._blink_phase != "open" or self._sleeping:
+        if self.blinkPhase != "open" or self.sleeping:
             return
 
-        self._blink_clock += dt
-        if self._blink_clock >= self._next_blink:
-            self._start_blink()
-            if self._rng.random() < DOUBLE_BLINK_CHANCE:
-                self._queued_blinks = 1
+        self.blinkClock += dt
+        if self.blinkClock >= self.nextBlink:
+            self.startBlink()
+            if self.rng.random() < DOUBLE_BLINK_CHANCE:
+                self.queuedBlinks = 1
 
     # -----------------------------------------------------------------------
     # Acoes internas
     # -----------------------------------------------------------------------
-    def _start_blink(self) -> None:
-        self._blink_phase = "closing"
-        self._blink_clock = 0.0
-        self._next_blink = self._sample(
-            BLINK_INTERVAL_THINKING if self._activity is Expression.THINKING else BLINK_INTERVAL
+    def startBlink(self) -> None:
+        self.blinkPhase = "closing"
+        self.blinkClock = 0.0
+        self.nextBlink = self.sample(
+            BLINK_INTERVAL_THINKING if self.activityAtual is Expression.THINKING else BLINK_INTERVAL
         )
-        self._blink.to(1.0, BLINK_CLOSE_DURATION, easing.ease_in_quad)
+        self.blink.to(1.0, BLINK_CLOSE_DURATION, easing.easeInQuad)
 
-    def _look_at(self, x: float, y: float, duration: float | None = None) -> None:
+    def lookAt(self, x: float, y: float, duration: float | None = None) -> None:
         """Move o olhar com o perfil de uma sacada: arranque forte, freada longa."""
-        span = duration if duration is not None else self._sample(SACCADE_DURATION)
-        self._gaze_x.to(x, span, easing.ease_out_cubic)
-        self._gaze_y.to(y, span, easing.ease_out_cubic)
+        span = duration if duration is not None else self.sample(SACCADE_DURATION)
+        self.gazeX.to(x, span, easing.easeOutCubic)
+        self.gazeY.to(y, span, easing.easeOutCubic)
 
-    def _next_fixation(self) -> tuple[float, float]:
+    def nextFixation(self) -> tuple[float, float]:
         """Escolhe o proximo ponto para onde olhar."""
-        if self._activity is Expression.THINKING:
+        if self.activityAtual is Expression.THINKING:
             # Pensando, o olhar vagueia pela parte de cima do campo de visao.
-            side = self._rng.choice((-1.0, 1.0)) * self._rng.uniform(0.3, 1.0)
+            side = self.rng.choice((-1.0, 1.0)) * self.rng.uniform(0.3, 1.0)
             return LOOK_RANGE * THINKING_SPREAD * side, THINKING_LOOK_UP
 
-        if self._activity is Expression.SPEAKING:
+        if self.activityAtual is Expression.SPEAKING:
             # Falando, ela encara quem ouve, com desvios curtos.
-            return LOOK_RANGE * self._rng.uniform(-0.22, 0.22), self._rng.uniform(-12.0, 12.0)
+            return LOOK_RANGE * self.rng.uniform(-0.22, 0.22), self.rng.uniform(-12.0, 12.0)
 
         options = (-1.0, -0.5, 0.0, 0.0, 0.5, 1.0)
-        return LOOK_RANGE * self._rng.choice(options), self._rng.uniform(-20.0, 20.0)
+        return LOOK_RANGE * self.rng.choice(options), self.rng.uniform(-20.0, 20.0)
 
-    def _begin_thinking(self) -> None:
+    def beginThinking(self) -> None:
         """Antecipacao: o olhar cai um instante antes de subir para pensar."""
-        self._look_at(self._gaze_x.value, THINKING_ANTICIPATION, THINKING_ANTICIPATION_DURATION)
-        self._gaze_clock = 0.0
-        self._next_gaze = THINKING_ANTICIPATION_DURATION
+        self.lookAt(self.gazeX.value, THINKING_ANTICIPATION, THINKING_ANTICIPATION_DURATION)
+        self.gazeClock = 0.0
+        self.nextGaze = THINKING_ANTICIPATION_DURATION
 
-    def _begin_listening(self) -> None:
+    def beginListening(self) -> None:
         """Olha para frente e para de vaguear: o robo esta prestando atencao."""
-        self._look_at(0.0, 0.0, 0.16)
-        self._gaze_clock = 0.0
+        self.lookAt(0.0, 0.0, 0.16)
+        self.gazeClock = 0.0
 
-    def _begin_speaking(self) -> None:
+    def beginSpeaking(self) -> None:
         """Um pequeno salto de escala no instante em que a voz comeca."""
-        self._speech_pop.snap(SPEECH_ONSET_POP)
-        self._speech_pop.to(1.0, SPEECH_ONSET_DURATION, easing.ease_out_back)
-        self._look_at(0.0, 0.0, 0.18)
-        self._gaze_clock = 0.0
+        self.speechPop.snap(SPEECH_ONSET_POP)
+        self.speechPop.to(1.0, SPEECH_ONSET_DURATION, easing.easeOutBack)
+        self.lookAt(0.0, 0.0, 0.18)
+        self.gazeClock = 0.0
 
-    def _retarget(self, duration: float) -> None:
+    def retarget(self, duration: float) -> None:
         """Comeca a interpolar da forma atual ate a forma da expressao corrente."""
-        progress = self._morph.value
-        self._left_from = self._left_from.lerp(self._left_to, progress)
-        self._right_from = self._right_from.lerp(self._right_to, progress)
-        self._left_to, self._right_to = self._target_shapes()
-        self._morph.snap(0.0)
-        self._morph.to(1.0, duration, easing.ease_in_out_cubic)
+        progress = self.morph.value
+        self.leftFrom = self.leftFrom.lerp(self.leftTo, progress)
+        self.rightFrom = self.rightFrom.lerp(self.rightTo, progress)
+        self.leftTo, self.rightTo = self.targetShapes()
+        self.morph.snap(0.0)
+        self.morph.to(1.0, duration, easing.easeInOutCubic)
 
-    def _target_shapes(self) -> tuple[EyeShape, EyeShape]:
+    def targetShapes(self) -> tuple[EyeShape, EyeShape]:
         """Forma de repouso de cada olho na expressao atual.
 
         A assimetria entre os dois olhos e deliberada: e ela que transforma uma
         forma geometrica em algo com intencao.
         """
-        expression = self.current_expression
-        base = preset_for(expression)
+        expression = self.currentExpression
+        base = presetFor(expression)
 
         if expression is Expression.THINKING:
             # Um olho mais fechado que o outro: a cara de quem esta matutando.
             # A diferenca e pequena de proposito — exagerar vira caricatura.
-            return replace(base, top_lid=0.09), replace(base, top_lid=0.21)
+            return replace(base, topLid=0.09), replace(base, topLid=0.21)
 
         if expression is Expression.DIZZY:
-            return replace(base, top_lid=0.28), replace(base, top_lid=0.14, top_lid_slant=0.2)
+            return replace(base, topLid=0.28), replace(base, topLid=0.14, topLidSlant=0.2)
 
         return base, base
 
     # -----------------------------------------------------------------------
     # Sorteios
     # -----------------------------------------------------------------------
-    def _sample(self, interval: tuple[float, float]) -> float:
-        return self._rng.uniform(*interval)
+    def sample(self, interval: tuple[float, float]) -> float:
+        return self.rng.uniform(*interval)
 
-    def _weighted_mood(self) -> Expression:
+    def weightedMood(self) -> Expression:
         candidates = [
             expression
             for expression, weight in IDLE_WEIGHTS.items()
-            if expression != self._mood
+            if expression != self.mood
             for _ in range(weight)
         ]
-        return self._rng.choice(candidates) if candidates else Expression.NEUTRAL
+        return self.rng.choice(candidates) if candidates else Expression.NEUTRAL

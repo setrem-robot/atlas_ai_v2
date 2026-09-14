@@ -41,7 +41,7 @@ import pygame
 
 from roboteye.face.animator import EyeAnimator
 from roboteye.face.layout import EyeLayout
-from roboteye.face.renderer import EyeRenderer, quality_for
+from roboteye.face.renderer import EyeRenderer, qualityFor
 from roboteye.face.theme import Theme
 
 #: Legenda de exemplo. Medir sem ela subestima o quadro tipico, que e justamente
@@ -58,18 +58,18 @@ class Resultado:
     largura: int
     altura: int
     qualidade: str
-    mediana_ms: float
-    p95_ms: float
+    medianaMs: float
+    p95Ms: float
 
-    def fracao(self, orcamento_ms: float) -> float:
+    def fracao(self, orcamentoMs: float) -> float:
         """Quanto do quadro o desenho consome, em porcentagem, no p95."""
-        return 100.0 * self.p95_ms / orcamento_ms
+        return 100.0 * self.p95Ms / orcamentoMs
 
 
 def medir(largura: int, altura: int, qualidade: str, quadros: int) -> Resultado:
     screen = pygame.display.set_mode((largura, altura))
     layout = EyeLayout.for_screen(largura, altura)
-    renderer = EyeRenderer(screen, layout, Theme(), quality=quality_for(qualidade))
+    renderer = EyeRenderer(screen, layout, Theme(), quality=qualityFor(qualidade))
     animator = EyeAnimator(idle_animations=True)
 
     passo = 1.0 / 60.0
@@ -92,12 +92,12 @@ def medir(largura: int, altura: int, qualidade: str, quadros: int) -> Resultado:
         largura=largura,
         altura=altura,
         qualidade=qualidade,
-        mediana_ms=statistics.median(tempos),
-        p95_ms=tempos[min(len(tempos) - 1, int(len(tempos) * 0.95))],
+        medianaMs=statistics.median(tempos),
+        p95Ms=tempos[min(len(tempos) - 1, int(len(tempos) * 0.95))],
     )
 
 
-def _resolucao(texto: str) -> tuple[int, int]:
+def resolucao(texto: str) -> tuple[int, int]:
     try:
         largura, altura = (int(parte) for parte in texto.lower().split("x", 1))
     except ValueError as exc:
@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--resolucao",
-        type=_resolucao,
+        type=resolucao,
         action="append",
         dest="resolucoes",
         help="LARGURAxALTURA (repetivel; padrao: 800x480, 1280x720, 1920x1080)",
@@ -137,10 +137,10 @@ def main(argv: list[str] | None = None) -> int:
 
     resolucoes = args.resolucoes or [(800, 480), (1280, 720), (1920, 1080)]
     qualidades = args.qualidades or ["auto", "low"]
-    orcamento_ms = 1000.0 / max(1, args.fps)
+    orcamentoMs = 1000.0 / max(1, args.fps)
 
     pygame.init()
-    print(f"\nquadro de {orcamento_ms:.1f} ms ({args.fps} FPS) · {args.quadros} quadros por medida")
+    print(f"\nquadro de {orcamentoMs:.1f} ms ({args.fps} FPS) · {args.quadros} quadros por medida")
     print("=" * 64)
 
     resultados = [
@@ -154,19 +154,19 @@ def main(argv: list[str] | None = None) -> int:
         tela = f"{r.largura}x{r.altura}"
         print(
             f"{tela:>10}  {r.qualidade:<7}"
-            f"mediana {r.mediana_ms:6.2f} ms   p95 {r.p95_ms:6.2f} ms"
-            f"   {r.fracao(orcamento_ms):5.1f}% do quadro"
+            f"mediana {r.medianaMs:6.2f} ms   p95 {r.p95Ms:6.2f} ms"
+            f"   {r.fracao(orcamentoMs):5.1f}% do quadro"
         )
     print("=" * 64)
 
     if args.orcamento is None:
         return 0
 
-    estourados = [r for r in resultados if r.fracao(orcamento_ms) > args.orcamento]
+    estourados = [r for r in resultados if r.fracao(orcamentoMs) > args.orcamento]
     for r in estourados:
         print(
             f"[falha] {r.largura}x{r.altura} {r.qualidade}: "
-            f"{r.fracao(orcamento_ms):.1f}% do quadro, teto {args.orcamento:.1f}%"
+            f"{r.fracao(orcamentoMs):.1f}% do quadro, teto {args.orcamento:.1f}%"
         )
     return 1 if estourados else 0
 

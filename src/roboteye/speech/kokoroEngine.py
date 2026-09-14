@@ -16,13 +16,13 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import AudioFormat, SpeechChunk, SpeechError
 
 if TYPE_CHECKING:
     from roboteye.config import VoiceSettings
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 _INSTALL_HINT = 'Kokoro nao esta instalado. Rode: pip install -e ".[kokoro]"'
 
@@ -47,79 +47,79 @@ class KokoroEngine:
     name = "kokoro"
 
     def __init__(self, settings: VoiceSettings) -> None:
-        self._settings = settings
-        self._kokoro: Any | None = None
-        self._speaker = settings.speaker or DEFAULT_SPEAKER
-        self._language = _LANGUAGES.get(settings.language, "en-us")
+        self.settings = settings
+        self.kokoro: Any | None = None
+        self.speaker = settings.speaker or DEFAULT_SPEAKER
+        self.language = _LANGUAGES.get(settings.language, "en-us")
 
     # -- ciclo de vida -----------------------------------------------------
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         """Carrega o modelo (~1,5 s). Feito no arranque para nao pagar na 1a fala."""
-        if self._kokoro is not None:
+        if self.kokoro is not None:
             return
 
         try:
-            from kokoro_onnx import Kokoro
+            from kokoroOnnx import Kokoro
         except ImportError as exc:  # pragma: no cover - depende do ambiente
             raise SpeechError(_INSTALL_HINT) from exc
 
-        model_path = self._settings.model_path
-        voices_path = self._settings.resolved_config_path()
-        _ensure_files(model_path, voices_path)
+        modelPath = self.settings.modelPath
+        voicesPath = self.settings.resolvedConfigPath()
+        ensureFiles(modelPath, voicesPath)
 
-        logger.info("carregando voz kokoro: %s", self._speaker)
+        logger.info("carregando voz kokoro: %s", self.speaker)
         try:
-            self._kokoro = Kokoro(str(model_path), str(voices_path))
+            self.kokoro = Kokoro(str(modelPath), str(voicesPath))
         except Exception as exc:
-            raise SpeechError(f"falha ao carregar o modelo Kokoro {model_path}: {exc}") from exc
+            raise SpeechError(f"falha ao carregar o modelo Kokoro {modelPath}: {exc}") from exc
 
-        available = set(self._kokoro.get_voices())
-        if self._speaker not in available:
+        available = set(self.kokoro.get_voices())
+        if self.speaker not in available:
             raise SpeechError(
-                f"voz {self._speaker!r} nao existe no pacote Kokoro "
+                f"voz {self.speaker!r} nao existe no pacote Kokoro "
                 f"(ha {len(available)}, por exemplo: {', '.join(sorted(available)[:5])})"
             )
 
     def close(self) -> None:
-        self._kokoro = None
+        self.kokoro = None
 
     # -- sintese -----------------------------------------------------------
     def synthesize(self, text: str) -> Iterator[SpeechChunk]:
         if not text.strip():
             return
 
-        self.warm_up()
-        assert self._kokoro is not None  # garantido por warm_up
+        self.warmUp()
+        assert self.kokoro is not None  # garantido por warm_up
 
         try:
-            samples, sample_rate = self._kokoro.create(
+            samples, sampleRate = self.kokoro.create(
                 text,
-                voice=self._speaker,
-                speed=1.0 / self._settings.length_scale,
-                lang=self._language,
+                voice=self.speaker,
+                speed=1.0 / self.settings.lengthScale,
+                lang=self.language,
             )
         except Exception as exc:
             raise SpeechError(f"falha na sintese Kokoro: {exc}") from exc
 
         yield SpeechChunk(
-            audio=_to_pcm16(samples),
-            format=AudioFormat(sample_rate=sample_rate, channels=1, sample_width=2),
+            audio=toPcm16(samples),
+            format=AudioFormat(sampleRate=sampleRate, channels=1, sampleWidth=2),
         )
 
 
-def _to_pcm16(samples: np.ndarray) -> bytes:
+def toPcm16(samples: np.ndarray) -> bytes:
     """Converte as amostras de ponto flutuante (-1..1) para PCM de 16 bits."""
     clipped = np.clip(samples, -1.0, 1.0)
     return (clipped * 32767.0).astype(np.int16).tobytes()
 
 
-def _ensure_files(model_path: Path, voices_path: Path) -> None:
-    if not model_path.is_file():
+def ensureFiles(modelPath: Path, voicesPath: Path) -> None:
+    if not modelPath.is_file():
         raise SpeechError(
-            f"modelo Kokoro nao encontrado em {model_path}. Baixe com: roboteye voice download dora"
+            f"modelo Kokoro nao encontrado em {modelPath}. Baixe com: roboteye voice download dora"
         )
-    if not voices_path.is_file():
+    if not voicesPath.is_file():
         raise SpeechError(
-            f"pacote de vozes nao encontrado em {voices_path}. "
+            f"pacote de vozes nao encontrado em {voicesPath}. "
             "Baixe com: roboteye voice download dora --force"
         )

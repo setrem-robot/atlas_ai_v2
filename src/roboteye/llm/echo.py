@@ -26,18 +26,18 @@ class EchoClient:
     name = "echo"
 
     def __init__(self, *, seed: int | None = None) -> None:
-        self._rng = random.Random(seed)
+        self.rng = random.Random(seed)
 
-    def stream_reply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
-        reply = self._rng.choice(_CANNED_REPLIES)
+    def streamReply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
+        reply = self.rng.choice(_CANNED_REPLIES)
         # Emite em pedacos para exercitar o mesmo caminho do streaming real.
         for word in reply.split(" "):
             yield word + " "
 
-    def is_available(self) -> bool:
+    def isAvailable(self) -> bool:
         return True
 
-    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
+    def warmUp(self, messages: Sequence[ChatMessage] = ()) -> None:
         return None
 
     def close(self) -> None:

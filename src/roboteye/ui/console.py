@@ -21,9 +21,9 @@ from roboteye.core.events import (
     ThinkingStarted,
     UserMessage,
 )
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 PROMPT = "\033[36mvoce\033[0m> "
 REPLY_PREFIX = "\033[35mAtlas\033[0m> "
@@ -55,30 +55,30 @@ Qualquer outra linha e enviada para a Atlas.\
 class ConsoleChat:
     """Laco de leitura do teclado."""
 
-    def __init__(self, assistant: Assistant, bus: EventBus, *, echo_replies: bool = True) -> None:
-        self._assistant = assistant
-        self._bus = bus
-        self._running = False
-        self._thread: threading.Thread | None = None
-        self._echo = echo_replies
+    def __init__(self, assistant: Assistant, bus: EventBus, *, echoReplies: bool = True) -> None:
+        self.assistant = assistant
+        self.bus = bus
+        self.running = False
+        self.thread: threading.Thread | None = None
+        self.echo = echoReplies
 
         #: Instante da mensagem do usuario aguardando a 1a fala da resposta. Serve
         #: so para medir o tempo ate o robo comecar a responder; a 1a `SpeechStarted`
         #: consome e zera, para o numero sair uma vez por turno.
-        self._aguardando_desde: float | None = None
+        self.aguardandoDesde: float | None = None
 
-        if echo_replies:
-            bus.subscribe(self._print_event)
-        bus.subscribe(self._on_shutdown, event_type=Shutdown)
+        if echoReplies:
+            bus.subscribe(self.printEvent)
+        bus.subscribe(self.onShutdown, eventType=Shutdown)
 
     # -- execucao ----------------------------------------------------------
     def run(self) -> None:
         """Le do teclado ate `/sair` ou EOF. Bloqueante."""
-        self._running = True
+        self.running = True
         print(HELP)
         print()
 
-        while self._running:
+        while self.running:
             try:
                 line = input(PROMPT).strip()
             except (EOFError, KeyboardInterrupt):
@@ -88,27 +88,27 @@ class ConsoleChat:
             if not line:
                 continue
             if line.startswith("/"):
-                if not self._handle_command(line):
+                if not self.handleCommand(line):
                     break
                 continue
 
-            self._assistant.submit(line)
+            self.assistant.submit(line)
 
-        self._running = False
-        self._bus.publish(Shutdown())
+        self.running = False
+        self.bus.publish(Shutdown())
 
-    def start_background(self) -> None:
+    def startBackground(self) -> None:
         """Roda o chat numa thread, para conviver com a face na thread principal."""
-        if self._thread is not None:
+        if self.thread is not None:
             return
-        self._thread = threading.Thread(target=self.run, name="console-chat", daemon=True)
-        self._thread.start()
+        self.thread = threading.Thread(target=self.run, name="console-chat", daemon=True)
+        self.thread.start()
 
     def stop(self) -> None:
-        self._running = False
+        self.running = False
 
     # -- comandos ----------------------------------------------------------
-    def _handle_command(self, line: str) -> bool:
+    def handleCommand(self, line: str) -> bool:
         """Executa um comando. Devolve False quando o chat deve encerrar."""
         command, _, argumento = line.partition(" ")
         command = command.lower()
@@ -118,19 +118,19 @@ class ConsoleChat:
             case "/ajuda" | "/help":
                 print(HELP)
             case "/limpar" | "/clear":
-                self._assistant.memory.clear()
+                self.assistant.memory.clear()
                 print("  historico apagado.")
             case "/parar" | "/stop":
-                self._assistant.interrupt()
+                self.assistant.interrupt()
                 print("  silencio.")
             case "/lembrar" | "/remember":
-                self._remember(argumento)
+                self.remember(argumento)
             case "/esquecer" | "/forget":
-                self._forget(argumento)
+                self.forget(argumento)
             case "/memoria" | "/memory":
-                self._show_memory()
+                self.showMemory()
             case "/recarregar" | "/reload":
-                self._assistant.reload_persona()
+                self.assistant.reloadPersona()
                 print("  persona recarregada do disco.")
             case "/sair" | "/quit" | "/exit":
                 return False
@@ -139,27 +139,27 @@ class ConsoleChat:
         return True
 
     # -- ensinar -----------------------------------------------------------
-    def _remember(self, fato: str) -> None:
+    def remember(self, fato: str) -> None:
         if not fato:
             print("  uso: /lembrar meu nome e Kerlon")
             return
-        if self._assistant.teach(fato):
+        if self.assistant.teach(fato):
             print(f"  guardado: {fato}")
         else:
             print("  ela ja sabia disso.")
 
-    def _forget(self, trecho: str) -> None:
+    def forget(self, trecho: str) -> None:
         if not trecho:
             print("  uso: /esquecer nome")
             return
-        removidos = self._assistant.forget(trecho)
+        removidos = self.assistant.forget(trecho)
         if removidos:
             print(f"  {removidos} fato(s) esquecido(s).")
         else:
             print("  nada correspondia.")
 
-    def _show_memory(self) -> None:
-        fatos = self._assistant.facts()
+    def showMemory(self) -> None:
+        fatos = self.assistant.facts()
         if not fatos:
             print("  ela ainda nao aprendeu nada. Use /lembrar <fato>.")
             return
@@ -168,22 +168,22 @@ class ConsoleChat:
             print(f"    - {fato}")
 
     # -- saida -------------------------------------------------------------
-    def _print_event(self, event: Event) -> None:
+    def printEvent(self, event: Event) -> None:
         match event:
             case SpeechHeard():
-                self._print_heard(event)
+                self.printHeard(event)
             case UserMessage():
                 # So marca o inicio do turno para cronometrar a resposta. Nao
                 # imprime: o texto digitado ja esta na tela, e o falado saiu no
                 # bloco do `SpeechHeard` acima.
-                self._aguardando_desde = event.timestamp
+                self.aguardandoDesde = event.timestamp
             case ThinkingStarted():
                 print(f"  {DIM}…pensando{RESET}")
             case SpeechStarted():
-                if self._aguardando_desde is not None:
-                    ms = (event.timestamp - self._aguardando_desde) * 1000.0
+                if self.aguardandoDesde is not None:
+                    ms = (event.timestamp - self.aguardandoDesde) * 1000.0
                     print(f"   {DIM}⏱ 1a fala em {ms:.0f} ms (LLM + TTS){RESET}")
-                    self._aguardando_desde = None
+                    self.aguardandoDesde = None
             case AssistantReply(text=text):
                 print(f"{REPLY_PREFIX}{text}")
             case ErrorOccurred(message=message, source=source):
@@ -191,15 +191,15 @@ class ConsoleChat:
             case Notice(message=message, source=source):
                 print(f"{NOTICE_PREFIX}[{source}] {message}")
 
-    def _print_heard(self, event: SpeechHeard) -> None:
+    def printHeard(self, event: SpeechHeard) -> None:
         """Mostra o que o microfone entendeu, com as medidas do reconhecimento."""
         medidas = [f"STT {event.ms:.0f} ms"]
         if event.confidence is not None:
             medidas.append(f"conf {event.confidence:.2f}")
-        if event.no_speech is not None and event.no_speech > 0.5:
+        if event.noSpeech is not None and event.noSpeech > 0.5:
             # So aparece quando e alto: e o sinal de que o trecho era mais
             # silencio ou ruido que fala — a pista mais util quando o STT inventa.
-            medidas.append(f"silencio {event.no_speech:.0%}")
+            medidas.append(f"silencio {event.noSpeech:.0%}")
         selo = f"{DIM}[{' · '.join(medidas)}]{RESET}"
 
         if event.accepted is None:
@@ -212,5 +212,5 @@ class ConsoleChat:
             # O nome e os restos foram tirados: mostra o que virou a pergunta.
             print(f'   {DIM}→ entendi:{RESET} "{event.accepted}"')
 
-    def _on_shutdown(self, _: Event) -> None:
-        self._running = False
+    def onShutdown(self, _: Event) -> None:
+        self.running = False

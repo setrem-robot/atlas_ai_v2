@@ -30,9 +30,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 SYS_NET = Path("/sys/class/net")
 
@@ -46,11 +46,11 @@ class EstadoRadio:
 
     interface: str = ""
     ssid: str = ""
-    frequencia_mhz: int = 0
+    frequenciaMhz: int = 0
     #: Potencia do sinal em dBm. Negativo; quanto mais perto de zero, melhor.
-    sinal_dbm: int = 0
-    power_save: bool | None = None
-    bluetooth_ligado: bool = False
+    sinalDbm: int = 0
+    powerSave: bool | None = None
+    bluetoothLigado: bool = False
     erro: str = ""
 
     @property
@@ -60,14 +60,14 @@ class EstadoRadio:
     @property
     def banda(self) -> str:
         """Banda em que o Wi-Fi esta: 5 GHz, 2,4 GHz, ou vazio sem conexao."""
-        if not self.frequencia_mhz:
+        if not self.frequenciaMhz:
             return ""
-        return "5 GHz" if self.frequencia_mhz >= LIMITE_BANDA_MHZ else "2,4 GHz"
+        return "5 GHz" if self.frequenciaMhz >= LIMITE_BANDA_MHZ else "2,4 GHz"
 
     @property
     def disputando(self) -> bool:
         """Se Wi-Fi e Bluetooth estao na mesma faixa, brigando pela antena."""
-        return self.bluetooth_ligado and self.banda == "2,4 GHz"
+        return self.bluetoothLigado and self.banda == "2,4 GHz"
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +98,7 @@ def aconselhar(estado: EstadoRadio) -> list[Conselho]:
             )
         )
 
-    if estado.power_save:
+    if estado.powerSave:
         conselhos.append(
             Conselho(
                 titulo="desligar a economia de energia do Wi-Fi",
@@ -131,14 +131,14 @@ def render(estado: EstadoRadio, conselhos: list[Conselho] | None = None) -> str:
     if estado.conectado:
         linhas.append(
             f"  Wi-Fi       {estado.ssid} · {estado.banda} "
-            f"({estado.frequencia_mhz} MHz) · {estado.sinal_dbm} dBm"
+            f"({estado.frequenciaMhz} MHz) · {estado.sinalDbm} dBm"
         )
     else:
         linhas.append(f"  Wi-Fi       sem conexão ({estado.interface or 'sem interface'})")
 
-    economia = {True: "ligada", False: "desligada", None: "não sei dizer"}[estado.power_save]
+    economia = {True: "ligada", False: "desligada", None: "não sei dizer"}[estado.powerSave]
     linhas.append(f"  economia    {economia}")
-    linhas.append(f"  Bluetooth   {'ligado' if estado.bluetooth_ligado else 'desligado'}")
+    linhas.append(f"  Bluetooth   {'ligado' if estado.bluetoothLigado else 'desligado'}")
 
     if conselhos is None:
         conselhos = aconselhar(estado)
@@ -164,7 +164,7 @@ def render(estado: EstadoRadio, conselhos: list[Conselho] | None = None) -> str:
 # ---------------------------------------------------------------------------
 def medir() -> EstadoRadio:
     """Le o estado atual dos dois radios."""
-    interface = interface_wifi()
+    interface = interfaceWifi()
     if not interface:
         return EstadoRadio(erro="nenhuma interface Wi-Fi encontrada (isto roda no robô)")
     if shutil.which("iw") is None:
@@ -173,18 +173,18 @@ def medir() -> EstadoRadio:
             erro="o comando `iw` não está instalado: sudo apt install iw",
         )
 
-    ssid, frequencia, sinal = ler_link(_rodar("iw", "dev", interface, "link"))
+    ssid, frequencia, sinal = lerLink(rodar("iw", "dev", interface, "link"))
     return EstadoRadio(
         interface=interface,
         ssid=ssid,
-        frequencia_mhz=frequencia,
-        sinal_dbm=sinal,
-        power_save=ler_power_save(_rodar("iw", "dev", interface, "get", "power_save")),
-        bluetooth_ligado=_bluetooth_ligado(),
+        frequenciaMhz=frequencia,
+        sinalDbm=sinal,
+        powerSave=lerPowerSave(rodar("iw", "dev", interface, "get", "power_save")),
+        bluetoothLigado=bluetoothLigado(),
     )
 
 
-def interface_wifi() -> str:
+def interfaceWifi() -> str:
     """A primeira interface sem fio da maquina, normalmente `wlan0`.
 
     O diretorio `wireless` so existe em interfaces de radio — e mais confiavel
@@ -199,7 +199,7 @@ def interface_wifi() -> str:
     return ""
 
 
-def ler_link(saida: str) -> tuple[str, int, int]:
+def lerLink(saida: str) -> tuple[str, int, int]:
     """Extrai SSID, frequencia e sinal de `iw dev X link`. Funcao pura.
 
     Sem conexao a saida e a linha "Not connected." — dai o retorno neutro em
@@ -224,7 +224,7 @@ def ler_link(saida: str) -> tuple[str, int, int]:
     return ssid, frequencia, sinal
 
 
-def ler_power_save(saida: str) -> bool | None:
+def lerPowerSave(saida: str) -> bool | None:
     """Le `iw dev X get power_save`. None quando a resposta nao foi entendida."""
     texto = saida.lower()
     if "power save: on" in texto:
@@ -234,7 +234,7 @@ def ler_power_save(saida: str) -> bool | None:
     return None
 
 
-def _bluetooth_ligado() -> bool:
+def bluetoothLigado() -> bool:
     """Se ha um controlador Bluetooth ligado.
 
     `rfkill` diz apenas se o radio foi bloqueado; o que interessa aqui e se ele
@@ -257,7 +257,7 @@ def _bluetooth_ligado() -> bool:
     return False
 
 
-def _rodar(*comando: str) -> str:
+def rodar(*comando: str) -> str:
     try:
         pronto = subprocess.run(comando, capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError) as exc:

@@ -32,10 +32,10 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import SpeechChunk, SpeechError, TTSEngine
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Quanto tempo o motor preferido fica em quarentena depois de falhar.
 DEFAULT_COOLDOWN = 60.0
@@ -58,81 +58,81 @@ class FallbackEngine:
         backup: TTSEngine,
         *,
         cooldown: float = DEFAULT_COOLDOWN,
-        espera_de_arranque: float = ESPERA_DE_ARRANQUE,
-        on_switch: Callable[[str], None] | None = None,
+        esperaDeArranque: float = ESPERA_DE_ARRANQUE,
+        onSwitch: Callable[[str], None] | None = None,
     ) -> None:
-        self._primary = primary
-        self._backup = backup
-        self._cooldown = max(0.0, cooldown)
-        self._blocked_until = 0.0
-        self._espera_de_arranque = max(0.0, espera_de_arranque)
+        self.primary = primary
+        self.backup = backup
+        self.cooldown = max(0.0, cooldown)
+        self.blockedUntil = 0.0
+        self.esperaDeArranque = max(0.0, esperaDeArranque)
         #: A espera acontece uma vez so. Depois da primeira frase, uma falha de
         #: rede e uma falha de rede — quem esta conversando prefere a voz
         #: reserva agora a voz certa daqui a vinte segundos.
-        self._primeira_frase = True
+        self.primeiraFrase = True
         #: Chamado quando a voz muda, para que a troca nao passe despercebida.
         #: Uma reserva do mesmo idioma e genero passa facilmente por "a voz
         #: configurada, so que errada" — e quem esta ouvindo vai procurar o erro
         #: na configuracao, que e o lugar onde ele nao esta.
-        self._on_switch = on_switch
-        self._announced = False
+        self.onSwitch = onSwitch
+        self.announced = False
         #: Atributo, e nao propriedade: o protocolo `TTSEngine` declara `name`
         #: como variavel, e uma propriedade so de leitura nao o satisfaz.
         self.name = f"{primary.name}+{backup.name}"
 
     # -- ciclo de vida -----------------------------------------------------
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         """Prepara o reserva sempre; o preferido, so se der.
 
         A ordem importa: o reserva e quem precisa estar pronto no instante em
         que o preferido falhar, e carregar um modelo local leva segundos que
         nao cabem no meio de uma frase.
         """
-        self._backup.warm_up()
+        self.backup.warmUp()
         try:
-            self._primary.warm_up()
+            self.primary.warmUp()
         except SpeechError as exc:
             logger.warning("voz preferida indisponivel (%s); usando a reserva", exc)
-            self._block()
+            self.block()
 
     def close(self) -> None:
-        self._primary.close()
-        self._backup.close()
+        self.primary.close()
+        self.backup.close()
 
     # -- sintese -----------------------------------------------------------
     def synthesize(self, text: str) -> Iterator[SpeechChunk]:
-        if self._primeira_frase:
-            self._primeira_frase = False
-            self._esperar_o_preferido()
+        if self.primeiraFrase:
+            self.primeiraFrase = False
+            self.esperarOPreferido()
 
-        if self._available():
-            chunks = self._try_primary(text)
+        if self.available():
+            chunks = self.tryPrimary(text)
             if chunks is not None:
                 yield from chunks
                 return
 
-        yield from self._backup.synthesize(text)
+        yield from self.backup.synthesize(text)
 
-    def _try_primary(self, text: str) -> Iterator[SpeechChunk] | None:
+    def tryPrimary(self, text: str) -> Iterator[SpeechChunk] | None:
         """Devolve o audio do motor preferido, ou None se ele falhou.
 
         O primeiro bloco e forcado aqui dentro: e o que garante que a decisao
         entre uma voz e outra seja tomada antes de qualquer som ser tocado.
         """
-        stream = self._primary.synthesize(text)
+        stream = self.primary.synthesize(text)
         try:
             first = next(stream)
         except StopIteration:
             return iter(())
         except Exception as exc:
             logger.warning("voz preferida falhou (%s); caindo para a reserva", exc)
-            self._block()
+            self.block()
             return None
 
-        return _resume(first, stream, self._block)
+        return resume(first, stream, self.block)
 
     # -- arranque -----------------------------------------------------------
-    def _esperar_o_preferido(self) -> None:
+    def esperarOPreferido(self) -> None:
         """Da ao motor preferido um tempo para ficar de pe, uma unica vez.
 
         Pergunta ao proprio motor se ele ja e alcancavel, quando ele souber
@@ -140,22 +140,22 @@ class FallbackEngine:
         fora do ar. Isto roda na thread que ia sintetizar de qualquer jeito, e
         nunca na que desenha a face.
         """
-        alcancavel = getattr(self._primary, "alcancavel", None)
-        if alcancavel is None or self._espera_de_arranque <= 0:
+        alcancavel = getattr(self.primary, "alcancavel", None)
+        if alcancavel is None or self.esperaDeArranque <= 0:
             return
         if alcancavel():
             return
 
         logger.info(
             "a rede ainda nao subiu; esperando ate %.0fs para falar com a voz %s",
-            self._espera_de_arranque,
-            self._primary.name,
+            self.esperaDeArranque,
+            self.primary.name,
         )
-        limite = time.monotonic() + self._espera_de_arranque
+        limite = time.monotonic() + self.esperaDeArranque
         while time.monotonic() < limite:
             time.sleep(INTERVALO_DA_ESPERA)
             if alcancavel():
-                logger.info("a rede chegou; a primeira frase vai na voz %s", self._primary.name)
+                logger.info("a rede chegou; a primeira frase vai na voz %s", self.primary.name)
                 return
         # Nao adianta tentar assim mesmo: a espera acabou de provar que o
         # servidor esta inalcancavel, e a tentativa so somaria o tempo limite da
@@ -163,37 +163,37 @@ class FallbackEngine:
         # dia. A quarentena normal cuida de tentar de novo mais tarde.
         logger.warning(
             "a rede nao chegou em %.0fs; a primeira frase vai pela voz %s",
-            self._espera_de_arranque,
-            self._backup.name,
+            self.esperaDeArranque,
+            self.backup.name,
         )
-        self._block()
+        self.block()
 
     # -- quarentena ---------------------------------------------------------
-    def _available(self) -> bool:
-        disponivel = time.monotonic() >= self._blocked_until
-        if disponivel and self._announced:
+    def available(self) -> bool:
+        disponivel = time.monotonic() >= self.blockedUntil
+        if disponivel and self.announced:
             # Voltou a funcionar: o proximo tropeco merece ser anunciado de novo.
-            self._announced = False
-            self._notify(f"voz {self._primary.name} de volta")
+            self.announced = False
+            self.notify(f"voz {self.primary.name} de volta")
         return disponivel
 
-    def _block(self) -> None:
-        self._blocked_until = time.monotonic() + self._cooldown
-        if not self._announced:
-            self._announced = True
-            self._notify(
-                f"falando pela voz reserva ({self._backup.name}): {self._primary.name} indisponivel"
+    def block(self) -> None:
+        self.blockedUntil = time.monotonic() + self.cooldown
+        if not self.announced:
+            self.announced = True
+            self.notify(
+                f"falando pela voz reserva ({self.backup.name}): {self.primary.name} indisponivel"
             )
 
-    def _notify(self, message: str) -> None:
-        if self._on_switch is not None:
-            self._on_switch(message)
+    def notify(self, message: str) -> None:
+        if self.onSwitch is not None:
+            self.onSwitch(message)
 
 
-def _resume(
+def resume(
     first: SpeechChunk,
     stream: Iterator[SpeechChunk],
-    on_failure: Callable[[], None],
+    onFailure: Callable[[], None],
 ) -> Iterator[SpeechChunk]:
     """Entrega o primeiro bloco e segue com o resto do fluxo.
 
@@ -206,4 +206,4 @@ def _resume(
         yield from stream
     except Exception as exc:
         logger.warning("a voz preferida caiu no meio da frase (%s)", exc)
-        on_failure()
+        onFailure()

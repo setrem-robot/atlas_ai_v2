@@ -27,21 +27,21 @@ from roboteye.core.events import (
     SpeechStarted,
     ThinkingStarted,
     UserMessage,
-    queue_subscriber,
+    queueSubscriber,
 )
 from roboteye.core.text import truncate
 from roboteye.face.animator import EyeAnimator
 from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
-from roboteye.face.renderer import EyeRenderer, quality_for
+from roboteye.face.renderer import EyeRenderer, qualityFor
 from roboteye.face.theme import Theme
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.envelope import SpeechEnvelope
 
 if TYPE_CHECKING:
     from roboteye.config import FaceSettings
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 HINT_TEXT = "ESC sair · S dormir · ESPACO piscar · H ajuda"
 
@@ -66,35 +66,35 @@ class FaceApp:
         settings: FaceSettings,
         bus: EventBus,
         *,
-        show_hint: bool = True,
+        showHint: bool = True,
         envelope: SpeechEnvelope | None = None,
     ) -> None:
-        self._settings = settings
-        self._bus = bus
+        self.settings = settings
+        self.bus = bus
         #: Amplitude do audio em reproducao, para animar a fala. Sem ele a face
         #: continua funcionando, com o movimento sintetico.
-        self._envelope = envelope
-        self._events: queue.Queue[Event] = queue.Queue()
-        self._running = False
-        self._show_hint = show_hint
+        self.envelope = envelope
+        self.events: queue.Queue[Event] = queue.Queue()
+        self.running = False
+        self.showHint = showHint
 
-        self._caption = ""
-        self._caption_age = 0.0
+        self.caption = ""
+        self.captionAge = 0.0
 
-        self._fps = 0.0
-        self._fps_age = 0.0
+        self.fps = 0.0
+        self.fpsAge = 0.0
 
-        self._animator = EyeAnimator(idle_animations=settings.idle_animations)
-        self._screen: pygame.Surface | None = None
-        self._renderer: EyeRenderer | None = None
-        self._clock: pygame.time.Clock | None = None
+        self.animator = EyeAnimator(idleAnimations=settings.idleAnimations)
+        self.screen: pygame.Surface | None = None
+        self.renderer: EyeRenderer | None = None
+        self.clock: pygame.time.Clock | None = None
 
-        bus.subscribe(queue_subscriber(self._events))
+        bus.subscribe(queueSubscriber(self.events))
 
     # -- ciclo de vida -----------------------------------------------------
-    def _create_window(self) -> None:
+    def createWindow(self) -> None:
         if os.environ.get("SDL_VIDEODRIVER") is None:
-            escolhido = _pick_video_driver()
+            escolhido = pickVideoDriver()
             if escolhido is not None:
                 os.environ["SDL_VIDEODRIVER"] = escolhido
 
@@ -104,193 +104,193 @@ class FaceApp:
         # Sem desktop nao ha janela: o KMSDRM entrega a tela inteira e ponto. Um
         # `set_mode` de 1280x720 ali dentro nao daria uma janela menor, daria a
         # tela toda com a face desenhada num pedaco dela.
-        if self._settings.fullscreen or os.environ.get("SDL_VIDEODRIVER") == "kmsdrm":
-            self._screen = _open_screen((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF)
+        if self.settings.fullscreen or os.environ.get("SDL_VIDEODRIVER") == "kmsdrm":
+            self.screen = openScreen((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF)
             # Depois do `set_mode`, e nao antes: sem tela aberta esta chamada
             # levanta "video system not initialized", e o traceback passa a
             # acusar o mouse quando o problema real e o video que nao subiu.
             pygame.mouse.set_visible(False)
         else:
-            self._screen = _open_screen(
-                (self._settings.width, self._settings.height),
+            self.screen = openScreen(
+                (self.settings.width, self.settings.height),
                 pygame.RESIZABLE | pygame.DOUBLEBUF,
             )
 
-        width, height = self._screen.get_size()
-        layout = EyeLayout.for_screen(width, height)
-        quality = quality_for(self._settings.quality)
-        self._renderer = EyeRenderer(
-            self._screen,
+        width, height = self.screen.get_size()
+        layout = EyeLayout.forScreen(width, height)
+        quality = qualityFor(self.settings.quality)
+        self.renderer = EyeRenderer(
+            self.screen,
             layout,
-            Theme.from_settings(self._settings),
+            Theme.fromSettings(self.settings),
             quality=quality,
-            corner_radius=self._settings.corner_radius,
+            cornerRadius=self.settings.cornerRadius,
         )
-        self._clock = pygame.time.Clock()
+        self.clock = pygame.time.Clock()
         logger.info("face iniciada em %dx%d (qualidade %s)", width, height, quality.name)
 
     def run(self) -> None:
         """Executa o loop ate o usuario fechar a janela. Bloqueante."""
-        self._create_window()
-        assert self._renderer is not None and self._clock is not None
+        self.createWindow()
+        assert self.renderer is not None and self.clock is not None
 
-        self._running = True
+        self.running = True
         try:
-            while self._running:
-                dt = self._clock.tick(self._settings.fps) / 1000.0
-                self._handle_pygame_events()
-                self._handle_bus_events()
-                self._age_caption(dt)
-                self._track_fps(dt, self._clock)
+            while self.running:
+                dt = self.clock.tick(self.settings.fps) / 1000.0
+                self.handlePygameEvents()
+                self.handleBusEvents()
+                self.ageCaption(dt)
+                self.trackFps(dt, self.clock)
 
-                if self._envelope is not None:
-                    self._animator.set_speech_level(self._envelope.level())
+                if self.envelope is not None:
+                    self.animator.setSpeechLevel(self.envelope.level())
 
-                frame = self._animator.update(dt)
-                self._renderer.draw(
+                frame = self.animator.update(dt)
+                self.renderer.draw(
                     frame,
-                    caption=self._caption,
-                    hint=self._hint(),
-                    caption_opacity=self._caption_opacity(),
+                    caption=self.caption,
+                    hint=self.hint(),
+                    captionOpacity=self.captionOpacity(),
                 )
                 pygame.display.flip()
         finally:
             pygame.quit()
             logger.info("face encerrada")
 
-    def request_stop(self) -> None:
+    def requestStop(self) -> None:
         """Pede o encerramento do loop (pode ser chamado de outra thread)."""
-        self._running = False
+        self.running = False
 
     # -- entrada -----------------------------------------------------------
-    def _handle_pygame_events(self) -> None:
+    def handlePygameEvents(self) -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self._quit()
+                self.quit()
 
             elif event.type == pygame.VIDEORESIZE:
-                self._resize(event.w, event.h)
+                self.resize(event.w, event.h)
 
             elif event.type == pygame.KEYDOWN:
-                self._handle_key(event.key)
+                self.handleKey(event.key)
 
-    def _handle_key(self, key: int) -> None:
+    def handleKey(self, key: int) -> None:
         if key in (pygame.K_ESCAPE, pygame.K_q):
-            self._quit()
+            self.quit()
         elif key == pygame.K_s:
-            self._animator.toggle_sleep()
+            self.animator.toggleSleep()
         elif key == pygame.K_SPACE:
-            self._animator.blink_now()
+            self.animator.blinkNow()
         elif key == pygame.K_h:
-            self._show_hint = not self._show_hint
+            self.showHint = not self.showHint
 
-    def _resize(self, width: int, height: int) -> None:
-        self._screen = pygame.display.set_mode((width, height), pygame.RESIZABLE | pygame.DOUBLEBUF)
-        assert self._renderer is not None
-        self._renderer.resize(self._screen, EyeLayout.for_screen(width, height))
+    def resize(self, width: int, height: int) -> None:
+        self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE | pygame.DOUBLEBUF)
+        assert self.renderer is not None
+        self.renderer.resize(self.screen, EyeLayout.forScreen(width, height))
 
-    def _quit(self) -> None:
-        self._running = False
-        self._bus.publish(Shutdown())
+    def quit(self) -> None:
+        self.running = False
+        self.bus.publish(Shutdown())
 
     # -- reacao aos eventos do sistema -------------------------------------
-    def _handle_bus_events(self) -> None:
+    def handleBusEvents(self) -> None:
         while True:
             try:
-                event = self._events.get_nowait()
+                event = self.events.get_nowait()
             except queue.Empty:
                 return
-            self._apply(event)
+            self.apply(event)
 
-    def _apply(self, event: Event) -> None:
+    def apply(self, event: Event) -> None:
         match event:
             case UserMessage():
-                self._animator.wake()
-                self._set_caption("")
+                self.animator.wake()
+                self.setCaption("")
 
             case ListeningChanged(active=True):
-                self._animator.set_activity(Expression.LISTENING)
+                self.animator.setActivity(Expression.LISTENING)
             case ListeningChanged(active=False):
                 # So volta ao repouso se ainda estiver ouvindo: pensar ou falar
                 # ja tomaram a face, e apaga-los aqui piscaria a expressao.
-                if self._animator.activity is Expression.LISTENING:
-                    self._animator.set_activity(None)
+                if self.animator.activity is Expression.LISTENING:
+                    self.animator.setActivity(None)
             case ThinkingStarted():
-                self._animator.set_activity(Expression.THINKING)
+                self.animator.setActivity(Expression.THINKING)
 
             case SpeechStarted(text=text):
-                self._animator.set_activity(Expression.SPEAKING)
-                self._set_caption(text)
+                self.animator.setActivity(Expression.SPEAKING)
+                self.setCaption(text)
 
             case SpeechFinished():
-                self._animator.set_activity(None)
+                self.animator.setActivity(None)
 
             case AssistantReply(text=text):
-                self._set_caption(text)
+                self.setCaption(text)
 
             case ErrorOccurred(message=message):
-                self._animator.set_activity(None)
-                self._animator.set_mood(Expression.ANGRY)
-                self._set_caption(f"[{truncate(message, 90)}]")
+                self.animator.setActivity(None)
+                self.animator.setMood(Expression.ANGRY)
+                self.setCaption(f"[{truncate(message, 90)}]")
 
             case Notice(message=message):
                 # Aviso, nao falha: nada de ficar brava nem de cortar a fala em
                 # curso. So aparece escrito, e a animacao segue como estava.
-                self._set_caption(f"({truncate(message, 90)})")
+                self.setCaption(f"({truncate(message, 90)})")
 
             case Shutdown():
-                self._running = False
+                self.running = False
 
-    def _set_caption(self, text: str) -> None:
-        self._caption = text
-        self._caption_age = 0.0
+    def setCaption(self, text: str) -> None:
+        self.caption = text
+        self.captionAge = 0.0
 
-    def _age_caption(self, dt: float) -> None:
-        if not self._caption:
+    def ageCaption(self, dt: float) -> None:
+        if not self.caption:
             return
-        self._caption_age += dt
-        if self._caption_age >= CAPTION_TIMEOUT:
-            self._caption = ""
+        self.captionAge += dt
+        if self.captionAge >= CAPTION_TIMEOUT:
+            self.caption = ""
 
-    def _track_fps(self, dt: float, clock: pygame.time.Clock) -> None:
+    def trackFps(self, dt: float, clock: pygame.time.Clock) -> None:
         """Guarda a taxa de quadros que a ajuda mostra."""
-        self._fps_age += dt
-        if self._fps_age >= FPS_REFRESH:
-            self._fps_age = 0.0
-            self._fps = clock.get_fps()
+        self.fpsAge += dt
+        if self.fpsAge >= FPS_REFRESH:
+            self.fpsAge = 0.0
+            self.fps = clock.get_fps()
 
-    def _hint(self) -> str:
+    def hint(self) -> str:
         """Linha de ajuda, com a taxa de quadros no fim.
 
         O numero fica junto da ajuda de proposito: e informacao de quem esta
         mexendo no robo, nao de quem olha para ele. Some com a mesma tecla.
         """
-        if not self._show_hint:
+        if not self.showHint:
             return ""
-        if self._fps < 1.0:
+        if self.fps < 1.0:
             # Nos primeiros quadros o `Clock` ainda nao tem media: melhor nao
             # mostrar nada do que anunciar 0 FPS logo no arranque.
             return HINT_TEXT
-        return f"{HINT_TEXT} · {self._fps:.0f} FPS"
+        return f"{HINT_TEXT} · {self.fps:.0f} FPS"
 
-    def _caption_opacity(self) -> float:
+    def captionOpacity(self) -> float:
         """Legenda aparece rapido e se apaga devagar, em vez de sumir de um golpe."""
-        if not self._caption:
+        if not self.caption:
             return 0.0
-        appearing = min(1.0, self._caption_age / CAPTION_FADE_IN)
-        remaining = CAPTION_TIMEOUT - self._caption_age
+        appearing = min(1.0, self.captionAge / CAPTION_FADE_IN)
+        remaining = CAPTION_TIMEOUT - self.captionAge
         vanishing = min(1.0, max(0.0, remaining / CAPTION_FADE_OUT))
         return appearing * vanishing
 
 
-def _has_display() -> bool:
+def hasDisplay() -> bool:
     """Heuristica para detectar ambiente grafico disponivel."""
     if os.name == "nt" or sys.platform == "darwin":
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
-def _has_kms_console() -> bool:
+def hasKmsConsole() -> bool:
     """Se ha um monitor ligado direto no kernel, sem desktop no meio.
 
     O `status` de cada conector do DRM diz se tem cabo do outro lado. Ler isso
@@ -305,7 +305,7 @@ def _has_kms_console() -> bool:
         return False
 
 
-def _pick_video_driver() -> str | None:
+def pickVideoDriver() -> str | None:
     """Escolhe o driver de video quando o ambiente nao escolheu por nos.
 
     Devolve None para deixar o SDL decidir, que e o certo onde ha desktop.
@@ -316,16 +316,16 @@ def _pick_video_driver() -> str | None:
     desta checagem a face caia no driver `dummy` justamente na maquina para a
     qual foi feita: o monitor ficava preto e o log nao dizia por que.
     """
-    if _has_display():
+    if hasDisplay():
         return None
-    if _has_kms_console():
+    if hasKmsConsole():
         logger.info("sem desktop, mas ha monitor ligado: desenhando direto no KMS/DRM")
         return "kmsdrm"
     logger.warning("nenhum display detectado; a face rodara sem janela visivel")
     return "dummy"
 
 
-def _open_screen(size: tuple[int, int], flags: int) -> pygame.Surface:
+def openScreen(size: tuple[int, int], flags: int) -> pygame.Surface:
     """Abre a tela pedindo sincronismo vertical, se o driver souber dar.
 
     Onde funciona, o vsync remove o rasgo horizontal sem custar nada. Nem todo

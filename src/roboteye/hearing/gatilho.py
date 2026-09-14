@@ -43,21 +43,21 @@ class Conversa:
     janela sem esperar em tempo real: quem chama informa o instante.
     """
 
-    def __init__(self, janela_s: float = JANELA_S) -> None:
-        self._janela = janela_s
-        self._ate = 0.0
+    def __init__(self, janelaS: float = JANELA_S) -> None:
+        self.janela = janelaS
+        self.ate = 0.0
 
     def aberta(self, agora: float | None = None) -> bool:
-        return (agora if agora is not None else time.monotonic()) < self._ate
+        return (agora if agora is not None else time.monotonic()) < self.ate
 
     def abrir(self, agora: float | None = None) -> None:
-        self._ate = (agora if agora is not None else time.monotonic()) + self._janela
+        self.ate = (agora if agora is not None else time.monotonic()) + self.janela
 
     def fechar(self) -> None:
-        self._ate = 0.0
+        self.ate = 0.0
 
 
-def dirigido_ao_robo(
+def dirigidoAoRobo(
     texto: str,
     palavra: str,
     *,
@@ -77,8 +77,8 @@ def dirigido_ao_robo(
     if not palavra.strip():
         return limpo
 
-    alvo = _simplificar(palavra)
-    palavras = _simplificar(limpo).split()
+    alvo = simplificar(palavra)
+    palavras = simplificar(limpo).split()
 
     if alvo not in palavras:
         # Sem o nome, so passa quem chegou dentro da janela — e responder fecha
@@ -107,11 +107,11 @@ def dirigido_ao_robo(
     return pergunta
 
 
-def _simplificar(texto: str) -> str:
+def simplificar(texto: str) -> str:
     """Sem acento, sem pontuacao e em minusculas — o Vosk erra os tres."""
-    sem_acento = "".join(
+    semAcento = "".join(
         letra
         for letra in unicodedata.normalize("NFD", texto.lower())
         if unicodedata.category(letra) != "Mn"
     )
-    return re.sub(r"[^\w\s]", " ", sem_acento)
+    return re.sub(r"[^\w\s]", " ", semAcento)

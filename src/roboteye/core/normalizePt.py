@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 
-from roboteye.core.numbers_pt import spell, spell_decimal, spell_ordinal
+from roboteye.core.numbersPt import spell, spellDecimal, spellOrdinal
 
 #: Abreviacoes que aparecem em conversa e que a sintese leria letra por letra.
 ABBREVIATIONS = {
@@ -61,11 +61,11 @@ def normalize(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Regras, na ordem em que rodam
 # ---------------------------------------------------------------------------
-def _money(text: str) -> str:
+def money(text: str) -> str:
     """`R$ 25,90` -> "vinte e cinco reais e noventa centavos"."""
 
     def replace(match: re.Match[str]) -> str:
-        whole = _to_int(match.group("whole"))
+        whole = toInt(match.group("whole"))
         cents = int((match.group("cents") or "0").ljust(2, "0")[:2])
 
         reais = f"{spell(whole)} {'real' if whole == 1 else 'reais'}"
@@ -77,16 +77,16 @@ def _money(text: str) -> str:
     return _MONEY.sub(replace, text)
 
 
-def _percent(text: str) -> str:
+def percent(text: str) -> str:
     """`35%` -> "trinta e cinco por cento"."""
 
     def replace(match: re.Match[str]) -> str:
-        return f"{_spell_number(match.group('number'))} por cento"
+        return f"{spellNumber(match.group('number'))} por cento"
 
     return _PERCENT.sub(replace, text)
 
 
-def _time(text: str) -> str:
+def time(text: str) -> str:
     """`15:30` -> "quinze e trinta"; `15:00` -> "quinze horas"."""
 
     def replace(match: re.Match[str]) -> str:
@@ -105,17 +105,17 @@ def _time(text: str) -> str:
     return _TIME.sub(replace, text)
 
 
-def _temperature(text: str) -> str:
+def temperature(text: str) -> str:
     """`23°C` -> "vinte e tres graus"."""
 
     def replace(match: re.Match[str]) -> str:
-        number = _spell_number(match.group("number"))
+        number = spellNumber(match.group("number"))
         return f"{number} {'grau' if match.group('number') == '1' else 'graus'}"
 
     return _TEMPERATURE.sub(replace, text)
 
 
-def _units(text: str) -> str:
+def units(text: str) -> str:
     """`5 km` -> "cinco quilometros"."""
 
     def replace(match: re.Match[str]) -> str:
@@ -123,22 +123,22 @@ def _units(text: str) -> str:
         unit = match.group("unit").lower()
         singular, plural = UNITS[unit]
         name = singular if raw in {"1", "-1"} else plural
-        return f"{_spell_number(raw)} {name}"
+        return f"{spellNumber(raw)} {name}"
 
     return _UNIT.sub(replace, text)
 
 
-def _ordinals(text: str) -> str:
+def ordinals(text: str) -> str:
     """`1º` -> "primeiro"; `2ª` -> "segunda"."""
 
     def replace(match: re.Match[str]) -> str:
         marker = match.group("marker")
-        return spell_ordinal(int(match.group("number")), feminine=marker in "ªa")
+        return spellOrdinal(int(match.group("number")), feminine=marker in "ªa")
 
     return _ORDINAL.sub(replace, text)
 
 
-def _abbreviations(text: str) -> str:
+def abbreviations(text: str) -> str:
     """`Dr.` -> "doutor"."""
 
     def replace(match: re.Match[str]) -> str:
@@ -147,20 +147,20 @@ def _abbreviations(text: str) -> str:
     return _ABBREV.sub(replace, text)
 
 
-def _numbers(text: str) -> str:
+def numbers(text: str) -> str:
     """O que sobrou de numero solto, incluindo decimais e milhar com ponto."""
-    return _NUMBER.sub(lambda m: _spell_number(m.group(0)), text)
+    return _NUMBER.sub(lambda m: spellNumber(m.group(0)), text)
 
 
 # ---------------------------------------------------------------------------
 # Apoio
 # ---------------------------------------------------------------------------
-def _to_int(raw: str) -> int:
+def toInt(raw: str) -> int:
     """Le um inteiro que pode vir com ponto de milhar."""
     return int(raw.replace(".", ""))
 
 
-def _spell_number(raw: str) -> str:
+def spellNumber(raw: str) -> str:
     """Escreve por extenso um numero cru, com ou sem parte decimal."""
     raw = raw.strip()
     negative = raw.startswith("-")
@@ -168,11 +168,11 @@ def _spell_number(raw: str) -> str:
 
     whole, _, fraction = raw.partition(",")
     try:
-        value = _to_int(whole or "0")
+        value = toInt(whole or "0")
     except ValueError:
         return raw
 
-    text = spell_decimal(value, fraction) if fraction else spell(value)
+    text = spellDecimal(value, fraction) if fraction else spell(value)
     return f"menos {text}" if negative else text
 
 
@@ -188,7 +188,7 @@ _TIME = re.compile(r"\b(?P<hour>\d{1,2})[:h](?P<minute>\d{2})\b")
 _TEMPERATURE = re.compile(rf"(?P<number>-?(?:{_RAW})(?:,\d+)?)\s*(?:°|graus?\s+)C?\b")
 
 
-def _longest_first(words: object) -> str:
+def longestFirst(words: object) -> str:
     """Alternativa de regex com as opcoes maiores na frente.
 
     A ordem nao e cosmetica: a alternancia do `re` para na primeira opcao que
@@ -199,11 +199,11 @@ def _longest_first(words: object) -> str:
 
 
 _UNIT = re.compile(
-    rf"(?P<number>-?(?:{_RAW})(?:,\d+)?)\s*(?P<unit>{_longest_first(UNITS)})\b",
+    rf"(?P<number>-?(?:{_RAW})(?:,\d+)?)\s*(?P<unit>{longestFirst(UNITS)})\b",
     re.IGNORECASE,
 )
 _ORDINAL = re.compile(r"\b(?P<number>\d{1,2})\s*(?P<marker>[ºª°ao])(?![a-z])", re.IGNORECASE)
-_ABBREV = re.compile(rf"\b({_longest_first(ABBREVIATIONS)})\.", re.IGNORECASE)
+_ABBREV = re.compile(rf"\b({longestFirst(ABBREVIATIONS)})\.", re.IGNORECASE)
 # Os dois-pontos ao redor sao um veto: um numero grudado num deles faz parte de
 # algo maior — uma hora, um placar, uma duracao. A regra da hora ja teve a sua
 # chance e, se recusou, foi porque nao reconheceu o formato. Ler as metades como
@@ -212,12 +212,12 @@ _NUMBER = re.compile(rf"(?<![\d:])-?(?:{_RAW})(?:,\d+)?(?![\d:])")
 
 #: A ordem e a propria regra: quem reconhece mais contexto vai primeiro.
 _RULES = (
-    _money,
-    _time,
-    _percent,
-    _temperature,
-    _units,
-    _ordinals,
-    _abbreviations,
-    _numbers,
+    money,
+    time,
+    percent,
+    temperature,
+    units,
+    ordinals,
+    abbreviations,
+    numbers,
 )

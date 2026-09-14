@@ -18,31 +18,31 @@ class BrokenLLM:
 
     name = "broken"
 
-    def stream_reply(self, messages):
+    def streamReply(self, messages):
         raise LLMError("ollama fora do ar")
         yield  # pragma: no cover - torna a função um gerador
 
-    def is_available(self) -> bool:
+    def isAvailable(self) -> bool:
         return False
 
     def close(self) -> None: ...
 
 
 class TestAssistant:
-    def test_turno_completo_na_ordem_certa(self, make_assistant, make_llm, recorder) -> None:
-        llm = make_llm("Que pergunta previsível. Tente de novo, com mais esforço.")
-        assistant, _ = make_assistant(llm)
+    def testTurnoCompletoNaOrdemCerta(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Que pergunta previsível. Tente de novo, com mais esforço.")
+        assistant, _ = makeAssistant(llm)
 
         assistant.submit("olá")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
-        tipos = recorder.type_names()
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        tipos = recorder.typeNames()
         assert tipos.index("UserMessage") < tipos.index("ThinkingStarted")
         assert tipos.index("ThinkingStarted") < tipos.index("SpeechStarted")
         assert "AssistantReply" in tipos
 
-    def test_resposta_e_entregue_a_voz_frase_a_frase(
-        self, make_assistant, make_llm, recorder
+    def testRespostaEEntregueAVozFraseAFrase(
+        self, makeAssistant, makeLlm, recorder
     ) -> None:
         """O assistente entrega cada frase assim que ela fecha.
 
@@ -51,90 +51,90 @@ class TestAssistant:
         o que o motor recebe é decisão do locutor, que junta numa síntese só as
         frases que já chegaram — e é assim que deve ser.
         """
-        llm = make_llm("Primeira frase suficientemente longa. Segunda frase igualmente longa.")
-        assistant, _ = make_assistant(llm)
+        llm = makeLlm("Primeira frase suficientemente longa. Segunda frase igualmente longa.")
+        assistant, _ = makeAssistant(llm)
 
         entregues: list[str] = []
-        speaker = assistant._speaker
+        speaker = assistant.speaker
         original = speaker.say
         speaker.say = lambda texto: (entregues.append(texto), original(texto))[1]  # type: ignore[method-assign]
 
         assistant.submit("olá")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
+        assert recorder.waitFor(SpeechFinished, timeout=10)
         assert len(entregues) == 2, f"esperava 2 frases, recebi {entregues}"
 
-    def test_pergunta_do_usuario_chega_ao_modelo(self, make_assistant, make_llm, recorder) -> None:
-        llm = make_llm("Uma resposta suficientemente longa para o teste.")
-        assistant, _ = make_assistant(llm)
+    def testPerguntaDoUsuarioChegaAoModelo(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Uma resposta suficientemente longa para o teste.")
+        assistant, _ = makeAssistant(llm)
 
         assistant.submit("qual é a resposta?")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
+        assert recorder.waitFor(SpeechFinished, timeout=10)
         ultima = llm.prompts[-1][-1]
         assert ultima.role == "user"
         assert ultima.content == "qual é a resposta?"
 
-    def test_prompt_de_sistema_vai_junto(self, make_assistant, make_llm, recorder) -> None:
-        llm = make_llm("Uma resposta suficientemente longa para o teste.")
-        assistant, _ = make_assistant(llm, system_prompt="seja sarcástica")
+    def testPromptDeSistemaVaiJunto(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Uma resposta suficientemente longa para o teste.")
+        assistant, _ = makeAssistant(llm, systemPrompt="seja sarcástica")
 
         assistant.submit("olá")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
+        assert recorder.waitFor(SpeechFinished, timeout=10)
         primeira = llm.prompts[-1][0]
         assert primeira.role == "system"
         assert primeira.content == "seja sarcástica"
 
-    def test_mensagem_vazia_e_ignorada(self, make_assistant, make_llm, recorder) -> None:
-        assistant, _ = make_assistant(make_llm())
+    def testMensagemVaziaEIgnorada(self, makeAssistant, makeLlm, recorder) -> None:
+        assistant, _ = makeAssistant(makeLlm())
 
         assistant.submit("   ")
 
-        assert recorder.of_type(UserMessage) == []
+        assert recorder.ofType(UserMessage) == []
 
-    def test_historico_guarda_pergunta_e_resposta(self, make_assistant, make_llm, recorder) -> None:
-        llm = make_llm("Uma resposta bastante longa para o teste funcionar.")
-        assistant, memory = make_assistant(llm)
+    def testHistoricoGuardaPerguntaEResposta(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Uma resposta bastante longa para o teste funcionar.")
+        assistant, memory = makeAssistant(llm)
 
         assistant.submit("qual é a resposta?")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
+        assert recorder.waitFor(SpeechFinished, timeout=10)
         assert len(memory) == 2  # pergunta + resposta
 
-    def test_erro_do_llm_vira_evento(self, make_assistant, recorder) -> None:
-        assistant, _ = make_assistant(BrokenLLM())
+    def testErroDoLlmViraEvento(self, makeAssistant, recorder) -> None:
+        assistant, _ = makeAssistant(BrokenLLM())
 
         assistant.submit("olá")
 
-        assert recorder.wait_for(ErrorOccurred, timeout=10)
-        assert "ollama fora do ar" in recorder.of_type(ErrorOccurred)[0].message
+        assert recorder.waitFor(ErrorOccurred, timeout=10)
+        assert "ollama fora do ar" in recorder.ofType(ErrorOccurred)[0].message
 
-    def test_erro_nao_derruba_o_assistente(self, make_assistant, make_llm, recorder) -> None:
+    def testErroNaoDerrubaOAssistente(self, makeAssistant, makeLlm, recorder) -> None:
         # Depois de falhar, o assistente ainda deve atender a próxima mensagem.
-        assistant, _ = make_assistant(BrokenLLM())
+        assistant, _ = makeAssistant(BrokenLLM())
         assistant.submit("primeira")
-        assert recorder.wait_for(ErrorOccurred, timeout=10)
+        assert recorder.waitFor(ErrorOccurred, timeout=10)
 
-        llm = make_llm("Agora sim, uma resposta suficientemente longa.")
-        assistant2, _ = make_assistant(llm)
+        llm = makeLlm("Agora sim, uma resposta suficientemente longa.")
+        assistant2, _ = makeAssistant(llm)
         assistant2.submit("segunda")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
+        assert recorder.waitFor(SpeechFinished, timeout=10)
 
-    def test_say_directly_nao_usa_o_llm(self, make_assistant, make_llm, recorder) -> None:
-        llm = make_llm()
-        assistant, _ = make_assistant(llm)
+    def testSayDirectlyNaoUsaOLlm(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm()
+        assistant, _ = makeAssistant(llm)
 
-        assistant.say_directly("Bem-vindo de volta ao centro de testes.")
+        assistant.sayDirectly("Bem-vindo de volta ao centro de testes.")
 
-        assert recorder.wait_for(SpeechFinished, timeout=10)
+        assert recorder.waitFor(SpeechFinished, timeout=10)
         assert llm.prompts == []
-        assert recorder.of_type(ThinkingStarted) == []
-        assert recorder.of_type(AssistantReply)
+        assert recorder.ofType(ThinkingStarted) == []
+        assert recorder.ofType(AssistantReply)
 
-    def test_interrupt_silencia_a_fala(self, make_assistant, make_llm, sink) -> None:
-        assistant, _ = make_assistant(make_llm())
+    def testInterruptSilenciaAFala(self, makeAssistant, makeLlm, sink) -> None:
+        assistant, _ = makeAssistant(makeLlm())
 
         assistant.interrupt()
 
@@ -142,42 +142,42 @@ class TestAssistant:
 
 
 class TestConversationMemory:
-    def test_prompt_comeca_com_a_mensagem_de_sistema(self) -> None:
+    def testPromptComecaComAMensagemDeSistema(self) -> None:
         memory = ConversationMemory("seja breve")
-        memory.add_user("olá")
+        memory.addUser("olá")
 
-        prompt = memory.build_prompt()
+        prompt = memory.buildPrompt()
 
         assert prompt[0].role == "system"
         assert prompt[0].content == "seja breve"
         assert prompt[1].content == "olá"
 
-    def test_janela_descarta_as_mensagens_antigas(self) -> None:
-        memory = ConversationMemory("sistema", max_messages=2)
-        memory.add_user("primeira")
-        memory.add_user("segunda")
-        memory.add_user("terceira")
+    def testJanelaDescartaAsMensagensAntigas(self) -> None:
+        memory = ConversationMemory("sistema", maxMessages=2)
+        memory.addUser("primeira")
+        memory.addUser("segunda")
+        memory.addUser("terceira")
 
-        conteudos = [m.content for m in memory.build_prompt()[1:]]
+        conteudos = [m.content for m in memory.buildPrompt()[1:]]
 
         assert conteudos == ["segunda", "terceira"]
 
-    def test_mensagens_vazias_sao_ignoradas(self) -> None:
+    def testMensagensVaziasSaoIgnoradas(self) -> None:
         memory = ConversationMemory("sistema")
-        memory.add_user("   ")
+        memory.addUser("   ")
 
         assert len(memory) == 0
 
-    def test_clear_apaga_o_historico_mas_mantem_o_sistema(self) -> None:
+    def testClearApagaOHistoricoMasMantemOSistema(self) -> None:
         memory = ConversationMemory("sistema")
-        memory.add_user("olá")
+        memory.addUser("olá")
         memory.clear()
 
         assert len(memory) == 0
-        assert memory.build_prompt()[0].role == "system"
+        assert memory.buildPrompt()[0].role == "system"
 
-    def test_troca_do_prompt_de_sistema(self) -> None:
+    def testTrocaDoPromptDeSistema(self) -> None:
         memory = ConversationMemory("antigo")
-        memory.replace_system_prompt("novo")
+        memory.replaceSystemPrompt("novo")
 
-        assert memory.build_prompt()[0].content == "novo"
+        assert memory.buildPrompt()[0].content == "novo"

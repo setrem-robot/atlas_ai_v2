@@ -55,20 +55,20 @@ class Report:
         return "\n".join(lines)
 
 
-def run_diagnostics(settings: Settings) -> Report:
+def runDiagnostics(settings: Settings) -> Report:
     """Executa todas as verificacoes."""
     report = Report()
-    report.checks.append(_check_python())
-    report.checks.append(_check_pygame())
-    report.checks.extend(_check_voice(settings))
-    report.checks.append(_check_audio_output(settings))
-    report.checks.append(_check_hearing(settings))
-    report.checks.extend(_check_llm(settings))
+    report.checks.append(checkPython())
+    report.checks.append(checkPygame())
+    report.checks.extend(checkVoice(settings))
+    report.checks.append(checkAudioOutput(settings))
+    report.checks.append(checkHearing(settings))
+    report.checks.extend(checkLlm(settings))
     return report
 
 
 # ---------------------------------------------------------------------------
-def _check_python() -> Check:
+def checkPython() -> Check:
     version = platform.python_version()
     status = Status.OK if sys.version_info >= (3, 10) else Status.FAIL
     return Check(
@@ -79,7 +79,7 @@ def _check_python() -> Check:
     )
 
 
-def _check_pygame() -> Check:
+def checkPygame() -> Check:
     try:
         import pygame
     except ImportError as exc:
@@ -87,7 +87,7 @@ def _check_pygame() -> Check:
     return Check("pygame", Status.OK, f"versao {pygame.version.ver}")
 
 
-def _check_voice(settings: Settings) -> list[Check]:
+def checkVoice(settings: Settings) -> list[Check]:
     voice = settings.voice
     engine = voice.engine
 
@@ -95,7 +95,7 @@ def _check_voice(settings: Settings) -> list[Check]:
         return [Check("motor de voz", Status.WARN, "desativado (backend=null)")]
 
     if engine == "edge":
-        return _check_online_voice(settings)
+        return checkOnlineVoice(settings)
 
     checks: list[Check] = []
     pacote, extra = ("kokoro_onnx", "kokoro") if engine == "kokoro" else ("piper", "tts")
@@ -108,8 +108,8 @@ def _check_voice(settings: Settings) -> list[Check]:
 
     checks.append(Check(pacote, Status.OK, f"instalado (motor {engine})"))
 
-    model = voice.model_path
-    config = voice.resolved_config_path()
+    model = voice.modelPath
+    config = voice.resolvedConfigPath()
     if not model.is_file():
         checks.append(
             Check(
@@ -129,24 +129,24 @@ def _check_voice(settings: Settings) -> list[Check]:
             )
         )
     else:
-        size_mb = model.stat().st_size / 1_048_576
+        sizeMb = model.stat().st_size / 1_048_576
         checks.append(
             Check(
                 "modelo de voz",
                 Status.OK,
-                f"{voice.voice} [{voice.language}] — {model.name} ({size_mb:.0f} MB)",
+                f"{voice.voice} [{voice.language}] — {model.name} ({sizeMb:.0f} MB)",
             )
         )
 
     return checks
 
 
-def _check_online_voice(settings: Settings) -> list[Check]:
+def checkOnlineVoice(settings: Settings) -> list[Check]:
     """Confere as dependencias da voz na nuvem e qual voz a substitui sem rede."""
     voice = settings.voice
     checks: list[Check] = []
 
-    faltando = [nome for nome in ("edge_tts", "miniaudio") if not _importable(nome)]
+    faltando = [nome for nome in ("edge_tts", "miniaudio") if not importable(nome)]
     if faltando:
         checks.append(
             Check(
@@ -158,9 +158,9 @@ def _check_online_voice(settings: Settings) -> list[Check]:
         )
         return checks
 
-    checks.append(_speak_a_word(settings))
+    checks.append(speakAWord(settings))
 
-    reserva = voice.fallback_voice()
+    reserva = voice.fallbackVoice()
     if reserva is None:
         checks.append(
             Check(
@@ -172,7 +172,7 @@ def _check_online_voice(settings: Settings) -> list[Check]:
         )
         return checks
 
-    modelo = settings.voice.for_voice(reserva).model_path
+    modelo = settings.voice.forVoice(reserva).modelPath
     if modelo.is_file():
         checks.append(Check("reserva offline", Status.OK, f"{reserva} (pronta)"))
     else:
@@ -188,7 +188,7 @@ def _check_online_voice(settings: Settings) -> list[Check]:
     return checks
 
 
-def _speak_a_word(settings: Settings) -> Check:
+def speakAWord(settings: Settings) -> Check:
     """Sintetiza uma palavra de verdade pela voz online.
 
     Conferir que os pacotes importam nao prova quase nada: o que costuma faltar
@@ -196,7 +196,7 @@ def _speak_a_word(settings: Settings) -> Check:
     feminina e em portugues, passa facilmente por "a voz configurada, so que
     errada". Este teste separa os dois casos antes de virar confusao.
     """
-    from roboteye.speech.edge_engine import EdgeEngine
+    from roboteye.speech.edgeEngine import EdgeEngine
 
     engine = EdgeEngine(settings.voice)
     try:
@@ -227,7 +227,7 @@ def _speak_a_word(settings: Settings) -> Check:
     )
 
 
-def _importable(name: str) -> bool:
+def importable(name: str) -> bool:
     try:
         __import__(name)
     except ImportError:
@@ -235,7 +235,7 @@ def _importable(name: str) -> bool:
     return True
 
 
-def _check_audio_output(settings: Settings) -> Check:
+def checkAudioOutput(settings: Settings) -> Check:
     # Com a voz desligada nao ha o que tocar, e abrir a placa so para dizer que
     # ela existe torna o diagnostico — e a suite de testes, que roda com
     # `backend=null` — dependente do hardware da maquina.
@@ -267,10 +267,10 @@ def _check_audio_output(settings: Settings) -> Check:
         )
 
     name = str(device["name"] if isinstance(device, dict) else device).strip()
-    return Check("saida de audio", Status.OK, f"{name}{_para_onde(name)}")
+    return Check("saida de audio", Status.OK, f"{name}{paraOnde(name)}")
 
 
-def _para_onde(nome: str) -> str:
+def paraOnde(nome: str) -> str:
     """Diz que placa esta por tras de um apelido como "default".
 
     "default" nao informa nada a quem esta sem som, e essa e exatamente a hora
@@ -299,7 +299,7 @@ def _para_onde(nome: str) -> str:
     return f" -> {etiqueta} (hw:{placa})"
 
 
-def _check_hearing(settings: Settings) -> Check:
+def checkHearing(settings: Settings) -> Check:
     """A escuta: ligada? modelo baixado? o pacote instalado?"""
     ouvidos = settings.hearing
     if not ouvidos.enabled:
@@ -318,53 +318,53 @@ def _check_hearing(settings: Settings) -> Check:
             'pip install -e ".[stt]"',
         )
 
-    if ouvidos.backend == "vosk" and not _tem_modelo_vosk(ouvidos.model_path / "vosk-pt"):
+    if ouvidos.backend == "vosk" and not temModeloVosk(ouvidos.modelPath / "vosk-pt"):
         # `final.mdl` e o coracao do modelo: uma pasta sem ele e um download
         # interrompido, que so falharia no primeiro "oi" de alguem. Fica na raiz
         # nos modelos pequenos e dentro de `am/` nos grandes.
         return Check(
             "escuta",
             Status.FAIL,
-            f"modelo ausente em {ouvidos.model_path / 'vosk-pt'}",
+            f"modelo ausente em {ouvidos.modelPath / 'vosk-pt'}",
             "./scripts/baixar-modelo-escuta.sh --vosk",
         )
 
-    gatilho = ouvidos.wake_word or "(responde a tudo que ouvir)"
+    gatilho = ouvidos.wakeWord or "(responde a tudo que ouvir)"
     detalhe = ouvidos.backend
     if ouvidos.backend == "whisper":
         detalhe = f"whisper {ouvidos.model}"
     return Check("escuta", Status.OK, f"{detalhe}, acorda com: {gatilho}")
 
 
-def _tem_modelo_vosk(pasta) -> bool:
+def temModeloVosk(pasta) -> bool:
     return (pasta / "final.mdl").is_file() or (pasta / "am" / "final.mdl").is_file()
 
 
-def _check_llm(settings: Settings) -> list[Check]:
+def checkLlm(settings: Settings) -> list[Check]:
     """Verifica a IA — e, se houver reserva local, verifica as duas.
 
     Uma linha so nao serve quando ha duas maquinas: a que fica de pe esconde a
     que caiu, e o robo responderia pelo modelo pequeno sem ninguem entender por
     que ficou menos esperto.
     """
-    from roboteye.llm.factory import create_llm_client
+    from roboteye.llm.factory import createLlmClient
 
     if settings.llm.backend != "ollama":
-        client = create_llm_client(settings.llm)
+        client = createLlmClient(settings.llm)
         try:
             return [Check("LLM", Status.OK, f"backend {client.name}")]
         finally:
             client.close()
 
-    fallback = settings.llm.fallback_host and settings.llm.fallback_host != settings.llm.host
+    fallback = settings.llm.fallbackHost and settings.llm.fallbackHost != settings.llm.host
     if not fallback:
-        return [_check_ollama("LLM", settings.llm.host, settings.llm.model, critico=True)]
+        return [checkOllama("LLM", settings.llm.host, settings.llm.model, critico=True)]
 
-    principal = _check_ollama("IA de rede", settings.llm.host, settings.llm.model, critico=False)
-    reserva = _check_ollama(
+    principal = checkOllama("IA de rede", settings.llm.host, settings.llm.model, critico=False)
+    reserva = checkOllama(
         "IA local (reserva)",
-        settings.llm.fallback_host,
-        settings.llm.fallback_model or settings.llm.model,
+        settings.llm.fallbackHost,
+        settings.llm.fallbackModel or settings.llm.model,
         # A reserva e a ultima linha: se ela tambem nao esta de pe, uma queda de
         # rede deixa o robo sem resposta nenhuma, e isso e falha de verdade.
         critico=principal.status is not Status.OK,
@@ -372,7 +372,7 @@ def _check_llm(settings: Settings) -> list[Check]:
     return [principal, reserva]
 
 
-def _check_ollama(nome: str, host: str, modelo: str, *, critico: bool) -> Check:
+def checkOllama(nome: str, host: str, modelo: str, *, critico: bool) -> Check:
     """Um servidor Ollama: esta de pe, e tem o modelo pedido?"""
     from dataclasses import replace
 
@@ -382,7 +382,7 @@ def _check_ollama(nome: str, host: str, modelo: str, *, critico: bool) -> Check:
     ruim = Status.FAIL if critico else Status.WARN
     client = OllamaClient(replace(LLMSettings(), host=host, model=modelo))
     try:
-        if not client.is_available():
+        if not client.isAvailable():
             return Check(
                 nome,
                 ruim,
@@ -390,7 +390,7 @@ def _check_ollama(nome: str, host: str, modelo: str, *, critico: bool) -> Check:
                 "inicie o Ollama (ollama serve) ou use ROBOTEYE_LLM_BACKEND=echo",
             )
 
-        models = client.list_models()
+        models = client.listModels()
         if modelo not in models:
             available = ", ".join(models[:5]) or "nenhum"
             return Check(

@@ -25,12 +25,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from roboteye import voice_catalog
+from roboteye import voiceCatalog
 from roboteye.config import PROJECT_ROOT, Settings
-from roboteye.llm.probe import ProbeResult, normalize_host, probe_ollama
-from roboteye.logging_setup import get_logger
+from roboteye.llm.probe import ProbeResult, normalizeHost, probeOllama
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Sugestoes de quando a maquina da IA nao tem modelo nenhum instalado. Um nome
 #: errado aqui vira uma falha so na primeira frase falada, entao vale oferecer
@@ -106,7 +106,7 @@ class Prompt:
                 return default
             self.say(f"  nao entendi {resposta!r}; escolha um numero de 1 a {len(options)}")
 
-    def yes_no(self, question: str, default: bool = True) -> bool:
+    def yesNo(self, question: str, default: bool = True) -> bool:
         if not self.interactive:
             return default
         padrao = "S/n" if default else "s/N"
@@ -128,11 +128,11 @@ class Answers:
     voice: str | None = None
     persona: str | None = None
     #: Roda sem modelo de linguagem nenhum (backend `echo`).
-    no_llm: bool = False
+    noLlm: bool = False
     #: Nao pergunta nada: usa o que veio nas flags e mantem o resto.
-    non_interactive: bool = False
+    nonInteractive: bool = False
     #: Nao baixa modelo de voz ao final.
-    skip_download: bool = False
+    skipDownload: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,19 +146,19 @@ class SetupPlan:
 # ---------------------------------------------------------------------------
 # Assistente
 # ---------------------------------------------------------------------------
-def run_setup(
+def runSetup(
     settings: Settings,
     answers: Answers,
     prompt: Prompt,
     *,
-    env_path: Path | None = None,
-    project_root: Path = PROJECT_ROOT,
+    envPath: Path | None = None,
+    projectRoot: Path = PROJECT_ROOT,
 ) -> SetupPlan:
     """Conduz o dialogo, grava o `.env` e devolve o que foi decidido."""
     from roboteye.web import envfile
 
-    env_path = env_path or (project_root / ".env")
-    _ensure_env_file(env_path, project_root / ".env.example", prompt)
+    envPath = envPath or (projectRoot / ".env")
+    ensureEnvFile(envPath, projectRoot / ".env.example", prompt)
 
     prompt.say()
     prompt.say("=" * 62)
@@ -167,18 +167,18 @@ def run_setup(
     prompt.say("Enter aceita o valor entre colchetes. Nada e gravado antes do fim.")
 
     valores: dict[str, str] = {}
-    valores.update(_ask_llm(settings, answers, prompt))
-    voz = _ask_voice(settings, answers, prompt)
+    valores.update(askLlm(settings, answers, prompt))
+    voz = askVoice(settings, answers, prompt)
     valores["ROBOTEYE_VOICE"] = voz
-    valores["ROBOTEYE_PERSONA"] = _ask_persona(settings, answers, prompt, project_root)
+    valores["ROBOTEYE_PERSONA"] = askPersona(settings, answers, prompt, projectRoot)
 
-    envfile.update(env_path, valores)
+    envfile.update(envPath, valores)
     prompt.say()
-    prompt.say(f"gravado em {env_path}:")
+    prompt.say(f"gravado em {envPath}:")
     for chave, valor in valores.items():
         prompt.say(f"  {chave}={valor or '(vazio)'}")
 
-    baixadas = () if answers.skip_download else _download_voices(voz, settings, prompt)
+    baixadas = () if answers.skipDownload else downloadVoices(voz, settings, prompt)
 
     prompt.say()
     prompt.say("-" * 62)
@@ -188,21 +188,21 @@ def run_setup(
     return SetupPlan(values=valores, downloads=baixadas)
 
 
-def _ensure_env_file(env_path: Path, example_path: Path, prompt: Prompt) -> None:
+def ensureEnvFile(envPath: Path, examplePath: Path, prompt: Prompt) -> None:
     """Cria o `.env` a partir do exemplo, para haver comentarios a preservar."""
-    if env_path.is_file():
+    if envPath.is_file():
         return
-    if example_path.is_file():
-        shutil.copyfile(example_path, env_path)
-        prompt.say(f"criado {env_path.name} a partir de {example_path.name}")
+    if examplePath.is_file():
+        shutil.copyfile(examplePath, envPath)
+        prompt.say(f"criado {envPath.name} a partir de {examplePath.name}")
     else:  # repositorio incompleto; o arquivo nasce das chaves gravadas
-        env_path.touch()
+        envPath.touch()
 
 
 # -- IA ---------------------------------------------------------------------
-def _ask_llm(settings: Settings, answers: Answers, prompt: Prompt) -> dict[str, str]:
+def askLlm(settings: Settings, answers: Answers, prompt: Prompt) -> dict[str, str]:
     """Onde roda a IA, e com qual modelo."""
-    if answers.no_llm:
+    if answers.noLlm:
         prompt.say()
         prompt.say("Sem modelo de linguagem: o robo responde no modo `echo`.")
         return {"ROBOTEYE_LLM_BACKEND": "echo"}
@@ -231,19 +231,19 @@ def _ask_llm(settings: Settings, answers: Answers, prompt: Prompt) -> dict[str, 
             else prompt.text("endereco (IP:PORTA)", settings.llm.host)
         )
 
-    sonda, host = _probe_until_ok(host, prompt)
-    modelo = _ask_model(settings, answers, prompt, sonda)
+    sonda, host = probeUntilOk(host, prompt)
+    modelo = askModel(settings, answers, prompt, sonda)
 
     valores = {
         "ROBOTEYE_LLM_BACKEND": "ollama",
-        "ROBOTEYE_OLLAMA_HOST": normalize_host(host),
+        "ROBOTEYE_OLLAMA_HOST": normalizeHost(host),
     }
     if modelo:
         valores["ROBOTEYE_LLM_MODEL"] = modelo
     return valores
 
 
-def _probe_until_ok(host: str, prompt: Prompt) -> tuple[ProbeResult, str]:
+def probeUntilOk(host: str, prompt: Prompt) -> tuple[ProbeResult, str]:
     """Testa o endereco e, se falhar, deixa corrigir sem sair do assistente.
 
     Um endereco errado gravado aqui so daria sinal na primeira conversa, longe
@@ -251,12 +251,12 @@ def _probe_until_ok(host: str, prompt: Prompt) -> tuple[ProbeResult, str]:
     fora do ar, IP trocado, Ollama escutando so em localhost.
     """
     while True:
-        prompt.say(f"      testando {normalize_host(host)} ...")
-        sonda = probe_ollama(host)
+        prompt.say(f"      testando {normalizeHost(host)} ...")
+        sonda = probeOllama(host)
         if sonda.ok:
             plural = "s" if len(sonda.models) != 1 else ""
             prompt.say(
-                f"      ok: respondeu em {sonda.latency_ms} ms, "
+                f"      ok: respondeu em {sonda.latencyMs} ms, "
                 f"{len(sonda.models)} modelo{plural} instalado{plural}"
             )
             return sonda, sonda.host
@@ -277,7 +277,7 @@ def _probe_until_ok(host: str, prompt: Prompt) -> tuple[ProbeResult, str]:
         host = outro
 
 
-def _ask_model(settings: Settings, answers: Answers, prompt: Prompt, sonda: ProbeResult) -> str:
+def askModel(settings: Settings, answers: Answers, prompt: Prompt, sonda: ProbeResult) -> str:
     """Qual modelo usar, entre os que a maquina realmente tem."""
     if answers.model:
         return answers.model
@@ -295,20 +295,20 @@ def _ask_model(settings: Settings, answers: Answers, prompt: Prompt, sonda: Prob
     opcoes = list(MODEL_SUGGESTIONS)
     escolhido = prompt.choice("modelo", opcoes, default=settings.llm.model)
 
-    if _can_pull(sonda.host) and prompt.yes_no(f"baixar {escolhido} agora com `ollama pull`?"):
-        _pull(escolhido, prompt)
+    if canPull(sonda.host) and prompt.yesNo(f"baixar {escolhido} agora com `ollama pull`?"):
+        pull(escolhido, prompt)
     else:
         prompt.say(f"      lembre-se de baixa-lo na maquina da IA: ollama pull {escolhido}")
     return escolhido
 
 
-def _can_pull(host: str) -> bool:
+def canPull(host: str) -> bool:
     """`ollama pull` so serve se o Ollama for desta maquina."""
     local = any(marca in host for marca in ("localhost", "127.0.0.1", "0.0.0.0"))
     return local and shutil.which("ollama") is not None
 
 
-def _pull(modelo: str, prompt: Prompt) -> None:
+def pull(modelo: str, prompt: Prompt) -> None:
     prompt.say(f"      baixando {modelo} (pode demorar)...")
     try:
         resultado = subprocess.run(["ollama", "pull", modelo], check=False)
@@ -320,7 +320,7 @@ def _pull(modelo: str, prompt: Prompt) -> None:
 
 
 # -- voz --------------------------------------------------------------------
-def _ask_voice(settings: Settings, answers: Answers, prompt: Prompt) -> str:
+def askVoice(settings: Settings, answers: Answers, prompt: Prompt) -> str:
     if answers.voice:
         return answers.voice
 
@@ -330,31 +330,31 @@ def _ask_voice(settings: Settings, answers: Answers, prompt: Prompt) -> str:
     prompt.say("      elas caem sozinhas numa voz local quando a rede falta.")
 
     opcoes = [
-        (key, f"[{spec.language}] {_encurtar(spec.description)} {_custo(spec.engine)}")
+        (key, f"[{spec.language}] {encurtar(spec.description)} {custo(spec.engine)}")
         for key, spec in sorted(
-            voice_catalog.CATALOG.items(),
+            voiceCatalog.CATALOG.items(),
             # Portugues primeiro: e o idioma do robo. Dentro do idioma, as vozes
             # que ja estao no disco aparecem antes das que exigem download.
-            key=lambda item: (item[1].language != "pt", voice_catalog.needs_download(item[0])),
+            key=lambda item: (item[1].language != "pt", voiceCatalog.needsDownload(item[0])),
         )
     ]
     return prompt.choice("voz", opcoes, default=settings.voice.voice)
 
 
-def _download_voices(voz: str, settings: Settings, prompt: Prompt) -> tuple[str, ...]:
+def downloadVoices(voz: str, settings: Settings, prompt: Prompt) -> tuple[str, ...]:
     """Baixa a voz escolhida e a reserva offline dela.
 
     A reserva importa mais do que parece: e o arquivo que precisa estar no disco
     *antes* de a internet cair, e nao depois.
     """
-    from roboteye.voices import VoiceDownloadError, console_progress, download_voice
+    from roboteye.voices import VoiceDownloadError, consoleProgress, downloadVoice
 
     alvos = [voz]
-    reserva = settings.voice.for_voice(voz).fallback_voice()
+    reserva = settings.voice.forVoice(voz).fallbackVoice()
     if reserva and reserva not in alvos:
         alvos.append(reserva)
 
-    pendentes = [chave for chave in alvos if voice_catalog.needs_download(chave)]
+    pendentes = [chave for chave in alvos if voiceCatalog.needsDownload(chave)]
     if not pendentes:
         prompt.say()
         prompt.say("Nada a baixar: esta configuracao fala inteiramente pela nuvem.")
@@ -365,7 +365,7 @@ def _download_voices(voz: str, settings: Settings, prompt: Prompt) -> tuple[str,
     baixadas: list[str] = []
     for chave in pendentes:
         try:
-            download_voice(chave, on_progress=console_progress)
+            downloadVoice(chave, onProgress=consoleProgress)
         except VoiceDownloadError as exc:
             prompt.say(f"  erro ao baixar {chave}: {exc}")
             prompt.say(f"  tente depois: roboteye voice download {chave}")
@@ -375,13 +375,13 @@ def _download_voices(voz: str, settings: Settings, prompt: Prompt) -> tuple[str,
 
 
 # -- persona ----------------------------------------------------------------
-def _ask_persona(settings: Settings, answers: Answers, prompt: Prompt, project_root: Path) -> str:
+def askPersona(settings: Settings, answers: Answers, prompt: Prompt, projectRoot: Path) -> str:
     if answers.persona:
         return answers.persona
 
     # Uma persona só — ou nenhuma pergunta a fazer — não vira menu. Anunciar uma
     # escolha que não existe só polui a saída de uma instalação automatizada.
-    disponiveis = available_personas(project_root / "persona")
+    disponiveis = availablePersonas(projectRoot / "persona")
     if len(disponiveis) <= 1 or not prompt.interactive:
         return settings.llm.persona
 
@@ -391,17 +391,17 @@ def _ask_persona(settings: Settings, answers: Answers, prompt: Prompt, project_r
     return prompt.choice("persona", opcoes, default=settings.llm.persona)
 
 
-def available_personas(persona_dir: Path) -> list[tuple[str, str]]:
+def availablePersonas(personaDir: Path) -> list[tuple[str, str]]:
     """Personas do disco, com a primeira linha de titulo de cada uma."""
     encontradas: list[tuple[str, str]] = []
-    for caminho in sorted(persona_dir.glob("*.md")):
+    for caminho in sorted(personaDir.glob("*.md")):
         if caminho.stem.endswith(".memoria"):
             continue
-        encontradas.append((caminho.stem, _summary(caminho)))
+        encontradas.append((caminho.stem, summary(caminho)))
     return encontradas
 
 
-def _summary(caminho: Path) -> str:
+def summary(caminho: Path) -> str:
     """Primeira frase de verdade do arquivo de persona.
 
     Nao serve o primeiro titulo: todas as personas comecam com "Quem voce e", e
@@ -413,24 +413,24 @@ def _summary(caminho: Path) -> str:
     except OSError:  # pragma: no cover - arquivo ilegivel e caso de borda
         return ""
 
-    em_comentario = False
+    emComentario = False
     for linha in linhas:
         texto = linha.strip()
-        if em_comentario:
-            em_comentario = "-->" not in texto
+        if emComentario:
+            emComentario = "-->" not in texto
             continue
         if texto.startswith("<!--"):
-            em_comentario = "-->" not in texto
+            emComentario = "-->" not in texto
             continue
         if not texto or texto.startswith("#"):
             continue
-        return _encurtar(texto)
+        return encurtar(texto)
     return ""
 
 
-def _custo(engine: str) -> str:
+def custo(engine: str) -> str:
     return _ENGINE_COST.get(engine, "")
 
 
-def _encurtar(texto: str) -> str:
+def encurtar(texto: str) -> str:
     return texto if len(texto) <= _MAX_DESCRICAO else texto[: _MAX_DESCRICAO - 1].rstrip() + "..."

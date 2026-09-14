@@ -27,12 +27,12 @@ class ProbeResult:
     ok: bool
     host: str
     #: Ida e volta em milissegundos. So faz sentido quando `ok`.
-    latency_ms: int = 0
+    latencyMs: int = 0
     models: tuple[str, ...] = field(default_factory=tuple)
     error: str = ""
 
 
-def normalize_host(raw: str) -> str:
+def normalizeHost(raw: str) -> str:
     """Completa o que uma pessoa digita ate virar uma URL.
 
     Ninguem digita `http://` ao informar o endereco de uma maquina da rede, e
@@ -51,11 +51,11 @@ def normalize_host(raw: str) -> str:
     return host
 
 
-def probe_ollama(raw_host: str, *, timeout: float = DEFAULT_TIMEOUT) -> ProbeResult:
+def probeOllama(rawHost: str, *, timeout: float = DEFAULT_TIMEOUT) -> ProbeResult:
     """Pergunta a maquina quais modelos ela tem."""
     import httpx
 
-    host = normalize_host(raw_host)
+    host = normalizeHost(rawHost)
     if not host:
         return ProbeResult(ok=False, host="", error="informe o endereco")
 
@@ -70,7 +70,7 @@ def probe_ollama(raw_host: str, *, timeout: float = DEFAULT_TIMEOUT) -> ProbeRes
     return ProbeResult(
         ok=True,
         host=host,
-        latency_ms=round((time.monotonic() - inicio) * 1000),
+        latencyMs=round((time.monotonic() - inicio) * 1000),
         models=tuple(sorted(filter(None, modelos))),
     )
 

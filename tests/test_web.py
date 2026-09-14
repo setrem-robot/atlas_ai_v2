@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from roboteye.config import ConfigError
-from roboteye.web import ConfigServer, WebConfig, envfile, generate_pin
+from roboteye.web import ConfigServer, WebConfig, envfile, generatePin
 from roboteye.web.conversa import ConversaWeb
 from roboteye.web.server import validate
 
@@ -31,16 +31,16 @@ def env(tmp_path: Path) -> Path:
 
 
 class TestEnvFile:
-    def test_le_as_chaves(self, env: Path) -> None:
+    def testLeAsChaves(self, env: Path) -> None:
         assert envfile.read(env) == {
             "ROBOTEYE_VOICE": "dii",
             "ROBOTEYE_LLM_MODEL": "qwen3:8b",
         }
 
-    def test_arquivo_inexistente_le_vazio(self, tmp_path: Path) -> None:
+    def testArquivoInexistenteLeVazio(self, tmp_path: Path) -> None:
         assert envfile.read(tmp_path / "nao-existe") == {}
 
-    def test_os_comentarios_sobrevivem(self, env: Path) -> None:
+    def testOsComentariosSobrevivem(self, env: Path) -> None:
         """Um `.env` é mais explicação do que configuração.
 
         Reescrevê-lo a partir de um dicionário deixaria quem o abrisse depois
@@ -53,26 +53,26 @@ class TestEnvFile:
         assert "# Outro comentario" in texto
         assert envfile.read(env)["ROBOTEYE_VOICE"] == "francisca"
 
-    def test_a_ordem_das_chaves_se_mantem(self, env: Path) -> None:
+    def testAOrdemDasChavesSeMantem(self, env: Path) -> None:
         envfile.update(env, {"ROBOTEYE_VOICE": "dora"})
         linhas = [linha for linha in env.read_text(encoding="utf-8").splitlines() if "=" in linha]
         assert linhas[0].startswith("ROBOTEYE_VOICE")
 
-    def test_chave_nova_vai_para_o_fim(self, env: Path) -> None:
+    def testChaveNovaVaiParaOFim(self, env: Path) -> None:
         envfile.update(env, {"ROBOTEYE_WEB_PIN": "424242"})
         assert envfile.read(env)["ROBOTEYE_WEB_PIN"] == "424242"
         assert "ROBOTEYE_VOICE=dii" in env.read_text(encoding="utf-8")
 
-    def test_chaves_desconhecidas_ficam_onde_estao(self, env: Path) -> None:
+    def testChavesDesconhecidasFicamOndeEstao(self, env: Path) -> None:
         env.write_text(EXEMPLO + "MINHA_VAR=nao-mexa\n", encoding="utf-8")
         envfile.update(env, {"ROBOTEYE_VOICE": "dii"})
         assert "MINHA_VAR=nao-mexa" in env.read_text(encoding="utf-8")
 
-    def test_valor_com_espaco_ou_cerquilha_ganha_aspas(self, env: Path) -> None:
+    def testValorComEspacoOuCerquilhaGanhaAspas(self, env: Path) -> None:
         envfile.update(env, {"ROBOTEYE_EYE_COLOR": "#04C9FD"})
         assert envfile.read(env)["ROBOTEYE_EYE_COLOR"] == "#04C9FD"
 
-    def test_chave_repetida_fica_consistente(self, env: Path) -> None:
+    def testChaveRepetidaFicaConsistente(self, env: Path) -> None:
         """Um `.env` editado à mão pode ter a mesma chave duas vezes.
 
         O que não pode acontecer é o arquivo ficar com dois valores diferentes
@@ -89,11 +89,11 @@ class TestEnvFile:
         ]
         assert set(valores) == {"dora"}
 
-    def test_escrita_e_atomica(self, env: Path, monkeypatch) -> None:
+    def testEscritaEAtomica(self, env: Path, monkeypatch) -> None:
         """Se a energia cair no meio, sobra o arquivo antigo — não meio arquivo."""
         original = env.read_text(encoding="utf-8")
 
-        def explode(*_args, **_kwargs):
+        def explode(*args, **kwargs):
             raise OSError("energia acabou")
 
         monkeypatch.setattr("os.replace", explode)
@@ -105,12 +105,12 @@ class TestEnvFile:
 
 
 class TestValidacao:
-    def test_recusa_configuracao_invalida(self, env: Path) -> None:
+    def testRecusaConfiguracaoInvalida(self, env: Path) -> None:
         envfile.update(env, {"ROBOTEYE_VOICE": "nao-existe"})
         with pytest.raises(ConfigError, match="desconhecida"):
             validate(env)
 
-    def test_enxerga_o_arquivo_e_nao_o_ambiente(self, env: Path, monkeypatch) -> None:
+    def testEnxergaOArquivoENaoOAmbiente(self, env: Path, monkeypatch) -> None:
         """Regressão: a conferência aprovava qualquer coisa.
 
         `Settings.from_env` usa `load_dotenv(override=False)`, que respeita o
@@ -123,7 +123,7 @@ class TestValidacao:
 
         assert validate(env).voice.voice == "dora", "leu o ambiente em vez do arquivo"
 
-    def test_devolve_o_ambiente_ao_que_era(self, env: Path, monkeypatch) -> None:
+    def testDevolveOAmbienteAoQueEra(self, env: Path, monkeypatch) -> None:
         monkeypatch.setenv("ROBOTEYE_VOICE", "dii")
         validate(env)
         import os
@@ -134,13 +134,13 @@ class TestValidacao:
 class TestServidor:
     @pytest.fixture
     def servidor(self, env: Path):
-        config = WebConfig(host="127.0.0.1", port=0, pin="123456", env_path=env)
+        config = WebConfig(host="127.0.0.1", port=0, pin="123456", envPath=env)
         server = ConfigServer(config)
         server.start()
         yield f"http://127.0.0.1:{server.port}"
         server.stop()
 
-    def _pedir(self, base: str, rota: str, corpo=None, pin: str = "123456"):
+    def pedir(self, base: str, rota: str, corpo=None, pin: str = "123456"):
         req = urllib.request.Request(base + rota, method="GET" if corpo is None else "POST")
         req.add_header("X-Pin", pin)
         dados = None
@@ -153,46 +153,46 @@ class TestServidor:
         except urllib.error.HTTPError as erro:
             return erro.code, json.loads(erro.read())
 
-    def test_a_pagina_abre_sem_pin(self, servidor: str) -> None:
+    def testAPaginaAbreSemPin(self, servidor: str) -> None:
         """O PIN protege o que muda o robô, não a tela de digitar o PIN."""
         with urllib.request.urlopen(servidor + "/", timeout=10) as resposta:
             assert resposta.status == 200
             assert b"RobotEye" in resposta.read()
 
-    def test_api_exige_pin(self, servidor: str) -> None:
-        status, _ = self._pedir(servidor, "/api/state", pin="000000")
+    def testApiExigePin(self, servidor: str) -> None:
+        status, _ = self.pedir(servidor, "/api/state", pin="000000")
         assert status == 401
 
-    def test_pin_fora_do_ascii_e_recusado_com_resposta(self, servidor: str) -> None:
+    def testPinForaDoAsciiERecusadoComResposta(self, servidor: str) -> None:
         """Errar o PIN tem de dar 401, e não deixar o cliente pendurado.
 
         `secrets.compare_digest` levanta TypeError com texto fora do ASCII, e a
         conferência acontece fora do `try` do handler: a requisição morria sem
         resposta nenhuma, com um traceback no log acusando o lugar errado.
         """
-        status, _ = self._pedir(servidor, "/api/state", pin="12345ç")
+        status, _ = self.pedir(servidor, "/api/state", pin="12345ç")
         assert status == 401
 
-    def test_estado_lista_vozes_e_personas(self, servidor: str) -> None:
-        status, dados = self._pedir(servidor, "/api/state")
+    def testEstadoListaVozesEPersonas(self, servidor: str) -> None:
+        status, dados = self.pedir(servidor, "/api/state")
         assert status == 200
         assert dados["config"]["ROBOTEYE_VOICE"] == "dii"
         assert any(v["key"] == "francisca" and v["online"] for v in dados["vozes"])
 
-    def test_salvar_grava_no_arquivo(self, servidor: str, env: Path) -> None:
-        status, dados = self._pedir(servidor, "/api/config", {"ROBOTEYE_VOICE": "dora"})
+    def testSalvarGravaNoArquivo(self, servidor: str, env: Path) -> None:
+        status, dados = self.pedir(servidor, "/api/config", {"ROBOTEYE_VOICE": "dora"})
         assert status == 200 and dados["salvo"] == 1
         assert envfile.read(env)["ROBOTEYE_VOICE"] == "dora"
 
-    def test_configuracao_invalida_e_desfeita(self, servidor: str, env: Path) -> None:
+    def testConfiguracaoInvalidaEDesfeita(self, servidor: str, env: Path) -> None:
         """Salvar algo inválido só apareceria no próximo arranque, longe daqui."""
-        self._pedir(servidor, "/api/config", {"ROBOTEYE_VOICE": "dora"})
-        status, _ = self._pedir(servidor, "/api/config", {"ROBOTEYE_VOICE": "nao-existe"})
+        self.pedir(servidor, "/api/config", {"ROBOTEYE_VOICE": "dora"})
+        status, _ = self.pedir(servidor, "/api/config", {"ROBOTEYE_VOICE": "nao-existe"})
 
         assert status == 500
         assert envfile.read(env)["ROBOTEYE_VOICE"] == "dora", "deixou o arquivo quebrado"
 
-    def test_o_tamanho_do_modelo_de_escuta_e_editavel_pela_pagina(
+    def testOTamanhoDoModeloDeEscutaEEditavelPelaPagina(
         self, servidor: str, env: Path
     ) -> None:
         """Trocar entre rápido e preciso não pode exigir SSH.
@@ -200,64 +200,64 @@ class TestServidor:
         É a mesma ideia que já vale para a voz: o que se troca no dia a dia sai
         do `.env` e vai para a página do celular.
         """
-        status, dados = self._pedir(
+        status, dados = self.pedir(
             servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "tiny"}
         )
         assert status == 200, dados
         assert envfile.read(env)["ROBOTEYE_HEARING_MODEL_SIZE"] == "tiny"
 
-    def test_tamanho_de_modelo_inventado_e_recusado(self, servidor: str, env: Path) -> None:
+    def testTamanhoDeModeloInventadoERecusado(self, servidor: str, env: Path) -> None:
         """O `faster-whisper` BAIXA o que pedirem: um erro de digitação viraria
         uma tentativa de download de um modelo inexistente, no arranque, com a
         escuta desligando em silêncio."""
-        status, _ = self._pedir(servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "gigante"})
+        status, _ = self.pedir(servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "gigante"})
         assert status == 500
         # O desfazer grava a chave de volta com o valor anterior — aqui, vazio.
         # O que importa é que o valor inventado não ficou.
         assert envfile.read(env).get("ROBOTEYE_HEARING_MODEL_SIZE", "") != "gigante"
 
-    def test_so_grava_chaves_conhecidas(self, servidor: str, env: Path) -> None:
+    def testSoGravaChavesConhecidas(self, servidor: str, env: Path) -> None:
         """A página não pode virar um editor livre do ambiente do processo."""
-        self._pedir(servidor, "/api/config", {"PATH": "/comprometido"})
+        self.pedir(servidor, "/api/config", {"PATH": "/comprometido"})
         assert "PATH" not in envfile.read(env)
 
-    def test_testar_ia_num_endereco_morto_explica_o_que_houve(self, servidor: str) -> None:
-        status, dados = self._pedir(servidor, "/api/test/llm", {"host": "127.0.0.1:9"})
+    def testTestarIaNumEnderecoMortoExplicaOQueHouve(self, servidor: str) -> None:
+        status, dados = self.pedir(servidor, "/api/test/llm", {"host": "127.0.0.1:9"})
         assert status == 200
         assert dados["ok"] is False
         assert dados["erro"], "uma falha sem explicação não ajuda quem está de pé na frente do robô"
 
-    def test_testar_ia_sem_endereco(self, servidor: str) -> None:
-        _, dados = self._pedir(servidor, "/api/test/llm", {"host": "  "})
+    def testTestarIaSemEndereco(self, servidor: str) -> None:
+        _, dados = self.pedir(servidor, "/api/test/llm", {"host": "  "})
         assert dados["ok"] is False
 
-    def test_rota_desconhecida(self, servidor: str) -> None:
-        status, _ = self._pedir(servidor, "/api/nao-existe", {})
+    def testRotaDesconhecida(self, servidor: str) -> None:
+        status, _ = self.pedir(servidor, "/api/nao-existe", {})
         assert status == 404
 
 
-def test_pin_tem_seis_digitos() -> None:
-    pin = generate_pin()
+def testPinTemSeisDigitos() -> None:
+    pin = generatePin()
     assert len(pin) == 6 and pin.isdigit()
 
 
 class TestConversa:
     """A conversa pela pagina — a unica entrada de texto do robo instalado."""
 
-    def test_entrega_o_que_foi_digitado(self) -> None:
+    def testEntregaOQueFoiDigitado(self) -> None:
         entregues: list[str] = []
         conversa = ConversaWeb(entregues.append)
         conversa.enviar("  oi, tudo bem?  ")
         assert entregues == ["oi, tudo bem?"]
 
-    def test_texto_vazio_nao_incomoda_o_robo(self) -> None:
+    def testTextoVazioNaoIncomodaORobo(self) -> None:
         entregues: list[str] = []
         conversa = ConversaWeb(entregues.append)
         conversa.enviar("   ")
         assert entregues == []
         assert conversa.falas() == []
 
-    def test_guarda_os_dois_lados_da_conversa(self) -> None:
+    def testGuardaOsDoisLadosDaConversa(self) -> None:
         conversa = ConversaWeb(lambda _: None)
         conversa.enviar("quem e voce?")
         conversa.anotar("atlas", "Sou a Atlas.")
@@ -266,7 +266,7 @@ class TestConversa:
             {"quem": "atlas", "texto": "Sou a Atlas."},
         ]
 
-    def test_nao_cresce_sem_limite(self) -> None:
+    def testNaoCresceSemLimite(self) -> None:
         # O processo fica ligado o dia inteiro; guardar tudo seria vazamento.
         conversa = ConversaWeb(lambda _: None)
         for i in range(ConversaWeb.LIMITE * 3):
@@ -275,7 +275,7 @@ class TestConversa:
         assert len(falas) == ConversaWeb.LIMITE
         assert falas[-1]["texto"] == f"mensagem {ConversaWeb.LIMITE * 3 - 1}"
 
-    def test_falas_e_uma_copia(self) -> None:
+    def testFalasEUmaCopia(self) -> None:
         # Quem le nao pode mexer no historico de quem escreve.
         conversa = ConversaWeb(lambda _: None)
         conversa.anotar("voce", "oi")
@@ -289,12 +289,12 @@ class TestRotaDeConversa:
         return []
 
     @pytest.fixture
-    def servidor_com_robo(self, env: Path, entregues: list[str]):
+    def servidorComRobo(self, env: Path, entregues: list[str]):
         config = WebConfig(
             host="127.0.0.1",
             port=0,
             pin="123456",
-            env_path=env,
+            envPath=env,
             conversa=ConversaWeb(entregues.append),
         )
         server = ConfigServer(config)
@@ -303,15 +303,15 @@ class TestRotaDeConversa:
         server.stop()
 
     @pytest.fixture
-    def servidor_sozinho(self, env: Path):
+    def servidorSozinho(self, env: Path):
         # `roboteye web` sem robo rodando: nao ha com quem conversar.
-        config = WebConfig(host="127.0.0.1", port=0, pin="123456", env_path=env)
+        config = WebConfig(host="127.0.0.1", port=0, pin="123456", envPath=env)
         server = ConfigServer(config)
         server.start()
         yield f"http://127.0.0.1:{server.port}"
         server.stop()
 
-    def _pedir(self, base: str, rota: str, corpo=None, pin: str = "123456"):
+    def pedir(self, base: str, rota: str, corpo=None, pin: str = "123456"):
         req = urllib.request.Request(base + rota, method="GET" if corpo is None else "POST")
         req.add_header("X-Pin", pin)
         dados = None
@@ -324,29 +324,29 @@ class TestRotaDeConversa:
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
-    def test_mensagem_chega_ao_robo(self, servidor_com_robo: str, entregues: list[str]) -> None:
-        status, corpo = self._pedir(servidor_com_robo, "/api/conversar", {"texto": "ola"})
+    def testMensagemChegaAoRobo(self, servidorComRobo: str, entregues: list[str]) -> None:
+        status, corpo = self.pedir(servidorComRobo, "/api/conversar", {"texto": "ola"})
         assert status == 200
         assert corpo == {"enviado": "ola"}
         assert entregues == ["ola"]
 
-    def test_o_estado_mostra_a_conversa(self, servidor_com_robo: str) -> None:
-        self._pedir(servidor_com_robo, "/api/conversar", {"texto": "ola"})
-        _, corpo = self._pedir(servidor_com_robo, "/api/state")
+    def testOEstadoMostraAConversa(self, servidorComRobo: str) -> None:
+        self.pedir(servidorComRobo, "/api/conversar", {"texto": "ola"})
+        _, corpo = self.pedir(servidorComRobo, "/api/state")
         assert corpo["conversa"]["disponivel"] is True
         assert corpo["conversa"]["falas"] == [{"quem": "voce", "texto": "ola"}]
 
-    def test_sem_robo_a_pagina_diz_isso(self, servidor_sozinho: str) -> None:
-        _, corpo = self._pedir(servidor_sozinho, "/api/conversar", {"texto": "ola"})
+    def testSemRoboAPaginaDizIsso(self, servidorSozinho: str) -> None:
+        _, corpo = self.pedir(servidorSozinho, "/api/conversar", {"texto": "ola"})
         assert "erro" in corpo
 
-    def test_sem_robo_o_estado_esconde_a_conversa(self, servidor_sozinho: str) -> None:
-        _, corpo = self._pedir(servidor_sozinho, "/api/state")
+    def testSemRoboOEstadoEscondeAConversa(self, servidorSozinho: str) -> None:
+        _, corpo = self.pedir(servidorSozinho, "/api/state")
         assert corpo["conversa"]["disponivel"] is False
 
-    def test_conversa_tambem_exige_o_PIN(
-        self, servidor_com_robo: str, entregues: list[str]
+    def testConversaTambemExigeOPIN(
+        self, servidorComRobo: str, entregues: list[str]
     ) -> None:
-        status, _ = self._pedir(servidor_com_robo, "/api/conversar", {"texto": "ola"}, pin="000000")
+        status, _ = self.pedir(servidorComRobo, "/api/conversar", {"texto": "ola"}, pin="000000")
         assert status == 401
         assert entregues == []

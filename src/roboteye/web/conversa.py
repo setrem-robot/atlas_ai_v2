@@ -28,7 +28,7 @@ class Fala:
     quem: str
     texto: str
 
-    def as_dict(self) -> dict[str, str]:
+    def asDict(self) -> dict[str, str]:
         return {"quem": self.quem, "texto": self.texto}
 
 
@@ -41,12 +41,12 @@ class ConversaWeb:
     LIMITE = 12
 
     def __init__(self, entregar: Callable[[str], None]) -> None:
-        self._entregar = entregar
-        self._falas: list[Fala] = []
+        self.entregar = entregar
+        self.historicoFalas: list[Fala] = []
         # A pagina responde numa thread do servidor HTTP e as respostas chegam
         # na thread do assistente; sem o cadeado, uma leitura pode pegar a lista
         # no meio de uma escrita.
-        self._lock = threading.Lock()
+        self.lock = threading.Lock()
 
     def enviar(self, texto: str) -> str:
         """Entrega o texto ao robo e devolve o que foi realmente enviado."""
@@ -54,17 +54,17 @@ class ConversaWeb:
         if not texto:
             return ""
         self.anotar("voce", texto)
-        self._entregar(texto)
+        self.entregar(texto)
         return texto
 
     def anotar(self, quem: str, texto: str) -> None:
         texto = texto.strip()
         if not texto:
             return
-        with self._lock:
-            self._falas.append(Fala(quem=quem, texto=texto))
-            del self._falas[: -self.LIMITE]
+        with self.lock:
+            self.historicoFalas.append(Fala(quem=quem, texto=texto))
+            del self.historicoFalas[: -self.LIMITE]
 
     def falas(self) -> list[dict[str, str]]:
-        with self._lock:
-            return [fala.as_dict() for fala in self._falas]
+        with self.lock:
+            return [fala.asDict() for fala in self.historicoFalas]

@@ -68,12 +68,12 @@ COEFICIENTES = 63
 class AudioPolish:
     """Parametros do acabamento aplicado a cada fala."""
 
-    fade_in: float = DEFAULT_FADE_IN
-    fade_out: float = DEFAULT_FADE_OUT
+    fadeIn: float = DEFAULT_FADE_IN
+    fadeOut: float = DEFAULT_FADE_OUT
     tail: float = DEFAULT_TAIL
     gain: float = 1.0
     #: Acima desta frequencia o audio e atenuado. 0 desliga. Ver o cabecalho.
-    treble_hz: float = 0.0
+    trebleHz: float = 0.0
 
     def process(self, chunks: Iterable[SpeechChunk]) -> Iterator[SpeechChunk]:
         """Aplica o acabamento a uma fala inteira, sem esperar por ela.
@@ -86,27 +86,27 @@ class AudioPolish:
         """
         # Nasce e morre aqui: a memoria do filtro atravessa os blocos de uma
         # fala e nunca a fronteira entre duas.
-        suave = _Suavizador(self.treble_hz)
+        suave = Suavizador(self.trebleHz)
         pending: SpeechChunk | None = None
         first = True
 
         for chunk in chunks:
             if pending is not None:
-                yield self._polish(pending, fade_in=first, fade_out=False, suave=suave)
+                yield self.polish(pending, fadeIn=first, fadeOut=False, suave=suave)
                 first = False
             pending = chunk
 
         if pending is None:
             return
 
-        yield self._polish(pending, fade_in=first, fade_out=True, suave=suave)
+        yield self.polish(pending, fadeIn=first, fadeOut=True, suave=suave)
         if self.tail > 0.0:
             yield SpeechChunk(audio=silence(pending.format, self.tail), format=pending.format)
 
-    def _polish(
-        self, chunk: SpeechChunk, *, fade_in: bool, fade_out: bool, suave: _Suavizador
+    def polish(
+        self, chunk: SpeechChunk, *, fadeIn: bool, fadeOut: bool, suave: Suavizador
     ) -> SpeechChunk:
-        samples = to_float(chunk.audio)
+        samples = toFloat(chunk.audio)
         if samples.size == 0:
             return chunk
 
@@ -115,18 +115,18 @@ class AudioPolish:
 
         # Antes das rampas: elas moldam as pontas do que vai sair, e filtrar
         # depois espalharia a rampa de volta para dentro do audio.
-        samples = suave.aplicar(samples, chunk.format.sample_rate)
+        samples = suave.aplicar(samples, chunk.format.sampleRate)
 
-        rate = chunk.format.sample_rate * chunk.format.channels
-        if fade_in:
-            _ramp_in(samples, int(self.fade_in * rate))
-        if fade_out:
-            _ramp_out(samples, int(self.fade_out * rate))
+        rate = chunk.format.sampleRate * chunk.format.channels
+        if fadeIn:
+            rampIn(samples, int(self.fadeIn * rate))
+        if fadeOut:
+            rampOut(samples, int(self.fadeOut * rate))
 
-        return SpeechChunk(audio=to_pcm16(samples), format=chunk.format)
+        return SpeechChunk(audio=toPcm16(samples), format=chunk.format)
 
 
-class _Suavizador:
+class Suavizador:
     """Tira o brilho que a caixinha do robo nao reproduz — ver o cabecalho.
 
     Guarda a cauda do bloco anterior porque um filtro reiniciado a cada bloco
@@ -134,30 +134,30 @@ class _Suavizador:
     curta: um por fala, criado dentro de `process`.
     """
 
-    def __init__(self, corte_hz: float) -> None:
-        self._corte = corte_hz
-        self._cauda: np.ndarray | None = None
+    def __init__(self, corteHz: float) -> None:
+        self.corte = corteHz
+        self.cauda: np.ndarray | None = None
 
     def aplicar(self, samples: np.ndarray, taxa: int) -> np.ndarray:
-        if self._corte <= 0.0 or samples.size == 0:
+        if self.corte <= 0.0 or samples.size == 0:
             return samples
         # Acima de Nyquist nao ha o que cortar: filtrar seria so gastar CPU e
         # perder as pontas do bloco.
-        if self._corte >= taxa / 2.0:
+        if self.corte >= taxa / 2.0:
             return samples
 
-        taps = _coeficientes(taxa, self._corte)
+        taps = coeficientes(taxa, self.corte)
         sobra = taps.size - 1
-        anterior = self._cauda if self._cauda is not None else np.zeros(sobra, dtype=np.float32)
+        anterior = self.cauda if self.cauda is not None else np.zeros(sobra, dtype=np.float32)
         entrada = np.concatenate([anterior, samples])
-        self._cauda = entrada[-sobra:].copy() if sobra else entrada[:0]
+        self.cauda = entrada[-sobra:].copy() if sobra else entrada[:0]
         # "valid" com a cauda na frente devolve exatamente `samples.size`
         # amostras, alinhadas: o atraso do filtro nao vira desencontro.
         return np.convolve(entrada, taps, mode="valid").astype(np.float32)
 
 
 @lru_cache(maxsize=8)
-def _coeficientes(taxa: int, corte_hz: float) -> np.ndarray:
+def coeficientes(taxa: int, corteHz: float) -> np.ndarray:
     """Passa-baixa de fase linear, por janelamento de um seno cardinal.
 
     Em cache porque so ha um punhado de combinacoes de taxa e corte na vida do
@@ -166,7 +166,7 @@ def _coeficientes(taxa: int, corte_hz: float) -> np.ndarray:
     n = np.arange(COEFICIENTES, dtype=np.float64) - (COEFICIENTES - 1) / 2.0
     # `np.sinc` ja e normalizado (sinc(x) = sen(pi x)/(pi x)), entao o corte
     # entra como fracao da taxa de amostragem.
-    taps = 2.0 * (corte_hz / taxa) * np.sinc(2.0 * (corte_hz / taxa) * n)
+    taps = 2.0 * (corteHz / taxa) * np.sinc(2.0 * (corteHz / taxa) * n)
     taps *= np.hamming(COEFICIENTES)
     # Ganho unitario em corrente continua: sem isto o filtro mudaria o volume
     # junto com o brilho, e a comparacao entre vozes deixaria de valer.
@@ -177,12 +177,12 @@ def _coeficientes(taxa: int, corte_hz: float) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Conversao
 # ---------------------------------------------------------------------------
-def to_float(pcm: bytes) -> np.ndarray:
+def toFloat(pcm: bytes) -> np.ndarray:
     """PCM de 16 bits para ponto flutuante em -1..1."""
     return np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
 
 
-def to_pcm16(samples: np.ndarray) -> bytes:
+def toPcm16(samples: np.ndarray) -> bytes:
     """Ponto flutuante de volta para PCM de 16 bits, com limite.
 
     O corte em -1..1 e o que impede um ganho alto de fazer o sinal dar a volta:
@@ -193,22 +193,22 @@ def to_pcm16(samples: np.ndarray) -> bytes:
     return (clipped * 32767.0).astype("<i2").tobytes()
 
 
-def silence(audio_format: AudioFormat, seconds: float) -> bytes:
+def silence(audioFormat: AudioFormat, seconds: float) -> bytes:
     """Um trecho mudo, no formato dado."""
-    count = int(max(0.0, seconds) * audio_format.sample_rate) * audio_format.channels
+    count = int(max(0.0, seconds) * audioFormat.sampleRate) * audioFormat.channels
     return np.zeros(count, dtype="<i2").tobytes()
 
 
 # ---------------------------------------------------------------------------
 # Rampas
 # ---------------------------------------------------------------------------
-def _ramp_in(samples: np.ndarray, length: int) -> None:
+def rampIn(samples: np.ndarray, length: int) -> None:
     length = min(length, samples.size)
     if length > 1:
         samples[:length] *= np.linspace(0.0, 1.0, length, dtype=np.float32)
 
 
-def _ramp_out(samples: np.ndarray, length: int) -> None:
+def rampOut(samples: np.ndarray, length: int) -> None:
     length = min(length, samples.size)
     if length > 1:
         samples[-length:] *= np.linspace(1.0, 0.0, length, dtype=np.float32)

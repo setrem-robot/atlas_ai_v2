@@ -24,9 +24,9 @@ import threading
 from collections.abc import Callable, Iterator, Sequence
 
 from roboteye.llm.base import ChatMessage, LLMClient, LLMError, ModeloResidente
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: De quanto em quanto tempo a thread de fundo pergunta se a rede voltou.
 DEFAULT_PROBE_INTERVAL = 10.0
@@ -68,77 +68,77 @@ class FallbackLLMClient:
         primary: LLMClient,
         backup: LLMClient,
         *,
-        probe_interval: float = DEFAULT_PROBE_INTERVAL,
-        on_switch: Callable[[str], None] | None = None,
-        keep_alive_ocioso: str = "0",
+        probeInterval: float = DEFAULT_PROBE_INTERVAL,
+        onSwitch: Callable[[str], None] | None = None,
+        keepAliveOcioso: str = "0",
     ) -> None:
-        self._primary = primary
-        self._backup = backup
-        self._probe_interval = max(0.0, probe_interval)
-        self._on_switch = on_switch
+        self.primary = primary
+        self.backup = backup
+        self.probeInterval = max(0.0, probeInterval)
+        self.onSwitch = onSwitch
         #: O mesmo objeto de `_backup`, quando ele sabe soltar a propria
         #: memoria. None para um reserva que nao ocupa RAM desta maquina —
         #: o `EchoClient` dos testes, por exemplo.
-        self._residente = backup if isinstance(backup, ModeloResidente) else None
+        self.residente = backup if isinstance(backup, ModeloResidente) else None
         #: Ultima troca de memoria pedida, para nao repetir o mesmo pedido a
         #: cada sondagem quando o estado nao mudou.
-        self._memoria: threading.Thread | None = None
+        self.memoria: threading.Thread | None = None
         #: Ultimo arranjo de memoria efetivamente aplicado. None enquanto
         #: nenhum foi — e o que faz o arranque valer como uma aplicacao.
-        self._memoria_estado: bool | None = None
+        self.memoriaEstado: bool | None = None
         #: Serializa o carregar/descarregar do reserva. Sem ele, uma rede que
         #: pisca (cai, volta, cai) em segundos poe `_segurar_reserva` e
         #: `_soltar_reserva` correndo juntas no mesmo modelo, e o estado final
         #: vira o de quem terminar por ultimo — o oposto do pedido.
-        self._memoria_lock = threading.Lock()
+        self.memoriaLock = threading.Lock()
         #: Quanto tempo o reserva fica residente quando *nao* e ele quem
         #: responde. "0" devolve a memoria assim que ele termina de falar.
-        self._keep_alive_ocioso = keep_alive_ocioso
+        self.keepAliveOcioso = keepAliveOcioso
         #: A persona, guardada no aquecimento. E o que o reserva precisa
         #: reprocessar se um dia tiver de assumir — sao ~500 tokens, e num Pi
         #: le-los custa segundos que ninguem quer pagar no meio de uma pergunta.
-        self._prompt: Sequence[ChatMessage] = ()
+        self.prompt: Sequence[ChatMessage] = ()
         #: Atributo, e nao propriedade: o protocolo `LLMClient` declara `name`
         #: como variavel, e uma propriedade so de leitura nao o satisfaz.
         self.name = "rede+local"
 
         # Comeca otimista. O `warm_up` corrige em seguida, e uma pergunta feita
         # antes dele apenas cai para o modelo local sozinha.
-        self._primary_up = True
-        self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._watcher: threading.Thread | None = None
+        self.primaryUp = True
+        self.lock = threading.Lock()
+        self.stop = threading.Event()
+        self.watcher: threading.Thread | None = None
 
     # -- estado ------------------------------------------------------------
     @property
-    def using_primary(self) -> bool:
+    def usingPrimary(self) -> bool:
         """Quem responderia agora. Lido pelo `doctor` e pela pagina web."""
-        with self._lock:
-            return self._primary_up
+        with self.lock:
+            return self.primaryUp
 
-    def _set_primary(self, up: bool) -> None:
-        with self._lock:
-            mudou = up != self._primary_up
-            self._primary_up = up
+    def setPrimary(self, up: bool) -> None:
+        with self.lock:
+            mudou = up != self.primaryUp
+            self.primaryUp = up
         if not mudou:
             return
-        self._ajustar_memoria(up)
+        self.ajustarMemoria(up)
         # Uma resposta que vem do modelo pequeno e mais curta e mais simples que
         # a de costume. Sem aviso, isso passa por "a IA ficou burra" — e quem
         # esta vendo vai procurar o erro no modelo, que e o lugar onde ele nao esta.
         if up:
             logger.info("IA de rede de volta")
-            self._notify("IA de rede de volta")
+            self.notify("IA de rede de volta")
         else:
             logger.warning("IA de rede indisponivel; respondendo pelo modelo local")
-            self._notify("respondendo pelo modelo local: a IA de rede nao respondeu")
+            self.notify("respondendo pelo modelo local: a IA de rede nao respondeu")
 
-    def _notify(self, message: str) -> None:
-        if self._on_switch is not None:
-            self._on_switch(message)
+    def notify(self, message: str) -> None:
+        if self.onSwitch is not None:
+            self.onSwitch(message)
 
     # -- memoria do reserva -------------------------------------------------
-    def _ajustar_memoria(self, primaria_no_ar: bool) -> None:
+    def ajustarMemoria(self, primariaNoAr: bool) -> None:
         """Poe o modelo de reserva na memoria, ou o tira dela.
 
         Num Raspberry Pi de 8 GB o modelo local ocupa mais de um giga o tempo
@@ -152,14 +152,14 @@ class FallbackLLMClient:
         enquanto ninguem esta esperando. Quando a rede volta, a memoria e
         devolvida na hora, sem esperar o tempo de expiracao do Ollama.
         """
-        if self._residente is None:
+        if self.residente is None:
             return
         # Idempotente de proposito: e chamado tanto pela troca de estado quanto
         # pelo arranque, e repetir o pedido significaria descarregar um modelo
         # que a chamada anterior acabou de mandar carregar.
-        if self._memoria_estado is primaria_no_ar:
+        if self.memoriaEstado is primariaNoAr:
             return
-        self._memoria_estado = primaria_no_ar
+        self.memoriaEstado = primariaNoAr
 
         # A aplicacao roda numa thread para nao segurar a sondagem, mas serializada
         # pelo lock: uma troca so comeca quando a anterior terminou. E, antes de
@@ -168,43 +168,43 @@ class FallbackLLMClient:
         # aqui sai sem tocar no modelo. E o que garante que o estado final e
         # sempre o ultimo pedido, e nao o da thread que por acaso terminou depois.
         thread = threading.Thread(
-            target=self._aplicar_memoria,
-            args=(primaria_no_ar,),
+            target=self.aplicarMemoria,
+            args=(primariaNoAr,),
             name="llm-memoria-reserva",
             daemon=True,
         )
-        self._memoria = thread
+        self.memoria = thread
         thread.start()
 
-    def _aplicar_memoria(self, primaria_no_ar: bool) -> None:
-        with self._memoria_lock:
-            if self._memoria_estado is not primaria_no_ar:
+    def aplicarMemoria(self, primariaNoAr: bool) -> None:
+        with self.memoriaLock:
+            if self.memoriaEstado is not primariaNoAr:
                 # Uma troca mais nova ja mudou o alvo; ela aplica o certo.
                 return
-            if primaria_no_ar:
-                self._soltar_reserva()
+            if primariaNoAr:
+                self.soltarReserva()
             else:
-                self._segurar_reserva()
+                self.segurarReserva()
 
-    def _segurar_reserva(self) -> None:
+    def segurarReserva(self) -> None:
         """A rede caiu: o modelo local passa a valer a RAM que ocupa."""
-        assert self._residente is not None
-        self._residente.set_keep_alive(KEEP_ALIVE_EM_USO)
+        assert self.residente is not None
+        self.residente.setKeepAlive(KEEP_ALIVE_EM_USO)
         try:
-            self._backup.warm_up(self._prompt)
+            self.backup.warmUp(self.prompt)
         except Exception as exc:
             # Amplo de proposito: se o reserva nao carregar agora, ele ainda
             # sera tentado na pergunta seguinte — so mais devagar.
             logger.debug("nao consegui preparar o modelo local: %s", exc)
 
-    def _soltar_reserva(self) -> None:
+    def soltarReserva(self) -> None:
         """A rede voltou: o modelo local devolve a memoria."""
-        assert self._residente is not None
-        self._residente.set_keep_alive(self._keep_alive_ocioso)
-        self._residente.unload()
+        assert self.residente is not None
+        self.residente.setKeepAlive(self.keepAliveOcioso)
+        self.residente.unload()
 
     # -- ciclo de vida -----------------------------------------------------
-    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
+    def warmUp(self, messages: Sequence[ChatMessage] = ()) -> None:
         """Descobre quem esta de pe, aquece os dois e comeca a vigiar a rede.
 
         Perguntar primeiro e depois aquecer nao e detalhe de ordem. Aquecer a
@@ -221,79 +221,79 @@ class FallbackLLMClient:
         bastante: a sondagem descobre a queda em segundos, e ninguem esta
         esperando por uma resposta nesse meio-tempo.
         """
-        self._prompt = messages
-        no_ar = self._primary.is_available()
-        self._set_primary(no_ar)
+        self.prompt = messages
+        noAr = self.primary.isAvailable()
+        self.setPrimary(noAr)
         # Tambem no arranque, e nao so nas trocas: numa reinicializacao o Ollama
         # local pode ter ficado com o modelo carregado da execucao anterior, e
         # `_set_primary` nao mexe em memoria quando nada mudou. Quando ha o que
         # carregar, e esta chamada que o carrega — dai o reserva nao aparecer
         # abaixo.
-        self._ajustar_memoria(no_ar)
+        self.ajustarMemoria(noAr)
 
         # Um reserva que nao ocupa memoria desta maquina nao tem o que gerenciar,
         # e `_ajustar_memoria` nao o teria aquecido.
-        alvo = self._primary if no_ar else (None if self._residente else self._backup)
+        alvo = self.primary if noAr else (None if self.residente else self.backup)
         if alvo is not None:
             try:
-                alvo.warm_up(messages)
+                alvo.warmUp(messages)
             except Exception as exc:
                 # Amplo de proposito: um modelo que nao carrega nao pode impedir
                 # o robo de subir com o outro.
                 logger.debug("aquecimento de %s falhou: %s", alvo.name, exc)
 
-        if self._watcher is None and self._probe_interval > 0:
-            self._stop.clear()
-            self._watcher = threading.Thread(
-                target=self._watch, name="llm-fallback-probe", daemon=True
+        if self.watcher is None and self.probeInterval > 0:
+            self.stop.clear()
+            self.watcher = threading.Thread(
+                target=self.watch, name="llm-fallback-probe", daemon=True
             )
-            self._watcher.start()
+            self.watcher.start()
 
     def close(self) -> None:
-        self._stop.set()
-        if self._watcher is not None:
-            self._watcher.join(timeout=2.0)
-            self._watcher = None
-        self._primary.close()
-        self._backup.close()
+        self.stop.set()
+        if self.watcher is not None:
+            self.watcher.join(timeout=2.0)
+            self.watcher = None
+        self.primary.close()
+        self.backup.close()
 
-    def is_available(self) -> bool:
-        return self._primary.is_available() or self._backup.is_available()
+    def isAvailable(self) -> bool:
+        return self.primary.isAvailable() or self.backup.isAvailable()
 
-    def _watch(self) -> None:
-        while not self._stop.wait(self._probe_interval):
-            self._set_primary(self._primary.is_available())
+    def watch(self) -> None:
+        while not self.stop.wait(self.probeInterval):
+            self.setPrimary(self.primary.isAvailable())
 
     # -- inferencia --------------------------------------------------------
-    def stream_reply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
-        if self.using_primary:
-            stream = self._try_primary(messages)
+    def streamReply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
+        if self.usingPrimary:
+            stream = self.tryPrimary(messages)
             if stream is not None:
                 yield from stream
                 return
 
-        yield from self._backup.stream_reply(messages)
+        yield from self.backup.streamReply(messages)
 
-    def _try_primary(self, messages: Sequence[ChatMessage]) -> Iterator[str] | None:
+    def tryPrimary(self, messages: Sequence[ChatMessage]) -> Iterator[str] | None:
         """Devolve a resposta da rede, ou None se ela nao veio.
 
         O primeiro pedaco e forcado aqui dentro — a conexao so acontece nele — e
         e o que garante que a escolha entre um modelo e outro seja feita antes
         de qualquer palavra ir para a voz.
         """
-        stream = self._primary.stream_reply(messages)
+        stream = self.primary.streamReply(messages)
         try:
             first = next(stream)
         except StopIteration:
             return iter(())
         except LLMError as exc:
             logger.warning("IA de rede falhou (%s); usando o modelo local", exc)
-            self._set_primary(False)
+            self.setPrimary(False)
             return None
 
-        return self._resume(first, stream)
+        return self.resume(first, stream)
 
-    def _resume(self, first: str, stream: Iterator[str]) -> Iterator[str]:
+    def resume(self, first: str, stream: Iterator[str]) -> Iterator[str]:
         """Entrega o primeiro pedaco e segue com o resto da resposta.
 
         Cair no meio e outra historia: a Atlas ja falou a primeira frase, e
@@ -306,5 +306,5 @@ class FallbackLLMClient:
             yield from stream
         except LLMError:
             logger.warning("a IA de rede caiu no meio da resposta")
-            self._set_primary(False)
+            self.setPrimary(False)
             raise

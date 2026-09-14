@@ -25,11 +25,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from roboteye import __version__, voice_catalog
+from roboteye import __version__, voiceCatalog
 from roboteye.config import ConfigError, Settings
-from roboteye.logging_setup import configure_logging, get_logger
+from roboteye.loggingSetup import configureLogging, getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -38,7 +38,7 @@ EXIT_ERROR = 1
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
-def build_parser() -> argparse.ArgumentParser:
+def buildParser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="roboteye",
         description="A face animada da Atlas: olhos, IA e voz local.",
@@ -47,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"roboteye {__version__}")
     parser.add_argument(
         "--log-level",
+        dest="logLevel",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="sobrescreve ROBOTEYE_LOG_LEVEL",
     )
@@ -54,15 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    def add_voice_option(sub: argparse.ArgumentParser) -> None:
+    def addVoiceOption(sub: argparse.ArgumentParser) -> None:
         sub.add_argument(
             "--voice",
             metavar="NOME",
-            help=f"voz do catalogo ({', '.join(voice_catalog.names())}); "
+            help=f"voz do catalogo ({', '.join(voiceCatalog.names())}); "
             "sobrescreve ROBOTEYE_VOICE",
         )
 
-    def add_persona_option(sub: argparse.ArgumentParser) -> None:
+    def addPersonaOption(sub: argparse.ArgumentParser) -> None:
         sub.add_argument(
             "--persona",
             metavar="NOME",
@@ -71,37 +72,39 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = subparsers.add_parser("run", help="face animada + chat de texto (padrao)")
     run.add_argument("--fullscreen", action="store_true", help="abre a face em tela cheia")
-    run.add_argument("--no-face", action="store_true", help="roda apenas o chat")
-    add_voice_option(run)
-    add_persona_option(run)
-    run.set_defaults(handler=_command_run)
+    run.add_argument(
+        "--no-face", dest="noFace", action="store_true", help="roda apenas o chat"
+    )
+    addVoiceOption(run)
+    addPersonaOption(run)
+    run.set_defaults(handler=commandRun)
 
     chat = subparsers.add_parser("chat", help="apenas o chat de texto no terminal")
-    add_voice_option(chat)
-    add_persona_option(chat)
-    chat.set_defaults(handler=_command_chat)
+    addVoiceOption(chat)
+    addPersonaOption(chat)
+    chat.set_defaults(handler=commandChat)
 
     face = subparsers.add_parser("face", help="apenas a face animada")
     face.add_argument("--fullscreen", action="store_true", help="abre a face em tela cheia")
-    face.set_defaults(handler=_command_face)
+    face.set_defaults(handler=commandFace)
 
     say = subparsers.add_parser("say", help="sintetiza um texto e sai")
     say.add_argument("text", nargs="+", help="texto a ser falado")
     say.add_argument("--output", help="salva em um arquivo WAV em vez de tocar")
-    add_voice_option(say)
-    say.set_defaults(handler=_command_say)
+    addVoiceOption(say)
+    say.set_defaults(handler=commandSay)
 
     doctor = subparsers.add_parser("doctor", help="verifica dependencias, voz e LLM")
-    doctor.set_defaults(handler=_command_doctor)
+    doctor.set_defaults(handler=commandDoctor)
 
     memoria = subparsers.add_parser("memoria", help="mostra onde a RAM do robo esta indo")
     memoria.add_argument("--json", action="store_true", help="saida em JSON, para graficos")
-    memoria.set_defaults(handler=_command_memoria)
+    memoria.set_defaults(handler=commandMemoria)
 
     radio = subparsers.add_parser(
         "radio", help="diz se o Wi-Fi e o Bluetooth estao brigando pela mesma antena"
     )
-    radio.set_defaults(handler=_command_radio)
+    radio.set_defaults(handler=commandRadio)
 
     setup = subparsers.add_parser(
         "setup",
@@ -114,66 +117,76 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup.add_argument("--ollama", metavar="IP:PORTA", help="endereco da maquina com o Ollama")
     setup.add_argument("--model", metavar="NOME", help="modelo de linguagem (ex.: llama3.2:3b)")
-    setup.add_argument("--no-llm", action="store_true", help="configura sem IA (modo echo)")
+    setup.add_argument(
+        "--no-llm", dest="noLlm", action="store_true", help="configura sem IA (modo echo)"
+    )
     setup.add_argument(
         "--non-interactive",
+        dest="nonInteractive",
         action="store_true",
         help="nao pergunta nada; usa as flags e mantem o resto",
     )
     setup.add_argument(
-        "--skip-download", action="store_true", help="nao baixa o modelo de voz ao final"
+        "--skip-download",
+        dest="skipDownload",
+        action="store_true",
+        help="nao baixa o modelo de voz ao final",
     )
-    add_voice_option(setup)
-    add_persona_option(setup)
-    setup.set_defaults(handler=_command_setup)
+    addVoiceOption(setup)
+    addPersonaOption(setup)
+    setup.set_defaults(handler=commandSetup)
 
     models = subparsers.add_parser("models", help="lista os modelos disponiveis na maquina da IA")
     models.add_argument(
         "--ollama", metavar="IP:PORTA", help="outro endereco, so para esta consulta"
     )
-    models.set_defaults(handler=_command_models)
+    models.set_defaults(handler=commandModels)
 
     preview = subparsers.add_parser("preview", help="salva um PNG com todas as expressoes da face")
     preview.add_argument("--output", default="preview.png", help="arquivo de saida")
-    preview.set_defaults(handler=_command_preview)
+    preview.set_defaults(handler=commandPreview)
 
     web = subparsers.add_parser("web", help="pagina de configuracao, para abrir do celular")
     web.add_argument("--port", type=int, help="porta (padrao: 8080)")
-    web.set_defaults(handler=_command_web)
+    web.set_defaults(handler=commandWeb)
 
     ble = subparsers.add_parser("ble", help="ponte bluetooth: o celular controla o robo sem ESP32")
     ble.add_argument("--nome", default="Atlas", help="nome que aparece na busca do celular")
-    ble.add_argument("--mqtt-host", default="127.0.0.1", help="broker (padrao: 127.0.0.1)")
-    ble.add_argument("--mqtt-port", type=int, default=1883, help="porta do broker")
-    ble.set_defaults(handler=_command_ble)
+    ble.add_argument(
+        "--mqtt-host", dest="mqttHost", default="127.0.0.1", help="broker (padrao: 127.0.0.1)"
+    )
+    ble.add_argument(
+        "--mqtt-port", dest="mqttPort", type=int, default=1883, help="porta do broker"
+    )
+    ble.set_defaults(handler=commandBle)
 
     voice = subparsers.add_parser("voice", help="gerencia modelos de voz")
-    voice_subparsers = voice.add_subparsers(dest="voice_command", required=True)
+    voiceSubparsers = voice.add_subparsers(dest="voiceCommand", required=True)
 
-    voice_list = voice_subparsers.add_parser("list", help="lista as vozes do catalogo")
-    voice_list.set_defaults(handler=_command_voice_list)
+    voiceList = voiceSubparsers.add_parser("list", help="lista as vozes do catalogo")
+    voiceList.set_defaults(handler=commandVoiceList)
 
-    voice_download = voice_subparsers.add_parser("download", help="baixa uma voz")
-    voice_download.add_argument(
+    voiceDownload = voiceSubparsers.add_parser("download", help="baixa uma voz")
+    voiceDownload.add_argument(
         "key",
         nargs="?",
-        default=voice_catalog.DEFAULT_VOICE,
-        help=f"voz (padrao: {voice_catalog.DEFAULT_VOICE})",
+        default=voiceCatalog.DEFAULT_VOICE,
+        help=f"voz (padrao: {voiceCatalog.DEFAULT_VOICE})",
     )
-    voice_download.add_argument("--force", action="store_true", help="rebaixa mesmo se existir")
-    voice_download.set_defaults(handler=_command_voice_download)
+    voiceDownload.add_argument("--force", action="store_true", help="rebaixa mesmo se existir")
+    voiceDownload.set_defaults(handler=commandVoiceDownload)
 
-    voice_ensure = voice_subparsers.add_parser(
+    voiceEnsure = voiceSubparsers.add_parser(
         "ensure",
         help="baixa o que a configuracao atual precisa (voz e reserva offline)",
     )
-    voice_ensure.set_defaults(handler=_command_voice_ensure)
+    voiceEnsure.set_defaults(handler=commandVoiceEnsure)
 
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
+    parser = buildParser()
     args = parser.parse_args(argv)
 
     # Sem subcomando, `run` e o padrao.
@@ -181,15 +194,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parser.parse_args([*(argv or []), "run"])
 
     try:
-        settings = Settings.from_env(env_file=args.env_file)
+        settings = Settings.fromEnv(envFile=args.env_file)
     except ConfigError as exc:
         print(f"erro de configuracao: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
-    configure_logging(args.log_level or settings.log_level)
+    configureLogging(args.logLevel or settings.logLevel)
 
     try:
-        settings = _apply_voice_override(args, settings)
+        settings = applyVoiceOverride(args, settings)
     except ConfigError as exc:
         print(f"erro de configuracao: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -206,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 # Comandos
 # ---------------------------------------------------------------------------
 @contextlib.contextmanager
-def _config_page(settings: Settings, app: Any = None):
+def configPage(settings: Settings, app: Any = None):
     """Sobe a pagina de configuracao junto com o robo.
 
     E o modo como ela sera usada de verdade: o robo liga sozinho no arranque, de
@@ -227,22 +240,22 @@ def _config_page(settings: Settings, app: Any = None):
 
     from roboteye.web import ConfigServer
 
-    config = build_web_config(settings)
+    config = buildWebConfig(settings)
     comandos = None
-    if settings.web.mostrar_comandos:
+    if settings.web.mostrarComandos:
         from roboteye.web.comandos import ComandosRecebidos
 
         comandos = ComandosRecebidos()
-        comandos.escutar(host=settings.web.mqtt_host, port=settings.web.mqtt_port)
+        comandos.escutar(host=settings.web.mqttHost, port=settings.web.mqttPort)
 
     if app is not None:
         config = replace(
             config,
             comandos=comandos,
-            conversa=_conversa_do(app),
+            conversa=conversaDo(app),
             # O atualizador pergunta isto antes de reiniciar o robo: ninguem quer
             # a face sumindo no meio de uma frase.
-            ocupado=app.assistant.is_busy,
+            ocupado=app.assistant.isBusy,
         )
     server = ConfigServer(config)
     try:
@@ -252,14 +265,14 @@ def _config_page(settings: Settings, app: Any = None):
         yield None
         return
 
-    print(announce_web(config), flush=True)
+    print(announceWeb(config), flush=True)
     try:
         yield server
     finally:
         server.stop()
 
 
-def _conversa_do(app: Any):
+def conversaDo(app: Any):
     """Liga a pagina ao robo: ela entrega o texto, ele devolve o que respondeu.
 
     A ligacao mora aqui, e nao dentro da pagina, pela mesma razao de sempre
@@ -270,51 +283,51 @@ def _conversa_do(app: Any):
     from roboteye.web.conversa import ConversaWeb
 
     conversa = ConversaWeb(app.assistant.submit)
-    app.bus.subscribe(lambda e: conversa.anotar("atlas", e.text), event_type=AssistantReply)
-    app.bus.subscribe(lambda e: conversa.anotar("erro", e.message), event_type=ErrorOccurred)
+    app.bus.subscribe(lambda e: conversa.anotar("atlas", e.text), eventType=AssistantReply)
+    app.bus.subscribe(lambda e: conversa.anotar("erro", e.message), eventType=ErrorOccurred)
     return conversa
 
 
 # A pagina precisa do robo montado para conversar com ele, entao o `Application`
 # vem primeiro nos `with` — ao contrario da ordem que estes comandos tinham.
-def _command_run(args: argparse.Namespace, settings: Settings) -> int:
+def commandRun(args: argparse.Namespace, settings: Settings) -> int:
     from roboteye.app import Application
 
-    settings = _apply_face_overrides(args, settings)
-    with Application.build(settings) as app, _config_page(settings, app):
-        app.run_interactive()
+    settings = applyFaceOverrides(args, settings)
+    with Application.build(settings) as app, configPage(settings, app):
+        app.runInteractive()
     return EXIT_OK
 
 
-def _command_chat(_: argparse.Namespace, settings: Settings) -> int:
+def commandChat(_: argparse.Namespace, settings: Settings) -> int:
     from roboteye.app import Application
 
-    with Application.build(settings) as app, _config_page(settings, app):
-        app.run_chat()
+    with Application.build(settings) as app, configPage(settings, app):
+        app.runChat()
     return EXIT_OK
 
 
-def _command_face(args: argparse.Namespace, settings: Settings) -> int:
+def commandFace(args: argparse.Namespace, settings: Settings) -> int:
     from roboteye.app import Application
 
-    settings = _apply_face_overrides(args, settings)
-    with Application.build(settings) as app, _config_page(settings, app):
-        app.run_face()
+    settings = applyFaceOverrides(args, settings)
+    with Application.build(settings) as app, configPage(settings, app):
+        app.runFace()
     return EXIT_OK
 
 
-def _command_ble(args: argparse.Namespace, _settings: Settings) -> int:
+def commandBle(args: argparse.Namespace, settings: Settings) -> int:
     """Poe o robo no ar pelo bluetooth e entrega os comandos aos motores.
 
     Substitui o par ESP32 + `serial_ingestor`: o celular fala com o Pi direto, e
     o que chega vai para o mesmo topico MQTT de sempre.
     """
-    from roboteye.ble import EntregaMqtt, PonteBLE, anunciar_pelo_kernel
+    from roboteye.ble import EntregaMqtt, PonteBLE, anunciarPeloKernel
 
-    entrega = EntregaMqtt(host=args.mqtt_host, port=args.mqtt_port)
+    entrega = EntregaMqtt(host=args.mqttHost, port=args.mqttPort)
     entrega.conectar()
 
-    if not anunciar_pelo_kernel(args.nome):
+    if not anunciarPeloKernel(args.nome):
         logger.error("sem anuncio no ar, o celular nao vai achar o robo")
         return EXIT_ERROR
 
@@ -329,29 +342,29 @@ def _command_ble(args: argparse.Namespace, _settings: Settings) -> int:
     return EXIT_OK
 
 
-def _command_say(args: argparse.Namespace, settings: Settings) -> int:
+def commandSay(args: argparse.Namespace, settings: Settings) -> int:
     import wave
 
     from roboteye.speech.base import SpeechError
-    from roboteye.speech.factory import create_tts_engine
-    from roboteye.speech.player import create_audio_sink
-    from roboteye.speech.speaker import synthesize_polished
+    from roboteye.speech.factory import createTtsEngine
+    from roboteye.speech.player import createAudioSink
+    from roboteye.speech.speaker import synthesizePolished
 
     text = " ".join(args.text)
-    engine = create_tts_engine(settings.voice)
+    engine = createTtsEngine(settings.voice)
 
     def audio():
         # O mesmo caminho que o robo usa, para que `say` sirva de conferencia:
         # com normalizacao do texto e com o acabamento do audio.
-        return synthesize_polished(engine, text, language=settings.voice.language)
+        return synthesizePolished(engine, text, language=settings.voice.language)
 
     try:
         if args.output:
-            _write_wav(audio(), args.output, wave)
+            writeWav(audio(), args.output, wave)
             print(f"audio salvo em {args.output}")
             return EXIT_OK
 
-        sink = create_audio_sink(settings.voice)
+        sink = createAudioSink(settings.voice)
         try:
             for chunk in audio():
                 sink.start(chunk.format)
@@ -367,41 +380,41 @@ def _command_say(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _write_wav(stream, path: str, wave_module) -> None:
+def writeWav(stream, path: str, waveModule) -> None:
     chunks = list(stream)
     if not chunks:
         raise RuntimeError("nenhum audio foi gerado")
 
-    audio_format = chunks[0].format
-    with wave_module.open(path, "wb") as handle:
-        handle.setnchannels(audio_format.channels)
-        handle.setsampwidth(audio_format.sample_width)
-        handle.setframerate(audio_format.sample_rate)
+    audioFormat = chunks[0].format
+    with waveModule.open(path, "wb") as handle:
+        handle.setnchannels(audioFormat.channels)
+        handle.setsampwidth(audioFormat.sampleWidth)
+        handle.setframerate(audioFormat.sampleRate)
         for chunk in chunks:
             handle.writeframes(chunk.audio)
 
 
-def _command_doctor(_: argparse.Namespace, settings: Settings) -> int:
-    from roboteye.diagnostics import run_diagnostics
+def commandDoctor(_: argparse.Namespace, settings: Settings) -> int:
+    from roboteye.diagnostics import runDiagnostics
 
-    report = run_diagnostics(settings)
+    report = runDiagnostics(settings)
     print(report.render())
     return EXIT_OK if report.ok else EXIT_ERROR
 
 
-def _command_memoria(args: argparse.Namespace, settings: Settings) -> int:
+def commandMemoria(args: argparse.Namespace, settings: Settings) -> int:
     """Mostra de quem e a memoria que o robo esta gastando."""
-    from roboteye.memoria import medir, render_json
+    from roboteye.memoria import medir, renderJson
 
     # O Ollama que interessa e o do proprio Pi: e ele que ocupa RAM aqui. O da
     # maquina de mesa gasta a memoria dela, e nao ha o que otimizar daqui.
-    local = settings.llm.fallback_host or _host_se_local(settings.llm.host)
-    relatorio = medir(ollama_host=local)
-    print(render_json(relatorio) if args.json else relatorio.render())
+    local = settings.llm.fallbackHost or hostSeLocal(settings.llm.host)
+    relatorio = medir(ollamaHost=local)
+    print(renderJson(relatorio) if args.json else relatorio.render())
     return EXIT_OK if relatorio.folgado or bool(relatorio.erro) else EXIT_ERROR
 
 
-def _command_radio(_: argparse.Namespace, __: Settings) -> int:
+def commandRadio(_: argparse.Namespace, __: Settings) -> int:
     """Diz se o Wi-Fi e o Bluetooth estao disputando a mesma faixa."""
     from roboteye.radio import aconselhar, medir, render
 
@@ -413,56 +426,56 @@ def _command_radio(_: argparse.Namespace, __: Settings) -> int:
     return EXIT_OK if not conselhos else EXIT_ERROR
 
 
-def _host_se_local(host: str) -> str:
+def hostSeLocal(host: str) -> str:
     """O endereco do LLM, mas so quando ele aponta para esta maquina."""
     return host if any(marca in host for marca in ("127.0.0.1", "localhost", "::1")) else ""
 
 
-def _command_setup(args: argparse.Namespace, settings: Settings) -> int:
+def commandSetup(args: argparse.Namespace, settings: Settings) -> int:
     """Assistente de primeira configuracao."""
     from roboteye.config import PROJECT_ROOT
-    from roboteye.setup_wizard import Answers, Prompt, run_setup
+    from roboteye.setupWizard import Answers, Prompt, runSetup
 
     answers = Answers(
         ollama=args.ollama,
         model=args.model,
         voice=args.voice,
         persona=args.persona,
-        no_llm=args.no_llm,
-        non_interactive=args.non_interactive,
-        skip_download=args.skip_download,
+        noLlm=args.noLlm,
+        nonInteractive=args.nonInteractive,
+        skipDownload=args.skipDownload,
     )
     # Sem terminal de verdade — num script, num servico — perguntar seria
     # esperar por uma resposta que nunca chega. Ali o assistente so aplica o que
     # veio nas flags.
-    prompt = Prompt(interactive=not args.non_interactive and _stdin_is_tty())
+    prompt = Prompt(interactive=not args.nonInteractive and stdinIsTty())
 
-    env_path = Path(args.env_file) if args.env_file else PROJECT_ROOT / ".env"
-    run_setup(settings, answers, prompt, env_path=env_path)
+    envPath = Path(args.env_file) if args.env_file else PROJECT_ROOT / ".env"
+    runSetup(settings, answers, prompt, envPath=envPath)
     return EXIT_OK
 
 
-def _stdin_is_tty() -> bool:
+def stdinIsTty() -> bool:
     try:
         return sys.stdin is not None and sys.stdin.isatty()
     except (ValueError, OSError):  # stdin fechado
         return False
 
 
-def _command_models(args: argparse.Namespace, settings: Settings) -> int:
+def commandModels(args: argparse.Namespace, settings: Settings) -> int:
     """Lista o que a maquina da IA tem instalado.
 
     A alternativa e entrar por SSH na outra maquina para rodar `ollama list` —
     e o robo ja sabe o endereco.
     """
-    from roboteye.llm.probe import probe_ollama
+    from roboteye.llm.probe import probeOllama
 
-    resultado = probe_ollama(args.ollama or settings.llm.host)
+    resultado = probeOllama(args.ollama or settings.llm.host)
     if not resultado.ok:
         print(f"{resultado.host}: {resultado.error}", file=sys.stderr)
         return EXIT_ERROR
 
-    print(f"\n{resultado.host} respondeu em {resultado.latency_ms} ms\n")
+    print(f"\n{resultado.host} respondeu em {resultado.latencyMs} ms\n")
     if not resultado.models:
         print("  nenhum modelo instalado.")
         print("  na maquina da IA: ollama pull llama3.2:3b\n")
@@ -476,28 +489,28 @@ def _command_models(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _command_preview(args: argparse.Namespace, settings: Settings) -> int:
+def commandPreview(args: argparse.Namespace, settings: Settings) -> int:
     from pathlib import Path
 
-    from roboteye.face.preview import render_sheet
+    from roboteye.face.preview import renderSheet
 
-    caminho = render_sheet(settings.face, Path(args.output))
+    caminho = renderSheet(settings.face, Path(args.output))
     print(f"folha de expressoes salva em {caminho}")
     return EXIT_OK
 
 
-def _command_voice_list(_: argparse.Namespace, settings: Settings) -> int:
+def commandVoiceList(_: argparse.Namespace, settings: Settings) -> int:
     from roboteye.voices import CATALOG, DEFAULT_MODELS_DIR
 
     print("\nVozes disponiveis:\n")
     for key, spec in sorted(CATALOG.items()):
-        model_path, config_path = spec.target_paths(DEFAULT_MODELS_DIR)
-        baixada = model_path.is_file() and config_path.is_file()
+        modelPath, configPath = spec.targetPaths(DEFAULT_MODELS_DIR)
+        baixada = modelPath.is_file() and configPath.is_file()
 
         marca = "*" if key == settings.voice.voice else " "
         estado = "baixada" if baixada else "nao baixada"
         print(f" {marca} {key:<8} [{spec.language}] {spec.description}")
-        print(f"   {'':<8} {estado}; licenca: {spec.license_note or 'nao informada'}")
+        print(f"   {'':<8} {estado}; licenca: {spec.licenseNote or 'nao informada'}")
 
     print("\n  * = voz em uso")
     print("\nPara trocar:")
@@ -507,12 +520,12 @@ def _command_voice_list(_: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
-def _command_web(args: argparse.Namespace, settings: Settings) -> int:
+def commandWeb(args: argparse.Namespace, settings: Settings) -> int:
     """Sobe so a pagina de configuracao e fica esperando."""
     from roboteye.web import ConfigServer
 
-    config = build_web_config(settings, port=args.port)
-    print(announce_web(config))
+    config = buildWebConfig(settings, port=args.port)
+    print(announceWeb(config))
     print("  Ctrl+C encerra.\n")
 
     server = ConfigServer(config)
@@ -526,32 +539,32 @@ def _command_web(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
-def build_web_config(settings: Settings, *, port: int | None = None):
+def buildWebConfig(settings: Settings, *, port: int | None = None):
     """Monta a configuracao da pagina, sorteando um PIN se nao houver um.
 
     O PIN sorteado nao e gravado: ele vale enquanto o robo estiver de pe. Quem
     quiser um PIN fixo define ROBOTEYE_WEB_PIN — o que e o normal numa
     instalacao de verdade, para nao precisar olhar o log a cada reinicio.
     """
-    from roboteye.web import WebConfig, generate_pin
+    from roboteye.web import WebConfig, generatePin
 
     return WebConfig(
         host=settings.web.host,
         port=port or settings.web.port,
-        pin=settings.web.pin or generate_pin(),
+        pin=settings.web.pin or generatePin(),
     )
 
 
-def announce_web(config) -> str:
+def announceWeb(config) -> str:
     """Texto que ensina como chegar na pagina."""
-    enderecos = _local_addresses() if config.host in {"0.0.0.0", ""} else [config.host]
+    enderecos = localAddresses() if config.host in {"0.0.0.0", ""} else [config.host]
     linhas = ["Configuracao pelo navegador:"]
     linhas += [f"  http://{host}:{config.port}" for host in enderecos]
     linhas.append(f"  PIN: {config.pin}")
     return "\n".join(linhas)
 
 
-def _local_addresses() -> list[str]:
+def localAddresses() -> list[str]:
     """IPs pelos quais o robo pode ser alcancado na rede."""
     import socket
 
@@ -568,7 +581,7 @@ def _local_addresses() -> list[str]:
     return enderecos
 
 
-def _command_voice_ensure(_: argparse.Namespace, settings: Settings) -> int:
+def commandVoiceEnsure(_: argparse.Namespace, settings: Settings) -> int:
     """Baixa tudo que a configuracao atual precisa para falar.
 
     Existe para a instalacao: quem esta implantando sabe qual voz quer, nao quais
@@ -576,36 +589,36 @@ def _command_voice_ensure(_: argparse.Namespace, settings: Settings) -> int:
     reserva offline dela tem — e e justamente a reserva que precisa estar no
     disco antes de a rede faltar, nao depois.
     """
-    from roboteye import voice_catalog
-    from roboteye.voices import VoiceDownloadError, console_progress, download_voice
+    from roboteye import voiceCatalog
+    from roboteye.voices import VoiceDownloadError, consoleProgress, downloadVoice
 
     alvos = [settings.voice.voice]
-    reserva = settings.voice.fallback_voice()
+    reserva = settings.voice.fallbackVoice()
     if reserva:
         alvos.append(reserva)
 
     baixou = False
     for chave in alvos:
-        if not voice_catalog.needs_download(chave):
+        if not voiceCatalog.needsDownload(chave):
             print(f"{chave}: roda na nuvem, nao ha o que baixar")
             continue
         try:
-            download_voice(chave, on_progress=console_progress)
+            downloadVoice(chave, onProgress=consoleProgress)
         except VoiceDownloadError as exc:
             print(f"erro ao baixar {chave}: {exc}", file=sys.stderr)
             return EXIT_ERROR
         baixou = True
 
-    if not baixou and not any(voice_catalog.needs_download(c) for c in alvos):
+    if not baixou and not any(voiceCatalog.needsDownload(c) for c in alvos):
         print("nada a baixar: esta configuracao fala inteiramente pela nuvem")
     return EXIT_OK
 
 
-def _command_voice_download(args: argparse.Namespace, _: Settings) -> int:
-    from roboteye.voices import VoiceDownloadError, console_progress, download_voice
+def commandVoiceDownload(args: argparse.Namespace, _: Settings) -> int:
+    from roboteye.voices import VoiceDownloadError, consoleProgress, downloadVoice
 
     try:
-        path = download_voice(args.key, force=args.force, on_progress=console_progress)
+        path = downloadVoice(args.key, force=args.force, onProgress=consoleProgress)
     except VoiceDownloadError as exc:
         print(f"erro: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -619,7 +632,7 @@ def _command_voice_download(args: argparse.Namespace, _: Settings) -> int:
 # ---------------------------------------------------------------------------
 # Auxiliares
 # ---------------------------------------------------------------------------
-def _apply_voice_override(args: argparse.Namespace, settings: Settings) -> Settings:
+def applyVoiceOverride(args: argparse.Namespace, settings: Settings) -> Settings:
     """Aplica `--voice` e `--persona`, relendo a configuracao.
 
     Em vez de remendar o objeto ja montado, as flags viram variaveis de ambiente
@@ -640,17 +653,17 @@ def _apply_voice_override(args: argparse.Namespace, settings: Settings) -> Setti
     if persona:
         os.environ["ROBOTEYE_PERSONA"] = persona
 
-    return Settings.from_env(env_file=args.env_file)
+    return Settings.fromEnv(envFile=args.env_file)
 
 
-def _apply_face_overrides(args: argparse.Namespace, settings: Settings) -> Settings:
+def applyFaceOverrides(args: argparse.Namespace, settings: Settings) -> Settings:
     """Aplica as flags de linha de comando sobre a configuracao do ambiente."""
     from dataclasses import replace
 
     face = settings.face
     if getattr(args, "fullscreen", False):
         face = replace(face, fullscreen=True)
-    if getattr(args, "no_face", False):
+    if getattr(args, "noFace", False):
         face = replace(face, enabled=False)
     return replace(settings, face=face)
 

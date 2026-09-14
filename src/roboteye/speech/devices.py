@@ -22,9 +22,9 @@ Quem aponta o padrão do sistema para a placa certa é `scripts/configurar-audio
 
 from __future__ import annotations
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Valor de `ROBOTEYE_AUDIO_DEVICE` que pede a escolha automática.
 AUTO = "auto"
@@ -40,7 +40,7 @@ TAXA_DE_PROVA = 22050
 _APELIDOS = ("default", "sysdefault", "pulse", "pipewire", "jack", "dmix", "surround")
 
 
-def resolver_saida(preferencia: str | None, *, taxa: int = TAXA_DE_PROVA) -> str | int | None:
+def resolverSaida(preferencia: str | None, *, taxa: int = TAXA_DE_PROVA) -> str | int | None:
     """Traduz o que veio da configuracao no que o `sounddevice` entende.
 
     - vazio ou None: o padrao do sistema, sem opinar;
@@ -58,24 +58,24 @@ def resolver_saida(preferencia: str | None, *, taxa: int = TAXA_DE_PROVA) -> str
     if escolha.lower() != AUTO:
         return escolha
 
-    indice = _primeira_placa_usb(taxa)
+    indice = primeiraPlacaUsb(taxa)
     if indice is None:
         logger.debug("nenhuma placa USB utilizavel; usando o padrao do sistema")
         return None
     return indice
 
 
-def _listar() -> list[dict]:
+def listar() -> list[dict]:
     """Os dispositivos que o sistema oferece. Isolado para poder ser trocado."""
     import sounddevice as sd
 
     return list(sd.query_devices())
 
 
-def _primeira_placa_usb(taxa: int) -> int | None:
+def primeiraPlacaUsb(taxa: int) -> int | None:
     """Indice da primeira placa USB que sabe tocar nesta taxa, ou None."""
     try:
-        dispositivos = _listar()
+        dispositivos = listar()
     except Exception as exc:
         # Amplo de proposito: sem `sounddevice` utilizavel nao ha o que
         # escolher, e isso nao pode derrubar o arranque do robo — quem chama
@@ -91,7 +91,7 @@ def _primeira_placa_usb(taxa: int) -> int | None:
             continue
         if "usb" not in nome.lower():
             continue
-        if not _aceita(indice, taxa):
+        if not aceita(indice, taxa):
             # Nao e erro: o padrao do sistema toca nela do mesmo jeito, com o
             # ALSA convertendo no meio do caminho.
             logger.info(
@@ -105,7 +105,7 @@ def _primeira_placa_usb(taxa: int) -> int | None:
     return None
 
 
-def _aceita(indice: int, taxa: int, *, entrada: bool = False) -> bool:
+def aceita(indice: int, taxa: int, *, entrada: bool = False) -> bool:
     """Se da para abrir esta placa nesta taxa.
 
     Abre de verdade, em vez de perguntar ao `check_*_settings`: no microfone
@@ -131,7 +131,7 @@ def _aceita(indice: int, taxa: int, *, entrada: bool = False) -> bool:
 TAXA_DE_ESCUTA = 16000
 
 
-def resolver_entrada(preferencia: str | None, *, taxa: int = TAXA_DE_ESCUTA) -> str | int | None:
+def resolverEntrada(preferencia: str | None, *, taxa: int = TAXA_DE_ESCUTA) -> str | int | None:
     """O mesmo que `resolver_saida`, para o microfone.
 
     A mesma armadilha vale aqui, e custou um `Invalid sample rate` para ser
@@ -149,7 +149,7 @@ def resolver_entrada(preferencia: str | None, *, taxa: int = TAXA_DE_ESCUTA) -> 
         return escolha
 
     try:
-        dispositivos = _listar()
+        dispositivos = listar()
     except Exception as exc:
         logger.debug("nao consegui listar dispositivos de audio: %s", exc)
         return None
@@ -162,7 +162,7 @@ def resolver_entrada(preferencia: str | None, *, taxa: int = TAXA_DE_ESCUTA) -> 
             continue
         if "usb" not in nome.lower():
             continue
-        if not _aceita(indice, taxa, entrada=True):
+        if not aceita(indice, taxa, entrada=True):
             logger.info(
                 "%s nao grava a %d Hz; deixando o ALSA converter pelo padrao do sistema",
                 nome,

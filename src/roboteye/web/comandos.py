@@ -24,12 +24,12 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
 if TYPE_CHECKING:
     from paho.mqtt.client import Client
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: O mesmo topico que a ponte Bluetooth alimenta e que o orquestrador assina.
 TOPICO_ENTRADA = "robo/comando/entrada"
@@ -59,16 +59,16 @@ class ComandosRecebidos:
     """Guarda os ultimos comandos que chegaram ao robo."""
 
     def __init__(self, limite: int = LIMITE) -> None:
-        self._itens: deque[dict] = deque(maxlen=limite)
-        self._lock = threading.Lock()
-        self._cliente: Client | None = None
+        self.itens: deque[dict] = deque(maxlen=limite)
+        self.lock = threading.Lock()
+        self.cliente: Client | None = None
 
     # -- leitura -----------------------------------------------------------
     def instantaneo(self, agora: float | None = None) -> dict:
         """O comando valendo agora e os ultimos que chegaram."""
         momento = agora if agora is not None else time.time()
-        with self._lock:
-            itens = list(self._itens)
+        with self.lock:
+            itens = list(self.itens)
 
         atual = None
         if itens:
@@ -91,11 +91,11 @@ class ComandosRecebidos:
 
     def anotar(self, comando: dict, agora: float | None = None) -> None:
         """Registra um comando ja decodificado."""
-        direcao = _direcao_de(comando)
+        direcao = direcaoDe(comando)
         if direcao is None:
             return
-        with self._lock:
-            self._itens.append(
+        with self.lock:
+            self.itens.append(
                 {"direcao": direcao, "quando": agora if agora is not None else time.time()}
             )
 
@@ -108,23 +108,23 @@ class ComandosRecebidos:
             logger.debug("sem paho-mqtt; a pagina nao mostra os comandos recebidos")
             return
 
-        def ao_conectar(cliente, _dados, _flags, _motivo, _propriedades=None) -> None:
+        def aoConectar(cliente, dados, flags, motivo, propriedades=None) -> None:
             cliente.subscribe(TOPICO_ENTRADA, qos=1)
             logger.info("mostrando na pagina o que chega em %s", TOPICO_ENTRADA)
 
-        def ao_receber(_cliente, _dados, mensagem) -> None:
+        def aoReceber(cliente, dados, mensagem) -> None:
             try:
                 self.anotar(json.loads(mensagem.payload))
             except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
                 logger.debug("comando ilegivel no topico; ignorado")
 
         try:
-            cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="roboteye-web")
-            cliente.on_connect = ao_conectar
-            cliente.on_message = ao_receber
+            cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, clientId="roboteye-web")
+            cliente.on_connect = aoConectar
+            cliente.on_message = aoReceber
             cliente.connect_async(host, port, keepalive=30)
             cliente.loop_start()
-            self._cliente = cliente
+            self.cliente = cliente
         except Exception as exc:
             # Amplo de proposito: um broker fora do ar deixa este painel vazio
             # e nao pode derrubar a pagina — que serve, entre outras coisas,
@@ -132,13 +132,13 @@ class ComandosRecebidos:
             logger.debug("nao consegui escutar os comandos: %s", exc)
 
     def fechar(self) -> None:
-        if self._cliente is not None:
-            self._cliente.loop_stop()
-            self._cliente.disconnect()
-            self._cliente = None
+        if self.cliente is not None:
+            self.cliente.loop_stop()
+            self.cliente.disconnect()
+            self.cliente = None
 
 
-def _direcao_de(comando: dict) -> str | None:
+def direcaoDe(comando: dict) -> str | None:
     """Traduz os dois formatos que o robo aceita numa direcao.
 
     O app manda a forma curta (`{"cmd":"F"}`); o formato expandido

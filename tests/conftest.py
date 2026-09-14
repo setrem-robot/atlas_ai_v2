@@ -21,7 +21,7 @@ from roboteye.llm.persona import PersonaStore
 from roboteye.speech.base import AudioFormat, SpeechChunk
 from roboteye.speech.speaker import Speaker
 
-TEST_FORMAT = AudioFormat(sample_rate=22050, channels=1, sample_width=2)
+TEST_FORMAT = AudioFormat(sampleRate=22050, channels=1, sampleWidth=2)
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ class FakeTTSEngine:
 
     def __init__(self) -> None:
         self.spoken: list[str] = []
-        self.warmed_up = False
+        self.warmedUp = False
         self.closed = False
 
     def synthesize(self, text: str) -> Iterator[SpeechChunk]:
@@ -42,8 +42,8 @@ class FakeTTSEngine:
         # 100 amostras por caractere: suficiente para exercitar o caminho do áudio.
         yield SpeechChunk(audio=b"\x00\x00" * (len(text) * 100), format=TEST_FORMAT)
 
-    def warm_up(self) -> None:
-        self.warmed_up = True
+    def warmUp(self) -> None:
+        self.warmedUp = True
 
     def close(self) -> None:
         self.closed = True
@@ -60,8 +60,8 @@ class FakeAudioSink:
         self.stops = 0
         self.closed = False
 
-    def start(self, audio_format: AudioFormat) -> None:
-        self.starts.append(audio_format)
+    def start(self, audioFormat: AudioFormat) -> None:
+        self.starts.append(audioFormat)
 
     def write(self, audio: bytes) -> None:
         self.written.extend(audio)
@@ -83,12 +83,12 @@ class FakeLLMClient:
         self.prompts: list[Sequence[ChatMessage]] = []
         self.closed = False
 
-    def stream_reply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
+    def streamReply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
         self.prompts.append(list(messages))
         for word in self.reply.split(" "):
             yield word + " "
 
-    def is_available(self) -> bool:
+    def isAvailable(self) -> bool:
         return True
 
     def close(self) -> None:
@@ -100,28 +100,28 @@ class EventRecorder:
 
     def __init__(self, bus: EventBus) -> None:
         self.events: list[Event] = []
-        self._lock = threading.Lock()
-        bus.subscribe(self._record)
+        self.lock = threading.Lock()
+        bus.subscribe(self.record)
 
-    def _record(self, event: Event) -> None:
-        with self._lock:
+    def record(self, event: Event) -> None:
+        with self.lock:
             self.events.append(event)
 
-    def of_type(self, event_type: type[Event]) -> list[Event]:
-        with self._lock:
-            return [event for event in self.events if isinstance(event, event_type)]
+    def ofType(self, eventType: type[Event]) -> list[Event]:
+        with self.lock:
+            return [event for event in self.events if isinstance(event, eventType)]
 
-    def type_names(self) -> list[str]:
-        with self._lock:
+    def typeNames(self) -> list[str]:
+        with self.lock:
             return [type(event).__name__ for event in self.events]
 
-    def wait_for(self, event_type: type[Event], timeout: float = 5.0) -> bool:
+    def waitFor(self, eventType: type[Event], timeout: float = 5.0) -> bool:
         """Espera até que um evento do tipo apareça. Devolve False se estourar."""
         clock = threading.Event()
         waited = 0.0
         step = 0.01
         while waited < timeout:
-            if self.of_type(event_type):
+            if self.ofType(eventType):
                 return True
             clock.wait(step)
             waited += step
@@ -132,7 +132,7 @@ class EventRecorder:
 # Fixtures
 # ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
-def ambiente_isolado():
+def ambienteIsolado():
     """Impede que a configuração de um teste vaze para o seguinte.
 
     A CLI grava em `os.environ` de propósito (é assim que `--voice` reaproveita
@@ -167,13 +167,13 @@ def sink() -> FakeAudioSink:
 
 
 @pytest.fixture
-def make_llm() -> Callable[..., FakeLLMClient]:
+def makeLlm() -> Callable[..., FakeLLMClient]:
     """Fábrica de clientes de LLM falsos com resposta configurável."""
     return FakeLLMClient
 
 
 @pytest.fixture
-def make_speaker(engine: FakeTTSEngine, sink: FakeAudioSink, bus: EventBus):
+def makeSpeaker(engine: FakeTTSEngine, sink: FakeAudioSink, bus: EventBus):
     """Fábrica de locutores já iniciados, fechados automaticamente no fim."""
     criados: list[Speaker] = []
 
@@ -191,7 +191,7 @@ def make_speaker(engine: FakeTTSEngine, sink: FakeAudioSink, bus: EventBus):
 
 
 @pytest.fixture
-def make_assistant(make_speaker, bus: EventBus):
+def makeAssistant(makeSpeaker, bus: EventBus):
     """Fábrica de assistentes já iniciados, fechados automaticamente no fim.
 
     Passe `persona_dir` para exercitar o caminho com persona em arquivo; sem
@@ -202,15 +202,15 @@ def make_assistant(make_speaker, bus: EventBus):
     def factory(
         llm,
         *,
-        system_prompt: str = "você é um robô de testes",
+        systemPrompt: str = "você é um robô de testes",
         history: int = 6,
-        persona_dir: Path | None = None,
+        personaDir: Path | None = None,
     ):
-        store = PersonaStore(persona_dir, "atlas") if persona_dir else None
-        prompt = store.load().system_prompt() if store else system_prompt
+        store = PersonaStore(personaDir, "atlas") if personaDir else None
+        prompt = store.load().systemPrompt() if store else systemPrompt
 
-        memory = ConversationMemory(prompt, max_messages=history)
-        speaker = make_speaker()
+        memory = ConversationMemory(prompt, maxMessages=history)
+        speaker = makeSpeaker()
         assistant = Assistant(llm=llm, memory=memory, speaker=speaker, bus=bus, persona=store)
         assistant.start()
         criados.append(assistant)

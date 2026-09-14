@@ -25,9 +25,9 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Nome do arquivo de fatos aprendidos, derivado do nome da persona.
 MEMORY_SUFFIX = ".memoria.md"
@@ -96,7 +96,7 @@ class Persona:
     facts: tuple[str, ...] = ()
     language: str = "en"
 
-    def system_prompt(self) -> str:
+    def systemPrompt(self) -> str:
         """Monta o prompt de sistema: identidade + fatos + regras de saida."""
         blocos = [self.identity.strip()]
 
@@ -113,48 +113,48 @@ class PersonaStore:
     """Le e escreve as personas em disco."""
 
     def __init__(self, directory: Path, name: str = "atlas") -> None:
-        self._directory = directory
-        self._name = name
+        self.directory = directory
+        self.name = name
 
     # -- caminhos ----------------------------------------------------------
     @property
-    def identity_path(self) -> Path:
-        return self._directory / f"{self._name}.md"
+    def identityPath(self) -> Path:
+        return self.directory / f"{self.name}.md"
 
     @property
-    def memory_path(self) -> Path:
-        return self._directory / f"{self._name}{MEMORY_SUFFIX}"
+    def memoryPath(self) -> Path:
+        return self.directory / f"{self.name}{MEMORY_SUFFIX}"
 
     # -- leitura -----------------------------------------------------------
     def load(self, language: str = "en") -> Persona:
         """Carrega a persona. Se o arquivo nao existir, usa a Atlas embutida."""
         identity = _FALLBACK_IDENTITY
-        if self.identity_path.is_file():
-            texto = self.identity_path.read_text(encoding="utf-8").strip()
+        if self.identityPath.is_file():
+            texto = self.identityPath.read_text(encoding="utf-8").strip()
             if texto:
                 identity = texto
-                logger.debug("persona carregada de %s", self.identity_path)
+                logger.debug("persona carregada de %s", self.identityPath)
         else:
             logger.info(
                 "persona %r nao encontrada em %s; usando a padrao",
-                self._name,
-                self.identity_path,
+                self.name,
+                self.identityPath,
             )
 
         return Persona(
-            name=self._name,
+            name=self.name,
             identity=identity,
-            facts=self.load_facts(),
+            facts=self.loadFacts(),
             language=language,
         )
 
-    def load_facts(self) -> tuple[str, ...]:
+    def loadFacts(self) -> tuple[str, ...]:
         """Fatos aprendidos, um por linha. Linhas vazias e `#` sao ignoradas."""
-        if not self.memory_path.is_file():
+        if not self.memoryPath.is_file():
             return ()
 
         fatos = []
-        for linha in self.memory_path.read_text(encoding="utf-8").splitlines():
+        for linha in self.memoryPath.read_text(encoding="utf-8").splitlines():
             texto = linha.strip().lstrip("-").strip()
             if texto and not texto.startswith("#"):
                 fatos.append(texto)
@@ -166,20 +166,20 @@ class PersonaStore:
         texto = fact.strip()
         if not texto:
             return False
-        if texto in self.load_facts():
+        if texto in self.loadFacts():
             return False
 
-        self.memory_path.parent.mkdir(parents=True, exist_ok=True)
-        if not self.memory_path.exists():
+        self.memoryPath.parent.mkdir(parents=True, exist_ok=True)
+        if not self.memoryPath.exists():
             cabecalho = (
-                f"# O que a {self._name} aprendeu\n"
+                f"# O que a {self.name} aprendeu\n"
                 "#\n"
                 "# Um fato por linha. Você pode editar este arquivo à mão;\n"
                 "# o comando /lembrar do chat escreve aqui.\n\n"
             )
-            self.memory_path.write_text(cabecalho, encoding="utf-8")
+            self.memoryPath.write_text(cabecalho, encoding="utf-8")
 
-        with self.memory_path.open("a", encoding="utf-8") as arquivo:
+        with self.memoryPath.open("a", encoding="utf-8") as arquivo:
             arquivo.write(f"- {texto}\n")
 
         logger.info("fato guardado: %s", texto)
@@ -187,7 +187,7 @@ class PersonaStore:
 
     def forget(self, needle: str) -> int:
         """Apaga os fatos que contenham `needle`. Devolve quantos saíram."""
-        if not self.memory_path.is_file():
+        if not self.memoryPath.is_file():
             return 0
 
         alvo = needle.strip().lower()
@@ -195,21 +195,21 @@ class PersonaStore:
             return 0
 
         mantidas, removidos = [], 0
-        for linha in self.memory_path.read_text(encoding="utf-8").splitlines():
+        for linha in self.memoryPath.read_text(encoding="utf-8").splitlines():
             conteudo = linha.strip().lstrip("-").strip()
-            e_fato = conteudo and not conteudo.startswith("#")
-            if e_fato and alvo in conteudo.lower():
+            eFato = conteudo and not conteudo.startswith("#")
+            if eFato and alvo in conteudo.lower():
                 removidos += 1
                 continue
             mantidas.append(linha)
 
         if removidos:
-            self.memory_path.write_text("\n".join(mantidas) + "\n", encoding="utf-8")
+            self.memoryPath.write_text("\n".join(mantidas) + "\n", encoding="utf-8")
             logger.info("%d fato(s) esquecido(s)", removidos)
         return removidos
 
 
-def create_default_persona(directory: Path, name: str = "atlas") -> Path:
+def createDefaultPersona(directory: Path, name: str = "atlas") -> Path:
     """Escreve um arquivo de persona inicial, se ainda nao houver um."""
     caminho = directory / f"{name}.md"
     if caminho.exists():

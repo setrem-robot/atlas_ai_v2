@@ -20,7 +20,7 @@ class ChatMessage:
     role: Role
     content: str
 
-    def as_dict(self) -> dict[str, str]:
+    def asDict(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
 
 
@@ -30,15 +30,15 @@ class LLMClient(Protocol):
 
     name: str
 
-    def stream_reply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
+    def streamReply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
         """Produz a resposta em pedacos, na ordem em que o modelo a gera."""
         ...
 
-    def is_available(self) -> bool:
+    def isAvailable(self) -> bool:
         """Indica se o backend esta acessivel (usado pelo comando `doctor`)."""
         ...
 
-    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
+    def warmUp(self, messages: Sequence[ChatMessage] = ()) -> None:
         """Prepara conexao e modelo. Deve ser idempotente e nunca levantar.
 
         `messages` sao as mensagens que a conversa vai usar de verdade — na
@@ -62,7 +62,7 @@ class ModeloResidente(Protocol):
     cliente sabe se descarregar.
     """
 
-    def set_keep_alive(self, valor: str) -> None:
+    def setKeepAlive(self, valor: str) -> None:
         """Muda quanto tempo o modelo fica residente depois de responder."""
         ...
 

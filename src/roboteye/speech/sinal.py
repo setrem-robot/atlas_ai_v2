@@ -59,9 +59,9 @@ VOLUME = 0.22
 RAMPA_S = 0.008
 
 
-def _nota(frequencia: float, duracao_s: float) -> array:
+def nota(frequencia: float, duracaoS: float) -> array:
     """Uma senoide com as bordas suavizadas, em PCM de 16 bits."""
-    total = int(TAXA * duracao_s)
+    total = int(TAXA * duracaoS)
     rampa = max(1, int(TAXA * RAMPA_S))
     amostras = array("h", bytes(2 * total))
 
@@ -81,19 +81,19 @@ def _nota(frequencia: float, duracao_s: float) -> array:
     return amostras
 
 
-def _silencio(duracao_s: float) -> array:
-    return array("h", bytes(2 * int(TAXA * duracao_s)))
+def silencio(duracaoS: float) -> array:
+    return array("h", bytes(2 * int(TAXA * duracaoS)))
 
 
 @cache
-def _par(primeira_hz: float, segunda_hz: float) -> bytes:
-    som = _nota(primeira_hz, DURACAO_NOTA_S)
-    som.extend(_silencio(PAUSA_ENTRE_NOTAS_S))
-    som.extend(_nota(segunda_hz, DURACAO_NOTA_S))
+def par(primeiraHz: float, segundaHz: float) -> bytes:
+    som = nota(primeiraHz, DURACAO_NOTA_S)
+    som.extend(silencio(PAUSA_ENTRE_NOTAS_S))
+    som.extend(nota(segundaHz, DURACAO_NOTA_S))
     return som.tobytes()
 
 
-def _chunk(pcm: bytes) -> tuple[SpeechChunk, ...]:
+def chunk(pcm: bytes) -> tuple[SpeechChunk, ...]:
     """Embrulha o PCM no mesmo formato que um motor de voz devolveria.
 
     É o que permite tocar o sinal pelo caminho que já existe — um dono só do
@@ -102,14 +102,14 @@ def _chunk(pcm: bytes) -> tuple[SpeechChunk, ...]:
     return (
         SpeechChunk(
             audio=pcm,
-            format=AudioFormat(sample_rate=TAXA, channels=1, sample_width=2),
+            format=AudioFormat(sampleRate=TAXA, channels=1, sampleWidth=2),
         ),
     )
 
 
 def escutando() -> tuple[SpeechChunk, ...]:
     """Subindo: "estou ouvindo, pode perguntar"."""
-    return _chunk(_par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ))
+    return chunk(par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ))
 
 
 def ouvi() -> tuple[SpeechChunk, ...]:
@@ -118,9 +118,9 @@ def ouvi() -> tuple[SpeechChunk, ...]:
     O espelho exato do outro. Dois sons diferentes diriam duas coisas sem
     relação; o mesmo par invertido é lido de imediato como abre e fecha.
     """
-    return _chunk(_par(NOTA_AGUDA_HZ, NOTA_GRAVE_HZ))
+    return chunk(par(NOTA_AGUDA_HZ, NOTA_GRAVE_HZ))
 
 
-def duracao_s() -> float:
+def duracaoS() -> float:
     """Quanto tempo um sinal dura. Os dois têm a mesma duração."""
-    return len(_par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ)) / 2 / TAXA
+    return len(par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ)) / 2 / TAXA

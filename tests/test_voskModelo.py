@@ -19,19 +19,19 @@ from roboteye.config import HearingSettings
 
 
 class TestQualModeloAFabricaAbre:
-    def test_o_padrao_continua_sendo_o_pequeno(self) -> None:
+    def testOPadraoContinuaSendoOPequeno(self) -> None:
         """Trocar o padrão exigiria 2,6 GB no disco de quem instalar do zero."""
-        assert HearingSettings().vosk_model == "vosk-pt"
+        assert HearingSettings().voskModel == "vosk-pt"
 
-    def test_a_variavel_escolhe_outro(self, monkeypatch) -> None:
+    def testAVariavelEscolheOutro(self, monkeypatch) -> None:
         monkeypatch.setenv("ROBOTEYE_HEARING_VOSK_MODEL", "vosk-pt-grande")
-        assert HearingSettings.from_env().vosk_model == "vosk-pt-grande"
+        assert HearingSettings.fromEnv().voskModel == "vosk-pt-grande"
 
-    def test_sem_a_variavel_cai_no_padrao(self, monkeypatch) -> None:
+    def testSemAVariavelCaiNoPadrao(self, monkeypatch) -> None:
         monkeypatch.delenv("ROBOTEYE_HEARING_VOSK_MODEL", raising=False)
-        assert HearingSettings.from_env().vosk_model == "vosk-pt"
+        assert HearingSettings.fromEnv().voskModel == "vosk-pt"
 
-    def test_a_fabrica_usa_o_escolhido(self, monkeypatch) -> None:
+    def testAFabricaUsaOEscolhido(self, monkeypatch) -> None:
         """O que este teste cerca é o caminho fixo que existia antes.
 
         Sem ele, trocar a variável não mudaria nada e a única pista seria o
@@ -44,20 +44,20 @@ class TestQualModeloAFabricaAbre:
         class OuvidoFalso:
             name = "vosk"
 
-            def __init__(self, model_path, **_kwargs) -> None:
-                vistos.append(Path(model_path))
+            def __init__(self, modelPath, **kwargs) -> None:
+                vistos.append(Path(modelPath))
 
-        import roboteye.hearing.vosk_ears as ve
+        import roboteye.hearing.voskEars as ve
 
         monkeypatch.setattr(ve, "VoskEars", OuvidoFalso)
-        monkeypatch.setattr("roboteye.speech.devices.resolver_entrada", lambda _d: None)
+        monkeypatch.setattr("roboteye.speech.devices.resolverEntrada", lambda d: None)
 
         ajustes = HearingSettings(
             enabled=True,
             backend="vosk",
-            model_path=Path("/modelos"),
-            vosk_model="vosk-pt-grande",
+            modelPath=Path("/modelos"),
+            voskModel="vosk-pt-grande",
         )
-        factory.create_ears(ajustes)
+        factory.createEars(ajustes)
 
         assert vistos == [Path("/modelos/vosk-pt-grande")]

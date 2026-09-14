@@ -26,19 +26,19 @@ CAPTION_SIZE = 46
 class EyeLayout:
     """Posicoes e tamanhos ja convertidos para pixels."""
 
-    screen_width: int
-    screen_height: int
+    screenWidth: int
+    screenHeight: int
     scale: float
 
-    eye_width: int
-    eye_height: int
+    eyeWidth: int
+    eyeHeight: int
 
-    left_eye_x: int
-    right_eye_x: int
-    eye_center_y: int
+    leftEyeX: int
+    rightEyeX: int
+    eyeCenterY: int
 
     @classmethod
-    def for_screen(cls, width: int, height: int) -> EyeLayout:
+    def forScreen(cls, width: int, height: int) -> EyeLayout:
         """Calcula o layout para uma tela de `width` x `height` pixels."""
         scale = min(width / BASE_WIDTH, height / BASE_HEIGHT)
 
@@ -46,24 +46,24 @@ class EyeLayout:
             return max(1, int(value * scale))
 
         return cls(
-            screen_width=width,
-            screen_height=height,
+            screenWidth=width,
+            screenHeight=height,
             scale=scale,
-            eye_width=px(EYE_WIDTH),
-            eye_height=px(EYE_HEIGHT),
-            left_eye_x=width // 3,
-            right_eye_x=2 * width // 3,
-            eye_center_y=height // 2 + int(EYE_Y_OFFSET * scale),
+            eyeWidth=px(EYE_WIDTH),
+            eyeHeight=px(EYE_HEIGHT),
+            leftEyeX=width // 3,
+            rightEyeX=2 * width // 3,
+            eyeCenterY=height // 2 + int(EYE_Y_OFFSET * scale),
         )
 
-    def px(self, base_value: float) -> int:
+    def px(self, baseValue: float) -> int:
         """Converte uma medida do referencial base para pixels."""
-        return int(base_value * self.scale)
+        return int(baseValue * self.scale)
 
     @property
-    def caption_font_size(self) -> int:
+    def captionFontSize(self) -> int:
         return max(12, self.px(CAPTION_SIZE))
 
     @property
-    def caption_margin(self) -> int:
+    def captionMargin(self) -> int:
         return max(8, self.px(CAPTION_MARGIN))

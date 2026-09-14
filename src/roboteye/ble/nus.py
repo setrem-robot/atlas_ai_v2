@@ -25,9 +25,9 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Nordic UART Service. Os mesmos do `esp32_ble_bridge.ino` e do
 #: `RobotBleIds` no app — mudou aqui, muda nos tres.
@@ -46,7 +46,7 @@ NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # o robo notifica aqui
 MAX_LINHA = 512
 
 
-def _dados_de_anuncio(uuid: str) -> str:
+def dadosDeAnuncio(uuid: str) -> str:
     """Monta o pacote de anuncio com o UUID do servico, em hexadecimal.
 
     O formato e o do proprio Bluetooth: um byte de tamanho, um de tipo, e os
@@ -54,11 +54,11 @@ def _dados_de_anuncio(uuid: str) -> str:
     ordem inversa de bytes — o padrao manda little-endian, e trocar a ordem faz
     o celular procurar por um servico que nao existe.
     """
-    bytes_uuid = bytes.fromhex(uuid.replace("-", ""))[::-1]
-    return f"{len(bytes_uuid) + 1:02x}07{bytes_uuid.hex()}"
+    bytesUuid = bytes.fromhex(uuid.replace("-", ""))[::-1]
+    return f"{len(bytesUuid) + 1:02x}07{bytesUuid.hex()}"
 
 
-def _dados_de_nome(nome: str) -> str:
+def dadosDeNome(nome: str) -> str:
     """O nome vai na resposta de varredura: no anuncio nao cabe.
 
     Um anuncio tem 31 bytes e o UUID de 128 bits ja consome 18. Tipo 0x09 e
@@ -68,7 +68,7 @@ def _dados_de_nome(nome: str) -> str:
     return f"{len(bruto) + 1:02x}09{bruto.hex()}"
 
 
-def anunciar_pelo_kernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
+def anunciarPeloKernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
     """Poe o anuncio no ar pelo `btmgmt`, falando direto com o kernel.
 
     O caminho normal seria o `bluetoothd`, mas neste controlador ele recusa
@@ -106,9 +106,9 @@ def anunciar_pelo_kernel(nome: str = "Atlas", uuid: str = NUS_SERVICE) -> bool:
     pronto = btmgmt(
         "add-adv",
         "-d",
-        _dados_de_anuncio(uuid),
+        dadosDeAnuncio(uuid),
         "-s",
-        _dados_de_nome(nome),
+        dadosDeNome(nome),
         # `-c` marca o anuncio como conectavel; sem isso o celular ve o robo e
         # nao consegue abrir conexao.
         "-c",
@@ -133,35 +133,35 @@ class PonteBLE:
         entregar: Callable[[dict], None],
         *,
         nome: str = "Atlas",
-        adapter_address: str | None = None,
+        adapterAddress: str | None = None,
     ) -> None:
-        self._entregar = entregar
-        self._nome = nome
-        self._adapter = adapter_address
-        self._buffer = bytearray()
-        self._conectado = False
-        self._periferico = None
+        self.entregar = entregar
+        self.nome = nome
+        self.adapter = adapterAddress
+        self.buffer = bytearray()
+        self.conectado = False
+        self.periferico = None
 
     # -- montagem ----------------------------------------------------------
-    def _radio(self):
+    def radio(self):
         """O adaptador Bluetooth a usar."""
         from bluezero import adapter
 
         disponiveis = list(adapter.Adapter.available())
         if not disponiveis:
             raise RuntimeError("nenhum radio bluetooth encontrado (o servico esta ligado?)")
-        if self._adapter is None:
+        if self.adapter is None:
             return disponiveis[0]
         for radio in disponiveis:
-            if radio.address == self._adapter:
+            if radio.address == self.adapter:
                 return radio
-        raise RuntimeError(f"radio {self._adapter} nao encontrado")
+        raise RuntimeError(f"radio {self.adapter} nao encontrado")
 
     def montar(self):
         """Cria o periferico BLE, sem ainda anunciar."""
         from bluezero import peripheral
 
-        radio = self._radio()
+        radio = self.radio()
         endereco = radio.address
 
         # O nome vai no **alias do radio**, e nao no pacote de anuncio.
@@ -172,7 +172,7 @@ class PonteBLE:
         # parametro. Pelo alias, o nome viaja na resposta de varredura, que e
         # outro pacote, e o app o le do mesmo jeito.
         try:
-            radio.alias = self._nome
+            radio.alias = self.nome
         except Exception as exc:
             # Amplo de proposito: o nome e conforto para quem procura no app,
             # nao requisito — o app filtra pelo UUID do servico.
@@ -191,7 +191,7 @@ class PonteBLE:
             # sempre substituivel, e esperar confirmacao de cada um so poria
             # atraso entre o dedo e a roda.
             flags=["write", "write-without-response"],
-            write_callback=self._ao_receber,
+            write_callback=self.aoReceber,
         )
         p.add_characteristic(
             srv_id=1,
@@ -200,11 +200,11 @@ class PonteBLE:
             value=[],
             notifying=False,
             flags=["notify"],
-            notify_callback=self._ao_assinar,
+            notify_callback=self.aoAssinar,
         )
-        p.on_connect = self._ao_conectar
-        p.on_disconnect = self._ao_desconectar
-        self._periferico = p
+        p.on_connect = self.aoConectar
+        p.on_disconnect = self.aoDesconectar
+        self.periferico = p
         return p
 
     def anunciar(self) -> None:
@@ -221,7 +221,7 @@ class PonteBLE:
         `btmgmt` (ver `anunciar_pelo_kernel`), e o que fica neste processo e
         so o GATT, com o laco rodando.
         """
-        p = self._periferico or self.montar()
+        p = self.periferico or self.montar()
 
         for objeto in (*p.services, *p.characteristics, *p.descriptors):
             p.app.add_managed_object(objeto)
@@ -236,44 +236,44 @@ class PonteBLE:
             p.mainloop.quit()
 
     # -- eventos do radio --------------------------------------------------
-    def _ao_conectar(self, device=None) -> None:
-        self._conectado = True
-        self._buffer.clear()
+    def aoConectar(self, device=None) -> None:
+        self.conectado = True
+        self.buffer.clear()
         logger.info("celular conectado pelo bluetooth")
 
-    def _ao_desconectar(self, adapter_address=None, device_address=None) -> None:
-        self._conectado = False
-        self._buffer.clear()
+    def aoDesconectar(self, adapterAddress=None, deviceAddress=None) -> None:
+        self.conectado = False
+        self.buffer.clear()
         # O celular pode ter sumido no meio de um movimento — saiu de alcance,
         # ficou sem bateria, o app foi fechado. Esta e a ultima coisa que a
         # ponte consegue fazer por quem esta na frente do robo.
         logger.warning("celular desconectou; mandando parar")
-        self._entregar({"tipo": "parada_emergencia"})
+        self.entregar({"tipo": "parada_emergencia"})
 
-    def _ao_assinar(self, notifying, characteristic) -> None:
+    def aoAssinar(self, notifying, characteristic) -> None:
         logger.debug("celular %s as respostas", "assinou" if notifying else "cancelou")
 
     # -- recepcao ----------------------------------------------------------
-    def _ao_receber(self, value, options=None) -> None:
+    def aoReceber(self, value, options=None) -> None:
         """Um pacote BLE chegou. Pode trazer meia linha, ou duas coladas."""
-        self._buffer.extend(bytes(value))
+        self.buffer.extend(bytes(value))
 
         # Primeiro tira todas as linhas completas. So depois o que sobra — o
         # trecho SEM `\n` — conta para o limite. Checar o buffer inteiro antes
         # disso descartaria uma rajada de comandos validos so porque a soma
         # deles passou de MAX_LINHA, e um "parada" no fim iria junto.
-        while b"\n" in self._buffer:
-            linha, _, resto = self._buffer.partition(b"\n")
-            self._buffer = bytearray(resto)
-            self._processar(linha.strip())
+        while b"\n" in self.buffer:
+            linha, _, resto = self.buffer.partition(b"\n")
+            self.buffer = bytearray(resto)
+            self.processar(linha.strip())
 
         # O que restou e uma linha ainda por terminar. So ela pode crescer sem
         # limite (um emissor que nunca manda `\n`), e e so ela que se descarta.
-        if len(self._buffer) > MAX_LINHA:
+        if len(self.buffer) > MAX_LINHA:
             logger.warning("linha longa demais no bluetooth; descartando")
-            self._buffer.clear()
+            self.buffer.clear()
 
-    def _processar(self, linha: bytes | bytearray) -> None:
+    def processar(self, linha: bytes | bytearray) -> None:
         if not linha:
             return
         try:
@@ -284,4 +284,4 @@ class PonteBLE:
         if not isinstance(comando, dict):
             logger.warning("bluetooth: esperava um objeto JSON, veio %s", type(comando).__name__)
             return
-        self._entregar(comando)
+        self.entregar(comando)

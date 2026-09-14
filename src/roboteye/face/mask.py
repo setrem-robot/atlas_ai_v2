@@ -74,40 +74,40 @@ class MaskGeometry:
     que permite o olho deslizar continuamente em vez de andar de pixel em pixel.
     """
 
-    grid_width: int
-    grid_height: int
-    eye_width: float
-    eye_height: float
-    subpixel_x: float = 0.0
-    subpixel_y: float = 0.0
+    gridWidth: int
+    gridHeight: int
+    eyeWidth: float
+    eyeHeight: float
+    subpixelX: float = 0.0
+    subpixelY: float = 0.0
 
     @property
-    def half_width(self) -> float:
+    def halfWidth(self) -> float:
         """Meia-largura da caixa do olho, em alturas de olho."""
-        return self.eye_width / (2.0 * self.eye_height) if self.eye_height else 0.5
+        return self.eyeWidth / (2.0 * self.eyeHeight) if self.eyeHeight else 0.5
 
     @property
     def pixel(self) -> float:
         """Tamanho de um pixel da grade, em alturas de olho."""
-        return 1.0 / self.eye_height if self.eye_height else 1.0
+        return 1.0 / self.eyeHeight if self.eyeHeight else 1.0
 
 
 # ---------------------------------------------------------------------------
 # Primitivas de campo de distancia
 # ---------------------------------------------------------------------------
-def rounded_box(
-    x: np.ndarray, y: np.ndarray, half_width: float, half_height: float, radius: float
+def roundedBox(
+    x: np.ndarray, y: np.ndarray, halfWidth: float, halfHeight: float, radius: float
 ) -> np.ndarray:
     """Distancia com sinal ate um retangulo de cantos arredondados."""
-    radius = min(radius, half_width, half_height)
-    qx = np.abs(x) - half_width + radius
-    qy = np.abs(y) - half_height + radius
+    radius = min(radius, halfWidth, halfHeight)
+    qx = np.abs(x) - halfWidth + radius
+    qy = np.abs(y) - halfHeight + radius
     outside = np.hypot(np.maximum(qx, 0.0), np.maximum(qy, 0.0))
     inside = np.minimum(np.maximum(qx, qy), 0.0)
     return outside + inside - radius
 
 
-def lid_edge(x: np.ndarray, y: np.ndarray, offset: float, slope: float, curve: float) -> np.ndarray:
+def lidEdge(x: np.ndarray, y: np.ndarray, offset: float, slope: float, curve: float) -> np.ndarray:
     """Distancia ate a borda da palpebra, negativa **abaixo** dela.
 
     A borda e `y = offset + slope*x + curve*x^2`. O termo quadratico e o que
@@ -121,12 +121,12 @@ def lid_edge(x: np.ndarray, y: np.ndarray, offset: float, slope: float, curve: f
     forte nas inclinacoes grandes que nas pequenas.
     """
     edge = offset + slope * x + curve * x * x
-    local_slope = slope + 2.0 * curve * x
-    return (edge - y) / np.hypot(1.0, local_slope)
+    localSlope = slope + 2.0 * curve * x
+    return (edge - y) / np.hypot(1.0, localSlope)
 
 
 def ellipse(
-    x: np.ndarray, y: np.ndarray, center_y: float, half_width: float, half_height: float
+    x: np.ndarray, y: np.ndarray, centerY: float, halfWidth: float, halfHeight: float
 ) -> np.ndarray:
     """Distancia aproximada ate uma elipse centrada em `(0, center_y)`.
 
@@ -134,12 +134,12 @@ def ellipse(
     semieixo) subestima a distancia longe da borda, o que nao importa: perto da
     borda — que e onde o antialiasing e o arredondamento agem — ela e fiel.
     """
-    dx = x / half_width
-    dy = (y - center_y) / half_height
-    return (np.hypot(dx, dy) - 1.0) * min(half_width, half_height)
+    dx = x / halfWidth
+    dy = (y - centerY) / halfHeight
+    return (np.hypot(dx, dy) - 1.0) * min(halfWidth, halfHeight)
 
 
-def smooth_intersect(a: np.ndarray, b: np.ndarray, fillet: float) -> np.ndarray:
+def smoothIntersect(a: np.ndarray, b: np.ndarray, fillet: float) -> np.ndarray:
     """Interseccao de dois campos, com a quina arredondada por `fillet`.
 
     A interseccao dura seria `maximum(a, b)`, e e ela que produz as pontas
@@ -156,11 +156,11 @@ def smooth_intersect(a: np.ndarray, b: np.ndarray, fillet: float) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # O olho
 # ---------------------------------------------------------------------------
-def eye_field(
+def eyeField(
     shape: EyeShape,
     geometry: MaskGeometry,
     *,
-    inner_is_right: bool,
+    innerIsRight: bool,
     fillet: float = DEFAULT_FILLET,
 ) -> np.ndarray:
     """Campo de distancia do olho, amostrado na grade de `geometry`.
@@ -168,49 +168,49 @@ def eye_field(
     Devolve um array `(altura, largura)` em que valores negativos estao dentro
     do olho. A unidade e a altura base do olho.
     """
-    grid_width = max(1, geometry.grid_width)
-    grid_height = max(1, geometry.grid_height)
-    unit = max(geometry.eye_height, 1e-6)
+    gridWidth = max(1, geometry.gridWidth)
+    gridHeight = max(1, geometry.gridHeight)
+    unit = max(geometry.eyeHeight, 1e-6)
 
     # A grade e centrada no olho. O deslocamento sub-pixel entra deslocando a
     # *amostragem*, nao a forma: e por isso que ele sobrevive intacto a qualquer
     # redimensionamento posterior.
-    xs = np.arange(grid_width, dtype=np.float32) + 0.5 - grid_width / 2.0
-    ys = np.arange(grid_height, dtype=np.float32) + 0.5 - grid_height / 2.0
-    xs = (xs - geometry.subpixel_x) / unit
-    ys = (ys - geometry.subpixel_y) / unit
+    xs = np.arange(gridWidth, dtype=np.float32) + 0.5 - gridWidth / 2.0
+    ys = np.arange(gridHeight, dtype=np.float32) + 0.5 - gridHeight / 2.0
+    xs = (xs - geometry.subpixelX) / unit
+    ys = (ys - geometry.subpixelY) / unit
 
     x = xs[None, :]
     y = ys[:, None]
 
     # `half_width` estica so o eixo x, o que mantem os cantos circulares mesmo
     # quando o olho esta achatado por uma piscada.
-    half_width = geometry.half_width
-    half_height = 0.5
-    radius = shape.radius * min(2.0 * half_width, 1.0)
+    halfWidth = geometry.halfWidth
+    halfHeight = 0.5
+    radius = shape.radius * min(2.0 * halfWidth, 1.0)
 
-    field = rounded_box(x, y, half_width, half_height, radius)
+    field = roundedBox(x, y, halfWidth, halfHeight, radius)
 
-    if shape.top_lid > 0.001:
+    if shape.topLid > 0.001:
         # A inclinacao positiva precisa baixar o canto voltado para o centro da
         # face; qual dos dois lados e esse depende de qual olho estamos desenhando.
-        direction = 1.0 if inner_is_right else -1.0
-        slope = shape.top_lid_slant * SLANT_STRENGTH * direction
+        direction = 1.0 if innerIsRight else -1.0
+        slope = shape.topLidSlant * SLANT_STRENGTH * direction
         # A borda e ancorada no centro do olho, entao inclinar nao muda quanto a
         # palpebra cobre em media — so como ela reparte essa cobertura.
-        offset = -half_height + shape.top_lid
-        field = smooth_intersect(field, lid_edge(x, y, offset, slope, LID_CURVE), fillet)
+        offset = -halfHeight + shape.topLid
+        field = smoothIntersect(field, lidEdge(x, y, offset, slope, LID_CURVE), fillet)
 
-    if shape.bottom_lid > 0.001:
+    if shape.bottomLid > 0.001:
         # A elipse ocupa a parte de baixo; o olho e o que sobra fora dela.
-        depth = shape.bottom_lid * SMILE_DEPTH
-        occluder = ellipse(x, y, half_height, SMILE_SPREAD, depth)
-        field = smooth_intersect(field, -occluder, fillet)
+        depth = shape.bottomLid * SMILE_DEPTH
+        occluder = ellipse(x, y, halfHeight, SMILE_SPREAD, depth)
+        field = smoothIntersect(field, -occluder, fillet)
 
     return field
 
 
-def field_to_alpha(field: np.ndarray, edge: float) -> np.ndarray:
+def fieldToAlpha(field: np.ndarray, edge: float) -> np.ndarray:
     """Converte distancia em opacidade, com a borda suavizada em `edge`.
 
     `edge` e a largura da transicao, na mesma unidade do campo. Um pixel cujo
@@ -226,7 +226,7 @@ def field_to_alpha(field: np.ndarray, edge: float) -> np.ndarray:
 GLOW_SIGMAS = 3.0
 
 
-def soft_glow(alpha: np.ndarray, sigma: float) -> np.ndarray:
+def softGlow(alpha: np.ndarray, sigma: float) -> np.ndarray:
     """Halo externo, por desfoque da cobertura.
 
     A tentacao e tirar o halo direto do campo de distancia, que ja esta
@@ -239,13 +239,13 @@ def soft_glow(alpha: np.ndarray, sigma: float) -> np.ndarray:
     Desfocar a cobertura nao tem esse problema: o que nao esta desenhado nao
     brilha.
     """
-    kernel = _gaussian_kernel(sigma)
+    kernel = gaussianKernel(sigma)
     if kernel.size <= 1:
         return alpha
-    return _convolve(_convolve(alpha, kernel, axis=0), kernel, axis=1)
+    return convolve(convolve(alpha, kernel, axis=0), kernel, axis=1)
 
 
-def _gaussian_kernel(sigma: float) -> np.ndarray:
+def gaussianKernel(sigma: float) -> np.ndarray:
     radius = int(max(0.0, sigma) * 3.0 + 0.5)
     if radius < 1:
         return np.ones(1, dtype=np.float32)
@@ -254,7 +254,7 @@ def _gaussian_kernel(sigma: float) -> np.ndarray:
     return (kernel / kernel.sum()).astype(np.float32)
 
 
-def _convolve(data: np.ndarray, kernel: np.ndarray, *, axis: int) -> np.ndarray:
+def convolve(data: np.ndarray, kernel: np.ndarray, *, axis: int) -> np.ndarray:
     """Convolucao 1-D ao longo de um eixo, com zeros fora da borda.
 
     Zeros na borda sao o que queremos: fora da grade nao ha olho, entao nao ha

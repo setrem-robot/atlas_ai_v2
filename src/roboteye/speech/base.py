@@ -20,17 +20,17 @@ class SpeechError(RuntimeError):
 class AudioFormat:
     """Formato do PCM produzido por um motor."""
 
-    sample_rate: int
+    sampleRate: int
     channels: int = 1
-    sample_width: int = 2  # bytes por amostra (2 = int16)
+    sampleWidth: int = 2  # bytes por amostra (2 = int16)
 
     @property
-    def bytes_per_second(self) -> int:
-        return self.sample_rate * self.channels * self.sample_width
+    def bytesPerSecond(self) -> int:
+        return self.sampleRate * self.channels * self.sampleWidth
 
-    def duration_of(self, audio: bytes) -> float:
+    def durationOf(self, audio: bytes) -> float:
         """Duracao, em segundos, de um bloco de PCM neste formato."""
-        return len(audio) / self.bytes_per_second
+        return len(audio) / self.bytesPerSecond
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +52,7 @@ class TTSEngine(Protocol):
         """Produz o audio de `text`, preferencialmente de forma incremental."""
         ...
 
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         """Carrega modelos/conexoes antecipadamente. Deve ser idempotente."""
         ...
 

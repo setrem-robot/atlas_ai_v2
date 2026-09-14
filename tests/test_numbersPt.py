@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from roboteye.core.numbers_pt import spell, spell_decimal, spell_ordinal
+from roboteye.core.numbersPt import spell, spellDecimal, spellOrdinal
 
 
 class TestBasico:
@@ -23,7 +23,7 @@ class TestBasico:
             (99, "noventa e nove"),
         ],
     )
-    def test_ate_cem(self, valor: int, esperado: str) -> None:
+    def testAteCem(self, valor: int, esperado: str) -> None:
         assert spell(valor) == esperado
 
     @pytest.mark.parametrize(
@@ -37,7 +37,7 @@ class TestBasico:
             (999, "novecentos e noventa e nove"),
         ],
     )
-    def test_centenas(self, valor: int, esperado: str) -> None:
+    def testCentenas(self, valor: int, esperado: str) -> None:
         """ "cem" só é "cem" exato; 101 já vira "cento e um"."""
         assert spell(valor) == esperado
 
@@ -57,7 +57,7 @@ class TestMilhares:
             (100000, "cem mil"),
         ],
     )
-    def test_o_e_aparece_onde_deve(self, valor: int, esperado: str) -> None:
+    def testOEApareceOndeDeve(self, valor: int, esperado: str) -> None:
         """A regra que quase todo mundo erra.
 
         O último grupo leva "e" quando é pequeno (< 100) ou redondo (múltiplo de
@@ -66,7 +66,7 @@ class TestMilhares:
         """
         assert spell(valor) == esperado
 
-    def test_mil_nao_leva_um_na_frente(self) -> None:
+    def testMilNaoLevaUmNaFrente(self) -> None:
         assert spell(1000) == "mil"
         assert not spell(1000).startswith("um")
 
@@ -79,7 +79,7 @@ class TestMilhares:
             (1_000_000_000, "um bilhao"),
         ],
     )
-    def test_milhoes_e_bilhoes(self, valor: int, esperado: str) -> None:
+    def testMilhoesEBilhoes(self, valor: int, esperado: str) -> None:
         assert spell(valor) == esperado
 
 
@@ -96,35 +96,35 @@ class TestGenero:
             (342, "trezentos e quarenta e dois", "trezentas e quarenta e duas"),
         ],
     )
-    def test_concorda_com_o_genero(self, valor: int, masculino: str, feminino: str) -> None:
+    def testConcordaComOGenero(self, valor: int, masculino: str, feminino: str) -> None:
         assert spell(valor) == masculino
         assert spell(valor, feminine=True) == feminino
 
-    def test_milhao_conta_coisa_masculina(self) -> None:
+    def testMilhaoContaCoisaMasculina(self) -> None:
         """ "duas milhões" não existe, mesmo contando algo feminino."""
         assert spell(2_000_000, feminine=True).startswith("dois milhoes")
 
 
 class TestOutrasFormas:
-    def test_negativo(self) -> None:
+    def testNegativo(self) -> None:
         assert spell(-5) == "menos cinco"
 
-    def test_decimal_le_digito_a_digito(self) -> None:
-        assert spell_decimal(3, "5") == "tres virgula cinco"
-        assert spell_decimal(0, "75") == "zero virgula sete cinco"
+    def testDecimalLeDigitoADigito(self) -> None:
+        assert spellDecimal(3, "5") == "tres virgula cinco"
+        assert spellDecimal(0, "75") == "zero virgula sete cinco"
 
-    def test_decimal_sem_parte_fracionaria(self) -> None:
-        assert spell_decimal(7, "") == "sete"
+    def testDecimalSemParteFracionaria(self) -> None:
+        assert spellDecimal(7, "") == "sete"
 
     @pytest.mark.parametrize(
         ("valor", "esperado"), [(1, "primeiro"), (3, "terceiro"), (10, "decimo")]
     )
-    def test_ordinais(self, valor: int, esperado: str) -> None:
-        assert spell_ordinal(valor) == esperado
+    def testOrdinais(self, valor: int, esperado: str) -> None:
+        assert spellOrdinal(valor) == esperado
 
-    def test_ordinal_feminino(self) -> None:
-        assert spell_ordinal(1, feminine=True) == "primeira"
+    def testOrdinalFeminino(self) -> None:
+        assert spellOrdinal(1, feminine=True) == "primeira"
 
-    def test_ordinal_grande_cai_no_cardinal(self) -> None:
+    def testOrdinalGrandeCaiNoCardinal(self) -> None:
         """Acima de dez ninguém diz "décimo primeiro" numa conversa falada."""
-        assert spell_ordinal(42) == "quarenta e dois"
+        assert spellOrdinal(42) == "quarenta e dois"

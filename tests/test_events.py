@@ -10,12 +10,12 @@ from roboteye.core.events import (
     EventBus,
     SpeechFinished,
     UserMessage,
-    queue_subscriber,
+    queueSubscriber,
 )
 
 
 class TestEventBus:
-    def test_entrega_a_todos_os_assinantes(self, bus: EventBus) -> None:
+    def testEntregaATodosOsAssinantes(self, bus: EventBus) -> None:
         recebidos: list[Event] = []
         bus.subscribe(recebidos.append)
         bus.subscribe(recebidos.append)
@@ -24,16 +24,16 @@ class TestEventBus:
 
         assert len(recebidos) == 2
 
-    def test_filtra_por_tipo(self, bus: EventBus) -> None:
-        somente_falas: list[Event] = []
-        bus.subscribe(somente_falas.append, event_type=SpeechFinished)
+    def testFiltraPorTipo(self, bus: EventBus) -> None:
+        somenteFalas: list[Event] = []
+        bus.subscribe(somenteFalas.append, eventType=SpeechFinished)
 
         bus.publish(UserMessage(text="olá"))
         bus.publish(SpeechFinished())
 
-        assert len(somente_falas) == 1
+        assert len(somenteFalas) == 1
 
-    def test_handler_com_erro_nao_afeta_os_demais(self, bus: EventBus) -> None:
+    def testHandlerComErroNaoAfetaOsDemais(self, bus: EventBus) -> None:
         def explode(_: Event) -> None:
             raise RuntimeError("falha proposital")
 
@@ -45,7 +45,7 @@ class TestEventBus:
 
         assert len(recebidos) == 1
 
-    def test_unsubscribe_para_de_entregar(self, bus: EventBus) -> None:
+    def testUnsubscribeParaDeEntregar(self, bus: EventBus) -> None:
         recebidos: list[Event] = []
         bus.subscribe(recebidos.append)
         bus.unsubscribe(recebidos.append)
@@ -54,9 +54,9 @@ class TestEventBus:
 
         assert recebidos == []
 
-    def test_queue_subscriber_enfileira(self, bus: EventBus) -> None:
+    def testQueueSubscriberEnfileira(self, bus: EventBus) -> None:
         fila: queue.Queue[Event] = queue.Queue()
-        bus.subscribe(queue_subscriber(fila))
+        bus.subscribe(queueSubscriber(fila))
 
         bus.publish(UserMessage(text="olá"))
 
@@ -64,10 +64,10 @@ class TestEventBus:
 
 
 class TestEventos:
-    def test_carregam_timestamp(self) -> None:
+    def testCarregamTimestamp(self) -> None:
         assert UserMessage(text="oi").timestamp > 0
 
-    def test_sao_imutaveis(self) -> None:
+    def testSaoImutaveis(self) -> None:
         evento = UserMessage(text="oi")
         try:
             evento.text = "outro"  # type: ignore[misc]

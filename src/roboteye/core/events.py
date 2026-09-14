@@ -18,9 +18,9 @@ from dataclasses import dataclass, field
 from time import time
 from typing import TypeVar
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ class SpeechHeard(Event):
     #: `None` nos motores que nao expoem isso (Vosk).
     confidence: float | None = None
     #: Probabilidade de o trecho ser silencio/ruido, tambem do Whisper.
-    no_speech: float | None = None
+    noSpeech: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,19 +136,19 @@ class EventBus:
     """Publicador/assinante simples e thread-safe."""
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._handlers: list[tuple[type[Event] | None, Handler]] = []
+        self.lock = threading.Lock()
+        self.handlers: list[tuple[type[Event] | None, Handler]] = []
 
-    def subscribe(self, handler: Handler, *, event_type: type[Event] | None = None) -> None:
+    def subscribe(self, handler: Handler, *, eventType: type[Event] | None = None) -> None:
         """Registra `handler`. Sem `event_type`, recebe todos os eventos."""
-        with self._lock:
-            self._handlers.append((event_type, handler))
+        with self.lock:
+            self.handlers.append((eventType, handler))
 
     def unsubscribe(self, handler: Handler) -> None:
         # Comparacao por igualdade, e nao por identidade: metodos ligados
         # (`obj.metodo`) sao objetos novos a cada acesso, mas comparam iguais.
-        with self._lock:
-            self._handlers = [entry for entry in self._handlers if entry[1] != handler]
+        with self.lock:
+            self.handlers = [entry for entry in self.handlers if entry[1] != handler]
 
     def publish(self, event: Event) -> None:
         """Entrega o evento aos assinantes.
@@ -156,11 +156,11 @@ class EventBus:
         Um handler que levanta excecao e registrado no log e ignorado: um
         subsistema com defeito nao pode derrubar os outros.
         """
-        with self._lock:
+        with self.lock:
             targets = [
                 handler
-                for event_type, handler in self._handlers
-                if event_type is None or isinstance(event, event_type)
+                for eventType, handler in self.handlers
+                if eventType is None or isinstance(event, eventType)
             ]
 
         logger.debug("evento: %s", type(event).__name__)
@@ -171,14 +171,14 @@ class EventBus:
                 logger.exception("handler de evento falhou para %s", type(event).__name__)
 
 
-def queue_subscriber(sink: queue.Queue[Event]) -> Handler:
+def queueSubscriber(sink: queue.Queue[Event]) -> Handler:
     """Handler que apenas enfileira eventos, para consumo em outra thread.
 
     Usado pela face: o barramento e publicado por threads de trabalho, mas o
     pygame so pode ser tocado pela thread principal.
     """
 
-    def _handler(event: Event) -> None:
+    def handler(event: Event) -> None:
         sink.put(event)
 
-    return _handler
+    return handler

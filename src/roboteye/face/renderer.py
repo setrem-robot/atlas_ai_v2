@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import numpy as np
 import pygame
 
-from roboteye.config import is_arm
+from roboteye.config import isArm
 from roboteye.face import mask
 from roboteye.face.animator import EyeFrame
 from roboteye.face.layout import EyeLayout
@@ -46,7 +46,7 @@ class RenderQuality:
 
     name: str
     #: Maior dimensao da grade do campo, em pixels. 0 remove o teto.
-    resolution_cap: int
+    resolutionCap: int
     #: Intensidade do halo ao redor do olho. 0 desliga.
     glow: float
     #: Se o olho recebe um leve degrade vertical, que sugere volume.
@@ -55,9 +55,9 @@ class RenderQuality:
     fillet: float = mask.DEFAULT_FILLET
 
 
-LOW = RenderQuality(name="low", resolution_cap=200, glow=0.0, gradient=False)
-MEDIUM = RenderQuality(name="medium", resolution_cap=340, glow=0.22, gradient=True)
-HIGH = RenderQuality(name="high", resolution_cap=560, glow=0.30, gradient=True)
+LOW = RenderQuality(name="low", resolutionCap=200, glow=0.0, gradient=False)
+MEDIUM = RenderQuality(name="medium", resolutionCap=340, glow=0.22, gradient=True)
+HIGH = RenderQuality(name="high", resolutionCap=560, glow=0.30, gradient=True)
 
 _QUALITIES = {q.name: q for q in (LOW, MEDIUM, HIGH)}
 
@@ -72,7 +72,7 @@ GLOW_RESOLUTION = 72
 GRADIENT_DEPTH = 0.16
 
 
-def quality_for(name: str) -> RenderQuality:
+def qualityFor(name: str) -> RenderQuality:
     """Resolve o nome de um nivel de qualidade.
 
     `auto` decide pela maquina: em ARM (o caso do Raspberry Pi) o orcamento de
@@ -80,7 +80,7 @@ def quality_for(name: str) -> RenderQuality:
     """
     key = name.strip().lower()
     if key == "auto":
-        return LOW if is_arm() else MEDIUM
+        return LOW if isArm() else MEDIUM
     return _QUALITIES.get(key, MEDIUM)
 
 
@@ -94,29 +94,29 @@ class EyeRenderer:
         theme: Theme,
         *,
         quality: RenderQuality = MEDIUM,
-        corner_radius: float = DEFAULT_RADIUS,
+        cornerRadius: float = DEFAULT_RADIUS,
     ) -> None:
-        self._surface = surface
-        self._layout = layout
-        self._theme = theme
-        self._quality = quality
+        self.surface = surface
+        self.layout = layout
+        self.theme = theme
+        self.quality = quality
         # Cada forma traz o proprio raio; a configuracao do usuario reescala
         # todos eles de uma vez, preservando as proporcoes entre expressoes.
-        self._radius_scale = corner_radius / DEFAULT_RADIUS
-        self._buffers: dict[tuple[int, int], pygame.Surface] = {}
-        self._build_fonts()
+        self.radiusScale = cornerRadius / DEFAULT_RADIUS
+        self.buffers: dict[tuple[int, int], pygame.Surface] = {}
+        self.buildFonts()
 
     def resize(self, surface: pygame.Surface, layout: EyeLayout) -> None:
         """Reajusta o renderizador apos mudanca de resolucao."""
-        self._surface = surface
-        self._layout = layout
-        self._buffers.clear()
-        self._build_fonts()
+        self.surface = surface
+        self.layout = layout
+        self.buffers.clear()
+        self.buildFonts()
 
-    def _build_fonts(self) -> None:
-        size = self._layout.caption_font_size
-        self._font = pygame.font.Font(None, size)
-        self._hint_font = pygame.font.Font(None, max(12, size * 2 // 3))
+    def buildFonts(self) -> None:
+        size = self.layout.captionFontSize
+        self.font = pygame.font.Font(None, size)
+        self.hintFont = pygame.font.Font(None, max(12, size * 2 // 3))
 
     # -----------------------------------------------------------------------
     # Desenho
@@ -127,144 +127,144 @@ class EyeRenderer:
         *,
         caption: str = "",
         hint: str = "",
-        caption_opacity: float = 1.0,
+        captionOpacity: float = 1.0,
     ) -> None:
-        self._surface.fill(self._theme.background)
+        self.surface.fill(self.theme.background)
 
-        layout = self._layout
-        self._draw_eye(frame.left, layout.left_eye_x, inner_is_right=True)
-        self._draw_eye(frame.right, layout.right_eye_x, inner_is_right=False)
+        layout = self.layout
+        self.drawEye(frame.left, layout.leftEyeX, innerIsRight=True)
+        self.drawEye(frame.right, layout.rightEyeX, innerIsRight=False)
 
-        if caption and caption_opacity > 0.01:
-            self._draw_caption(caption, caption_opacity)
+        if caption and captionOpacity > 0.01:
+            self.drawCaption(caption, captionOpacity)
         if hint:
-            self._draw_hint(hint)
+            self.drawHint(hint)
 
-    def _draw_eye(self, shape: EyeShape, base_x: int, *, inner_is_right: bool) -> None:
-        if shape.is_closed:
+    def drawEye(self, shape: EyeShape, baseX: int, *, innerIsRight: bool) -> None:
+        if shape.isClosed:
             return
 
-        layout = self._layout
-        eye_width = layout.eye_width * shape.width
-        eye_height = layout.eye_height * shape.height
-        if eye_width < 1.0 or eye_height < 1.0:
+        layout = self.layout
+        eyeWidth = layout.eyeWidth * shape.width
+        eyeHeight = layout.eyeHeight * shape.height
+        if eyeWidth < 1.0 or eyeHeight < 1.0:
             return
 
         # Tudo aqui e ponto flutuante ate o ultimo instante: e a parte
         # fracionaria que faz o movimento lento deslizar em vez de pular.
-        center_x = base_x + shape.offset_x * layout.scale
-        center_y = layout.eye_center_y + shape.offset_y * layout.scale
+        centerX = baseX + shape.offsetX * layout.scale
+        centerY = layout.eyeCenterY + shape.offsetY * layout.scale
 
-        shape = shape.with_radius(shape.radius * self._radius_scale)
+        shape = shape.withRadius(shape.radius * self.radiusScale)
 
-        if self._quality.glow > 0.0:
-            self._draw_glow(shape, eye_width, eye_height, center_x, center_y, inner_is_right)
+        if self.quality.glow > 0.0:
+            self.drawGlow(shape, eyeWidth, eyeHeight, centerX, centerY, innerIsRight)
 
-        self._blit_field(
+        self.blitField(
             shape,
-            eye_width,
-            eye_height,
-            center_x,
-            center_y,
-            inner_is_right=inner_is_right,
+            eyeWidth,
+            eyeHeight,
+            centerX,
+            centerY,
+            innerIsRight=innerIsRight,
             padding=1.5,
-            cap=self._quality.resolution_cap,
+            cap=self.quality.resolutionCap,
             glow=0.0,
         )
 
-    def _draw_glow(
+    def drawGlow(
         self,
         shape: EyeShape,
-        eye_width: float,
-        eye_height: float,
-        center_x: float,
-        center_y: float,
-        inner_is_right: bool,
+        eyeWidth: float,
+        eyeHeight: float,
+        centerX: float,
+        centerY: float,
+        innerIsRight: bool,
     ) -> None:
-        self._blit_field(
+        self.blitField(
             shape,
-            eye_width,
-            eye_height,
-            center_x,
-            center_y,
-            inner_is_right=inner_is_right,
-            padding=GLOW_PADDING * eye_height,
+            eyeWidth,
+            eyeHeight,
+            centerX,
+            centerY,
+            innerIsRight=innerIsRight,
+            padding=GLOW_PADDING * eyeHeight,
             cap=GLOW_RESOLUTION,
-            glow=self._quality.glow,
+            glow=self.quality.glow,
         )
 
-    def _blit_field(
+    def blitField(
         self,
         shape: EyeShape,
-        eye_width: float,
-        eye_height: float,
-        center_x: float,
-        center_y: float,
+        eyeWidth: float,
+        eyeHeight: float,
+        centerX: float,
+        centerY: float,
         *,
-        inner_is_right: bool,
+        innerIsRight: bool,
         padding: float,
         cap: int,
         glow: float,
     ) -> None:
         """Amostra o campo, colore e cola na tela. Serve ao olho e ao halo."""
-        target_width = eye_width + 2.0 * padding
-        target_height = eye_height + 2.0 * padding
+        targetWidth = eyeWidth + 2.0 * padding
+        targetHeight = eyeHeight + 2.0 * padding
 
         # A posicao vira um canto inteiro mais uma fracao; a fracao e assada na
         # amostragem do campo, mais adiante.
-        left = center_x - target_width / 2.0
-        top = center_y - target_height / 2.0
-        int_left = math.floor(left)
-        int_top = math.floor(top)
+        left = centerX - targetWidth / 2.0
+        top = centerY - targetHeight / 2.0
+        intLeft = math.floor(left)
+        intTop = math.floor(top)
 
-        blit_width = max(1, round(target_width))
-        blit_height = max(1, round(target_height))
+        blitWidth = max(1, round(targetWidth))
+        blitHeight = max(1, round(targetHeight))
 
         # Teto de resolucao: a grade encolhe, o olho na grade encolhe junto, e o
         # deslocamento sub-pixel e convertido para pixels da grade.
-        largest = max(target_width, target_height)
+        largest = max(targetWidth, targetHeight)
         factor = min(1.0, cap / largest) if cap else 1.0
 
-        grid_width = max(1, round(target_width * factor))
-        grid_height = max(1, round(target_height * factor))
+        gridWidth = max(1, round(targetWidth * factor))
+        gridHeight = max(1, round(targetHeight * factor))
 
         geometry = MaskGeometry(
-            grid_width=grid_width,
-            grid_height=grid_height,
-            eye_width=eye_width * factor,
-            eye_height=eye_height * factor,
-            subpixel_x=(left - int_left) * factor,
-            subpixel_y=(top - int_top) * factor,
+            gridWidth=gridWidth,
+            gridHeight=gridHeight,
+            eyeWidth=eyeWidth * factor,
+            eyeHeight=eyeHeight * factor,
+            subpixelX=(left - intLeft) * factor,
+            subpixelY=(top - intTop) * factor,
         )
 
-        field = mask.eye_field(
+        field = mask.eyeField(
             shape,
             geometry,
-            inner_is_right=inner_is_right,
-            fillet=self._quality.fillet,
+            innerIsRight=innerIsRight,
+            fillet=self.quality.fillet,
         )
 
-        alpha = mask.field_to_alpha(field, geometry.pixel)
+        alpha = mask.fieldToAlpha(field, geometry.pixel)
 
         if glow > 0.0:
             # O desfoque tem que caber na margem: se o brilho ainda nao zerou na
             # borda da grade, o corte aparece como um retangulo fantasma.
             sigma = padding * factor / mask.GLOW_SIGMAS
-            alpha = mask.soft_glow(alpha, sigma) * glow
+            alpha = mask.softGlow(alpha, sigma) * glow
 
         if not alpha.any():
             return
 
-        surface = self._paint(alpha, gradient=self._quality.gradient and glow == 0.0)
-        if (grid_width, grid_height) != (blit_width, blit_height):
-            surface = pygame.transform.smoothscale(surface, (blit_width, blit_height))
+        surface = self.paint(alpha, gradient=self.quality.gradient and glow == 0.0)
+        if (gridWidth, gridHeight) != (blitWidth, blitHeight):
+            surface = pygame.transform.smoothscale(surface, (blitWidth, blitHeight))
 
-        self._surface.blit(surface, (int_left, int_top))
+        self.surface.blit(surface, (intLeft, intTop))
 
-    def _paint(self, alpha: np.ndarray, *, gradient: bool) -> pygame.Surface:
+    def paint(self, alpha: np.ndarray, *, gradient: bool) -> pygame.Surface:
         """Transforma a opacidade num retalho RGBA da cor dos olhos."""
         height, width = alpha.shape
-        surface = self._buffer(width, height)
+        surface = self.buffer(width, height)
 
         # O pygame indexa superficies por [x][y]; os campos saem em [y][x].
         rgb = pygame.surfarray.pixels3d(surface)
@@ -272,7 +272,7 @@ class EyeRenderer:
 
         opacity[:] = (alpha.T * 255.0).astype(np.uint8)
 
-        color: np.ndarray = np.asarray(self._theme.eye, dtype=np.float32)
+        color: np.ndarray = np.asarray(self.theme.eye, dtype=np.float32)
         if gradient:
             # Um degrade de cima para baixo sugere uma superficie iluminada de
             # cima. E sutil de proposito: forte demais e o olho vira um botao.
@@ -290,54 +290,54 @@ class EyeRenderer:
         del rgb, opacity
         return surface
 
-    def _buffer(self, width: int, height: int) -> pygame.Surface:
+    def buffer(self, width: int, height: int) -> pygame.Surface:
         """Superficie reaproveitada para um tamanho, para nao alocar por quadro."""
         key = (width, height)
-        surface = self._buffers.get(key)
+        surface = self.buffers.get(key)
         if surface is None:
             surface = pygame.Surface(key, pygame.SRCALPHA)
             # O cache guarda um punhado de tamanhos: os que a respiracao e a
             # piscada percorrem. Um teto evita que ele cresca sem limite quando
             # a janela e redimensionada muitas vezes.
-            if len(self._buffers) > 64:
-                self._buffers.clear()
-            self._buffers[key] = surface
+            if len(self.buffers) > 64:
+                self.buffers.clear()
+            self.buffers[key] = surface
         return surface
 
     # -----------------------------------------------------------------------
     # Texto
     # -----------------------------------------------------------------------
-    def _draw_caption(self, caption: str, opacity: float) -> None:
-        layout = self._layout
-        max_width = layout.screen_width - 2 * layout.caption_margin
-        lines = _wrap(caption, self._font, max_width)[-3:]
+    def drawCaption(self, caption: str, opacity: float) -> None:
+        layout = self.layout
+        maxWidth = layout.screenWidth - 2 * layout.captionMargin
+        lines = wrap(caption, self.font, maxWidth)[-3:]
 
-        line_height = self._font.get_linesize()
-        bottom = layout.screen_height - layout.caption_margin - line_height
+        lineHeight = self.font.get_linesize()
+        bottom = layout.screenHeight - layout.captionMargin - lineHeight
         alpha = int(255 * min(1.0, max(0.0, opacity)))
 
         for index, line in enumerate(reversed(lines)):
-            text = self._font.render(line, True, self._theme.caption_highlight)
+            text = self.font.render(line, True, self.theme.captionHighlight)
             text.set_alpha(alpha)
             position = text.get_rect(
-                centerx=layout.screen_width // 2,
-                top=bottom - index * line_height,
+                centerx=layout.screenWidth // 2,
+                top=bottom - index * lineHeight,
             )
-            self._surface.blit(text, position)
+            self.surface.blit(text, position)
 
-    def _draw_hint(self, hint: str) -> None:
-        text = self._hint_font.render(hint, True, self._theme.caption)
-        self._surface.blit(text, (self._layout.caption_margin, self._layout.caption_margin))
+    def drawHint(self, hint: str) -> None:
+        text = self.hintFont.render(hint, True, self.theme.caption)
+        self.surface.blit(text, (self.layout.captionMargin, self.layout.captionMargin))
 
 
-def _wrap(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
+def wrap(text: str, font: pygame.font.Font, maxWidth: int) -> list[str]:
     """Quebra o texto em linhas que caibam em `max_width` pixels."""
     lines: list[str] = []
     current = ""
 
     for word in text.split():
         candidate = f"{current} {word}".strip()
-        if font.size(candidate)[0] <= max_width or not current:
+        if font.size(candidate)[0] <= maxWidth or not current:
             current = candidate
         else:
             lines.append(current)

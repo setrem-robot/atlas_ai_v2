@@ -16,40 +16,40 @@ from roboteye.llm.base import ChatMessage
 class ConversationMemory:
     """Historico limitado de mensagens, seguro entre threads."""
 
-    def __init__(self, system_prompt: str, *, max_messages: int = 8) -> None:
-        self._system = ChatMessage(role="system", content=system_prompt)
-        self._history: deque[ChatMessage] = deque(maxlen=max_messages)
-        self._lock = threading.Lock()
+    def __init__(self, systemPrompt: str, *, maxMessages: int = 8) -> None:
+        self.system = ChatMessage(role="system", content=systemPrompt)
+        self.history: deque[ChatMessage] = deque(maxlen=maxMessages)
+        self.lock = threading.Lock()
 
-    def add_user(self, text: str) -> None:
-        self._append(ChatMessage(role="user", content=text))
+    def addUser(self, text: str) -> None:
+        self.append(ChatMessage(role="user", content=text))
 
-    def add_assistant(self, text: str) -> None:
-        self._append(ChatMessage(role="assistant", content=text))
+    def addAssistant(self, text: str) -> None:
+        self.append(ChatMessage(role="assistant", content=text))
 
-    def _append(self, message: ChatMessage) -> None:
+    def append(self, message: ChatMessage) -> None:
         if not message.content.strip():
             return
-        with self._lock:
-            self._history.append(message)
+        with self.lock:
+            self.history.append(message)
 
-    def build_prompt(self) -> list[ChatMessage]:
+    def buildPrompt(self) -> list[ChatMessage]:
         """Mensagens a enviar ao modelo: prompt de sistema + historico."""
-        with self._lock:
-            return [self._system, *self._history]
+        with self.lock:
+            return [self.system, *self.history]
 
     def clear(self) -> None:
-        with self._lock:
-            self._history.clear()
+        with self.lock:
+            self.history.clear()
 
-    def replace_system_prompt(self, prompt: str) -> None:
-        with self._lock:
-            self._system = ChatMessage(role="system", content=prompt)
+    def replaceSystemPrompt(self, prompt: str) -> None:
+        with self.lock:
+            self.system = ChatMessage(role="system", content=prompt)
 
     def __len__(self) -> int:
-        with self._lock:
-            return len(self._history)
+        with self.lock:
+            return len(self.history)
 
     def __iter__(self) -> Iterable[ChatMessage]:
-        with self._lock:
-            return iter(list(self._history))
+        with self.lock:
+            return iter(list(self.history))

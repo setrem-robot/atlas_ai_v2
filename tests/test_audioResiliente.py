@@ -30,12 +30,12 @@ import types
 import numpy as np
 import pytest
 
-from roboteye.hearing import microfone as mic_mod
+from roboteye.hearing import microfone as micMod
 from roboteye.hearing.microfone import BLOCO, Microfone
 from roboteye.speech.base import AudioFormat, SpeechError
 from roboteye.speech.player import AplaySink, SoundDeviceSink
 
-FORMATO = AudioFormat(sample_rate=22050, channels=1, sample_width=2)
+FORMATO = AudioFormat(sampleRate=22050, channels=1, sampleWidth=2)
 
 
 # ---------------------------------------------------------------------------
@@ -65,25 +65,25 @@ class StreamFalso:
 
 
 class TestSaidaVoltaSozinha:
-    def _sink_com(self, streams: list[StreamFalso]) -> SoundDeviceSink:
+    def sinkCom(self, streams: list[StreamFalso]) -> SoundDeviceSink:
         """Um sink cujo `start()` entrega os streams desta lista, em ordem."""
         sink = SoundDeviceSink()
         restantes = list(streams)
 
-        def abrir(audio_format: AudioFormat) -> None:
-            if sink._stream is not None and sink._format == audio_format:
+        def abrir(audioFormat: AudioFormat) -> None:
+            if sink.stream is not None and sink.format == audioFormat:
                 return
             sink.close()
-            sink._stream = restantes.pop(0)
-            sink._stream.start()
-            sink._format = audio_format
+            sink.stream = restantes.pop(0)
+            sink.stream.start()
+            sink.format = audioFormat
 
         sink.start = abrir  # type: ignore[method-assign]
         return sink
 
-    def test_o_stream_morto_e_solto_no_erro(self) -> None:
+    def testOStreamMortoESoltoNoErro(self) -> None:
         morto = StreamFalso(morto=True)
-        sink = self._sink_com([morto, StreamFalso()])
+        sink = self.sinkCom([morto, StreamFalso()])
 
         sink.start(FORMATO)
         with pytest.raises(SpeechError):
@@ -92,11 +92,11 @@ class TestSaidaVoltaSozinha:
         # É este `close` que faz a diferença: sem ele o stream morto continuaria
         # guardado e o `start()` seguinte não reabriria nada.
         assert morto.fechado
-        assert sink._stream is None
+        assert sink.stream is None
 
-    def test_a_fala_seguinte_reabre_e_sai(self) -> None:
+    def testAFalaSeguinteReabreESai(self) -> None:
         vivo = StreamFalso()
-        sink = self._sink_com([StreamFalso(morto=True), vivo])
+        sink = self.sinkCom([StreamFalso(morto=True), vivo])
 
         sink.start(FORMATO)
         with pytest.raises(SpeechError):
@@ -107,14 +107,14 @@ class TestSaidaVoltaSozinha:
         sink.write(b"\x01\x02")
         assert bytes(vivo.escrito) == b"\x01\x02"
 
-    def test_o_aplay_morto_tambem_e_solto(self) -> None:
+    def testOAplayMortoTambemESolto(self) -> None:
         sink = AplaySink()
 
         class ProcessoFalso:
             def __init__(self) -> None:
                 self.stdin = self
 
-            def write(self, _audio: bytes) -> None:
+            def write(self, audio: bytes) -> None:
                 raise OSError("Broken pipe")
 
             def flush(self) -> None:
@@ -126,13 +126,13 @@ class TestSaidaVoltaSozinha:
             def wait(self, timeout: float | None = None) -> int:
                 return 0
 
-        sink._process = ProcessoFalso()  # type: ignore[assignment]
-        sink._format = FORMATO
+        sink.process = ProcessoFalso()  # type: ignore[assignment]
+        sink.format = FORMATO
 
         with pytest.raises(SpeechError):
             sink.write(b"\x00\x00")
-        assert sink._process is None
-        assert sink._format is None
+        assert sink.process is None
+        assert sink.format is None
 
 
 # ---------------------------------------------------------------------------
@@ -143,27 +143,27 @@ def bloco(volume: float = 0.001) -> np.ndarray:
 
 
 class TestEscutaPercebeODispositivoMudo:
-    def test_silencio_de_verdade_nao_dispara_o_alarme(self, monkeypatch) -> None:
+    def testSilencioDeVerdadeNaoDisparaOAlarme(self, monkeypatch) -> None:
         """Sala quieta produz bloco. Só a ausência de bloco é defeito."""
-        monkeypatch.setattr(mic_mod, "SEM_AUDIO_S", 0.05)
-        m = Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+        monkeypatch.setattr(micMod, "SEM_AUDIO_S", 0.05)
+        m = Microfone(limiar=0.02, silencioS=0.3, minimoS=0.15, maximoS=1.0)
         for _ in range(40):
-            m._blocos.put_nowait(bloco())
-        m._blocos.put_nowait(None)
+            m.blocos.put_nowait(bloco())
+        m.blocos.put_nowait(None)
 
         # Termina pelo `None` (fim de captura), sem levantar.
-        assert list(m._cortar_em_frases()) == []
+        assert list(m.cortarEmFrases()) == []
 
-    def test_fila_vazia_por_tempo_demais_e_dispositivo_morto(self, monkeypatch) -> None:
-        monkeypatch.setattr(mic_mod, "SEM_AUDIO_S", 0.05)
+    def testFilaVaziaPorTempoDemaisEDispositivoMorto(self, monkeypatch) -> None:
+        monkeypatch.setattr(micMod, "SEM_AUDIO_S", 0.05)
         m = Microfone(limiar=0.02)
 
-        with pytest.raises(mic_mod._CapturaParou):
-            list(m._cortar_em_frases())
+        with pytest.raises(micMod.capturaParou):
+            list(m.cortarEmFrases())
 
-    def test_enquanto_a_atlas_fala_o_silencio_e_esperado(self, monkeypatch) -> None:
+    def testEnquantoAAtlasFalaOSilencioEEsperado(self, monkeypatch) -> None:
         """Pausada, a captura não enfileira nada — e isso não é defeito."""
-        monkeypatch.setattr(mic_mod, "SEM_AUDIO_S", 0.05)
+        monkeypatch.setattr(micMod, "SEM_AUDIO_S", 0.05)
         m = Microfone(limiar=0.02)
         m.pausar()
 
@@ -172,7 +172,7 @@ class TestEscutaPercebeODispositivoMudo:
 
         def rodar() -> None:
             try:
-                list(m._cortar_em_frases())
+                list(m.cortarEmFrases())
             except BaseException as exc:
                 erro.append(exc)
 
@@ -184,11 +184,11 @@ class TestEscutaPercebeODispositivoMudo:
 
         assert not erro, f"acusou dispositivo morto durante uma fala: {erro}"
 
-    def test_reabre_e_volta_a_entregar_frases(self, monkeypatch) -> None:
+    def testReabreEVoltaAEntregarFrases(self, monkeypatch) -> None:
         """O contrato que importa: quem consome `frases()` nem percebe a queda."""
-        monkeypatch.setattr(mic_mod, "SEM_AUDIO_S", 0.05)
-        monkeypatch.setattr(mic_mod, "ESPERA_INICIAL_S", 0.01)
-        monkeypatch.setattr(mic_mod, "ESPERA_MAXIMA_S", 0.01)
+        monkeypatch.setattr(micMod, "SEM_AUDIO_S", 0.05)
+        monkeypatch.setattr(micMod, "ESPERA_INICIAL_S", 0.01)
+        monkeypatch.setattr(micMod, "ESPERA_MAXIMA_S", 0.01)
         # `frases()` importa o `sounddevice` antes de qualquer coisa, para
         # falhar cedo e com mensagem boa quando nao ha audio na maquina. Este
         # teste nao exercita a captura de verdade — ele substitui
@@ -197,35 +197,35 @@ class TestEscutaPercebeODispositivoMudo:
         # instala so `[dev]`) fica vermelha.
         monkeypatch.setitem(sys.modules, "sounddevice", types.ModuleType("sounddevice"))
 
-        m = Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+        m = Microfone(limiar=0.02, silencioS=0.3, minimoS=0.15, maximoS=1.0)
         aberturas: list[int] = []
 
-        def captura_falsa(_sd):
+        def capturaFalsa(sd):
             aberturas.append(1)
             if len(aberturas) == 1:
                 # Primeira sessão: o dispositivo morre sem entregar nada.
-                raise mic_mod._CapturaParou("a placa sumiu")
+                raise micMod._CapturaParou("a placa sumiu")
             # Segunda: entrega uma frase e encerra.
             for pedaco in [bloco()] * 3 + [bloco(0.2)] * 20 + [bloco()] * 15:
-                m._blocos.put_nowait(pedaco)
-            m._blocos.put_nowait(None)
-            yield from m._cortar_em_frases()
+                m.blocos.put_nowait(pedaco)
+            m.blocos.put_nowait(None)
+            yield from m.cortarEmFrases()
 
-        m._uma_captura = captura_falsa  # type: ignore[method-assign]
+        m.umaCaptura = capturaFalsa  # type: ignore[method-assign]
 
         frases = list(m.frases())
         assert len(aberturas) == 2, "não reabriu o dispositivo"
         assert len(frases) == 1, "a frase da segunda sessão não chegou a quem escuta"
 
-    def test_o_que_sobrou_da_sessao_morta_e_descartado(self, monkeypatch) -> None:
+    def testOQueSobrouDaSessaoMortaEDescartado(self, monkeypatch) -> None:
         """Resto de fila é pedaço de frase velha; colá-lo na próxima é pior que perdê-lo."""
-        monkeypatch.setattr(mic_mod, "ESPERA_INICIAL_S", 0.01)
-        monkeypatch.setattr(mic_mod, "ESPERA_MAXIMA_S", 0.01)
+        monkeypatch.setattr(micMod, "ESPERA_INICIAL_S", 0.01)
+        monkeypatch.setattr(micMod, "ESPERA_MAXIMA_S", 0.01)
 
         m = Microfone(limiar=0.02)
-        m._blocos.put_nowait(bloco(0.2))
-        m._blocos.put_nowait(bloco(0.2))
+        m.blocos.put_nowait(bloco(0.2))
+        m.blocos.put_nowait(bloco(0.2))
 
-        m._descartar_pendentes()
+        m.descartarPendentes()
         with pytest.raises(queue.Empty):
-            m._blocos.get_nowait()
+            m.blocos.get_nowait()

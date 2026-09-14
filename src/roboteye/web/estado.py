@@ -18,9 +18,9 @@ import subprocess
 import time
 from pathlib import Path
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Acima disto o Pi comeca a reduzir a frequencia para nao cozinhar.
 TEMPERATURA_ALERTA = 75.0
@@ -29,22 +29,22 @@ TEMPERATURA_ALERTA = 75.0
 DISCO_MINIMO_GB = 1.0
 
 
-def instantaneo(repo_dir: Path) -> dict:
+def instantaneo(repoDir: Path) -> dict:
     """Um retrato do robo agora, para a pagina mostrar."""
     return {
-        "temperatura": _temperatura(),
+        "temperatura": temperatura(),
         "temperatura_alerta": TEMPERATURA_ALERTA,
-        "carga": _carga(),
-        "memoria": _memoria(),
-        "disco": _disco(repo_dir),
-        "ligado_ha": _ligado_ha(),
-        "servicos": _servicos(),
-        "bluetooth": _bluetooth(),
-        "versao": _versao(repo_dir),
+        "carga": carga(),
+        "memoria": memoria(),
+        "disco": disco(repoDir),
+        "ligado_ha": ligadoHa(),
+        "servicos": servicos(),
+        "bluetooth": bluetooth(),
+        "versao": versao(repoDir),
     }
 
 
-def _temperatura() -> float | None:
+def temperatura() -> float | None:
     """Graus do processador. O Pi 5 nao tem ventoinha; isto importa."""
     try:
         bruto = Path("/sys/class/thermal/thermal_zone0/temp").read_text()
@@ -53,7 +53,7 @@ def _temperatura() -> float | None:
     return round(int(bruto.strip()) / 1000, 1)
 
 
-def _carga() -> float | None:
+def carga() -> float | None:
     """Media de processos esperando CPU no ultimo minuto."""
     try:
         return round(float(Path("/proc/loadavg").read_text().split()[0]), 2)
@@ -61,7 +61,7 @@ def _carga() -> float | None:
         return None
 
 
-def _memoria() -> dict | None:
+def memoria() -> dict | None:
     """Memoria em uso e disponivel, em MB."""
     try:
         linhas = dict(
@@ -76,7 +76,7 @@ def _memoria() -> dict | None:
     return {"total_mb": total, "usada_mb": total - livre, "livre_mb": livre}
 
 
-def _disco(caminho: Path) -> dict | None:
+def disco(caminho: Path) -> dict | None:
     """Espaco no cartao. Encher e a forma mais comum de o robo parar."""
     try:
         uso = shutil.disk_usage(caminho)
@@ -89,7 +89,7 @@ def _disco(caminho: Path) -> dict | None:
     }
 
 
-def _ligado_ha() -> int | None:
+def ligadoHa() -> int | None:
     """Segundos desde que a maquina ligou."""
     try:
         return int(float(Path("/proc/uptime").read_text().split()[0]))
@@ -97,7 +97,7 @@ def _ligado_ha() -> int | None:
         return None
 
 
-def _servicos() -> dict:
+def servicos() -> dict:
     """Quais partes do robo estao de pe.
 
     `systemctl is-active` com varias unidades de uma vez: uma chamada so, e
@@ -117,7 +117,7 @@ def _servicos() -> dict:
     return {nome: estados[i] if i < len(estados) else "?" for i, nome in enumerate(unidades)}
 
 
-def _bluetooth() -> dict:
+def bluetooth() -> dict:
     """Se ha celular conectado pelo Bluetooth, e com que nome."""
     try:
         pronto = subprocess.run(
@@ -138,11 +138,11 @@ def _bluetooth() -> dict:
     return {"conectado": bool(aparelhos), "aparelhos": aparelhos}
 
 
-def _versao(repo_dir: Path) -> dict | None:
+def versao(repoDir: Path) -> dict | None:
     """Que versao do robo esta rodando agora."""
     try:
         pronto = subprocess.run(
-            ["git", "-C", str(repo_dir), "log", "-1", "--format=%h|%s|%cr"],
+            ["git", "-C", str(repoDir), "log", "-1", "--format=%h|%s|%cr"],
             capture_output=True,
             text=True,
             timeout=4,
@@ -157,7 +157,7 @@ def _versao(repo_dir: Path) -> dict | None:
     return {"commit": partes[0], "titulo": partes[1], "quando": partes[2]}
 
 
-def formatar_duracao(segundos: int | None) -> str:
+def formatarDuracao(segundos: int | None) -> str:
     """Segundos em algo que se le: "3 h 12 min"."""
     if segundos is None:
         return "?"

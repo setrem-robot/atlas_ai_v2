@@ -54,9 +54,9 @@ from collections.abc import Callable, Iterator
 import numpy as np
 
 from roboteye.hearing.base import HearingError
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 #: Taxa que os modelos de reconhecimento esperam.
 TAXA = 16000
@@ -111,17 +111,17 @@ class CapturaParou(Exception):
     """O dispositivo deixou de entregar áudio.
 
     Quem trata é o laço de supervisão de quem abriu a captura — `frases()` aqui,
-    `escutar()` no `vosk_ears`. Os dois motores de escuta abrem o mesmo
+    `escutar()` no `voskEars`. Os dois motores de escuta abrem o mesmo
     microfone e sofrem a mesma desconexão, então a exceção mora aqui, junto das
     constantes que definem quando ela é levantada.
     """
 
 
 #: Nome antigo, de quando só o Whisper passava por aqui.
-_CapturaParou = CapturaParou
+capturaParou = CapturaParou
 
 
-def negociar_taxa(sd, device: str | int | None, *, bloco: int = BLOCO) -> tuple[int, int]:
+def negociarTaxa(sd, device: str | int | None, *, bloco: int = BLOCO) -> tuple[int, int]:
     """Descobre em que taxa dá para gravar, e de quanto é a conversão.
 
     Só taxas múltiplas de 16 kHz entram na lista: a conversão vira uma média de
@@ -179,28 +179,28 @@ class PassaAlta:
     tipo de coisa que o detector de fala leria como alguém falando.
     """
 
-    def __init__(self, corte_hz: float, taxa: int) -> None:
-        rc = 1.0 / (2.0 * np.pi * corte_hz)
+    def __init__(self, corteHz: float, taxa: int) -> None:
+        rc = 1.0 / (2.0 * np.pi * corteHz)
         dt = 1.0 / taxa
-        self._a = rc / (rc + dt)
-        self._x_anterior = 0.0
-        self._y_anterior = 0.0
+        self.a = rc / (rc + dt)
+        self.xAnterior = 0.0
+        self.yAnterior = 0.0
 
     def aplicar(self, bloco: np.ndarray) -> np.ndarray:
         # y[n] = a * (y[n-1] + x[n] - x[n-1]) — a forma padrão do passa-alta RC
         # discreto. Em Python puro seria lento demais para 16 000 amostras por
         # segundo; o `lfilter` do numpy não existe, então a recorrência vai num
         # laço sobre o bloco, que a 480 amostras é barato.
-        a = self._a
+        a = self.a
         saida = np.empty_like(bloco)
-        y = self._y_anterior
-        x_ant = self._x_anterior
+        y = self.yAnterior
+        xAnt = self.xAnterior
         for i, x in enumerate(bloco):
-            y = a * (y + x - x_ant)
-            x_ant = x
+            y = a * (y + x - xAnt)
+            xAnt = x
             saida[i] = y
-        self._y_anterior = float(y)
-        self._x_anterior = float(x_ant)
+        self.yAnterior = float(y)
+        self.xAnterior = float(xAnt)
         return saida
 
 
@@ -212,49 +212,49 @@ class Microfone:
         *,
         device: str | int | None = None,
         limiar: float | None = None,
-        silencio_s: float = 0.8,
-        minimo_s: float = 0.4,
-        maximo_s: float = 10.0,
+        silencioS: float = 0.8,
+        minimoS: float = 0.4,
+        maximoS: float = 10.0,
     ) -> None:
-        self._device = device
+        self.device = device
         #: Acima disto conta como fala. None faz medir a sala no arranque.
-        self._limiar = limiar if limiar is not None else 0.0
-        self._calibrar = limiar is None
+        self.limiar = limiar if limiar is not None else 0.0
+        self.calibrar = limiar is None
         #: Silêncio que fecha a frase. Ver o comentário sobre a vírgula.
-        self._silencio = int(silencio_s * TAXA / BLOCO)
+        self.silencio = int(silencioS * TAXA / BLOCO)
         #: Curto demais é ruído — uma porta, uma cadeira, uma tosse.
-        self._minimo = int(minimo_s * TAXA / BLOCO)
+        self.minimo = int(minimoS * TAXA / BLOCO)
         #: Teto de segurança: sem ele, um ruído contínuo (um ventilador ligando)
         #: gravaria para sempre e nada seria transcrito. Bater nele é sinal de
         #: que algo está errado — ninguém faz uma pergunta de dez segundos a um
         #: robô —, e por isso ele avisa no log quando acontece.
-        self._maximo = int(maximo_s * TAXA / BLOCO)
+        self.maximo = int(maximoS * TAXA / BLOCO)
         #: O que veio antes de o som subir. 300 ms bastam para a primeira sílaba.
-        self._antes: deque[np.ndarray] = deque(maxlen=10)
+        self.antes: deque[np.ndarray] = deque(maxlen=10)
 
         #: Avisado no instante em que uma frase fecha — antes de transcrever.
         #: Ver `AvisaAoFecharFrase` em `hearing/base.py`.
-        self._ao_fechar_frase: Callable[[], None] | None = None
+        self.callbackFimFrase: Callable[[], None] | None = None
 
-        self._filtro = PassaAlta(CORTE_GRAVES_HZ, TAXA)
-        self._blocos: queue.Queue[np.ndarray | None] = queue.Queue(maxsize=200)
-        self._pausado = False
-        self._fechado = False
+        self.filtro = PassaAlta(CORTE_GRAVES_HZ, TAXA)
+        self.blocos: queue.Queue[np.ndarray | None] = queue.Queue(maxsize=200)
+        self.pausado = False
+        self.fechado = False
 
-    def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
+    def aoFecharFrase(self, callback: Callable[[], None] | None) -> None:
         """Registra quem avisar quando a captura de uma frase termina."""
-        self._ao_fechar_frase = callback
+        self.callbackFimFrase = callback
 
     def pausar(self) -> None:
-        self._pausado = True
+        self.pausado = True
 
     def retomar(self) -> None:
-        self._pausado = False
+        self.pausado = False
 
     def fechar(self) -> None:
-        self._fechado = True
+        self.fechado = True
         with contextlib.suppress(queue.Full):
-            self._blocos.put_nowait(None)
+            self.blocos.put_nowait(None)
 
     def frases(self) -> Iterator[np.ndarray]:
         """Produz um trecho de áudio por frase falada, até ser fechado.
@@ -272,11 +272,11 @@ class Microfone:
 
         espera = ESPERA_INICIAL_S
         primeira = True
-        while not self._fechado:
+        while not self.fechado:
             try:
-                yield from self._uma_captura(sd)
+                yield from self.umaCaptura(sd)
                 return  # saiu limpo: alguém chamou `fechar()`
-            except _CapturaParou as motivo:
+            except capturaParou as motivo:
                 logger.warning("o microfone parou de entregar audio (%s); reabrindo", motivo)
             except HearingError:
                 # Nenhuma taxa serve: reabrir não vai mudar isso. Sobe para
@@ -289,68 +289,68 @@ class Microfone:
             finally:
                 primeira = False
 
-            if self._fechado:
+            if self.fechado:
                 return
             # O que ficou na fila é de antes da queda: entregá-lo agora colaria
             # um pedaço de frase velha no começo da próxima.
-            self._descartar_pendentes()
+            self.descartarPendentes()
             time.sleep(espera)
             espera = min(espera * 2.0, ESPERA_MAXIMA_S)
 
-    def _descartar_pendentes(self) -> None:
+    def descartarPendentes(self) -> None:
         with contextlib.suppress(queue.Empty):
             while True:
-                self._blocos.get_nowait()
+                self.blocos.get_nowait()
 
-    def _uma_captura(self, sd) -> Iterator[np.ndarray]:
+    def umaCaptura(self, sd) -> Iterator[np.ndarray]:
         """Uma sessão de captura, do `open` até o dispositivo parar."""
 
-        def receber(entrada, _quadros, _tempo, status) -> None:
+        def receber(entrada, quadros, tempo, status) -> None:
             if status:
                 logger.debug("microfone reclamou: %s", status)
             # Enquanto a Atlas fala, tudo o que chega é a própria voz dela.
-            if self._pausado:
+            if self.pausado:
                 return
             bloco = reduzir(entrada[:, 0], fator)
             # O filtro entra aqui, antes de tudo: o mesmo áudio limpo é o que
             # alimenta a medição de energia e o reconhecimento.
             with contextlib.suppress(queue.Full):
-                self._blocos.put_nowait(self._filtro.aplicar(bloco))
+                self.blocos.put_nowait(self.filtro.aplicar(bloco))
 
-        taxa, fator = negociar_taxa(sd, self._device)
+        taxa, fator = negociarTaxa(sd, self.device)
         with sd.InputStream(
             samplerate=taxa,
             blocksize=BLOCO * fator,
-            device=self._device,
+            device=self.device,
             dtype="float32",
             channels=1,
             callback=receber,
         ):
-            if self._calibrar:
+            if self.calibrar:
                 # Uma vez só, e só se der certo. Numa reabertura bem-sucedida,
                 # medir de novo esperaria até 20 s a Atlas calar a boca — e a
                 # sala é a mesma de dois segundos atrás. Mas uma medição que
                 # falhou (dispositivo morto, nenhuma amostra) deixou o limiar no
                 # valor de emergência, e esse merece ser refeito.
-                self._calibrar = not self._medir_a_sala()
-            logger.info("escutando pelo microfone (limiar %.4f)", self._limiar)
-            yield from self._cortar_em_frases()
+                self.calibrar = not self.medirASala()
+            logger.info("escutando pelo microfone (limiar %.4f)", self.limiar)
+            yield from self.cortarEmFrases()
 
-    def _avisar_que_fechou(self) -> None:
+    def avisarQueFechou(self) -> None:
         """Diz a quem quiser ouvir que a captura de uma frase acabou de fechar.
 
         Falha em silêncio de propósito: isto é aviso, e quem escuta pode estar
         tocando um som. Um erro ali não pode fazer a frase recém-capturada se
         perder — ela é o que a pessoa acabou de dizer.
         """
-        if self._ao_fechar_frase is None:
+        if self.callbackFimFrase is None:
             return
         try:
-            self._ao_fechar_frase()
+            self.callbackFimFrase()
         except Exception as exc:
             logger.debug("aviso de fim de frase falhou: %s", exc)
 
-    def _medir_a_sala(self) -> bool:
+    def medirASala(self) -> bool:
         """Escolhe o limiar a partir do ruído que esta sala realmente tem.
 
         Devolve `False` quando não chegou amostra nenhuma — o limiar fica no
@@ -367,7 +367,7 @@ class Microfone:
         # de emergencia, que e baixo demais e faz o robo gravar o proprio
         # silencio o dia inteiro.
         esperou = 0.0
-        while self._pausado and esperou < 20.0 and not self._fechado:
+        while self.pausado and esperou < 20.0 and not self.fechado:
             time.sleep(0.2)
             esperou += 0.2
         if esperou:
@@ -375,12 +375,12 @@ class Microfone:
         # O que entrou na fila enquanto ela falava nao serve de amostra.
         with contextlib.suppress(queue.Empty):
             while True:
-                self._blocos.get_nowait()
+                self.blocos.get_nowait()
 
         amostras: list[float] = []
         while len(amostras) < 30:
             try:
-                bloco = self._blocos.get(timeout=2.0)
+                bloco = self.blocos.get(timeout=2.0)
             except queue.Empty:
                 break
             if bloco is None:
@@ -388,31 +388,31 @@ class Microfone:
             amostras.append(float(np.sqrt(np.mean(bloco**2))))
 
         if not amostras:
-            self._limiar = 0.02
+            self.limiar = 0.02
             logger.warning("nao consegui medir o ruido da sala; usando 0.02")
             return False
 
         ruido = float(np.percentile(amostras, 95))
-        self._limiar = max(0.015, ruido * 2.5)
-        logger.info("ruido da sala %.4f; falar comeca em %.4f", ruido, self._limiar)
+        self.limiar = max(0.015, ruido * 2.5)
+        logger.info("ruido da sala %.4f; falar comeca em %.4f", ruido, self.limiar)
         return True
 
-    def _cortar_em_frases(self) -> Iterator[np.ndarray]:
+    def cortarEmFrases(self) -> Iterator[np.ndarray]:
         falando: list[np.ndarray] = []
         quieto = 0
         #: Blocos acima do limiar em sequência. Ver `VOZ_PARA_CONTINUAR`.
-        voz_seguida = 0
+        vozSeguida = 0
         #: Blocos com voz de verdade. E este numero, e nao o tamanho do trecho,
         #: que decide se houve pergunta: o preambulo guardado antes da fala
         #: sozinho ja passaria do minimo, e um estalo de porta viraria pergunta.
-        com_voz = 0
-        ultimo_bloco = time.monotonic()
+        comVoz = 0
+        ultimoBloco = time.monotonic()
 
-        while not self._fechado:
+        while not self.fechado:
             try:
-                bloco = self._blocos.get(timeout=0.5)
+                bloco = self.blocos.get(timeout=0.5)
             except queue.Empty:
-                if self._pausado:
+                if self.pausado:
                     # A Atlas está falando, e enquanto ela fala a captura
                     # descarta o que chega — é a própria voz dela. Não há bloco
                     # a esperar, então o relógio do vigia **não pode correr**:
@@ -420,60 +420,60 @@ class Microfone:
                     # com uma reabertura do dispositivo que ninguém pediu, e o
                     # robô ficava um segundo surdo justo depois de responder,
                     # que é quando a pessoa costuma emendar a próxima pergunta.
-                    ultimo_bloco = time.monotonic()
+                    ultimoBloco = time.monotonic()
                     continue
-                if time.monotonic() - ultimo_bloco > SEM_AUDIO_S:
-                    raise _CapturaParou(f"nada ha {SEM_AUDIO_S:.0f}s") from None
+                if time.monotonic() - ultimoBloco > SEM_AUDIO_S:
+                    raise capturaParou(f"nada ha {SEM_AUDIO_S:.0f}s") from None
                 continue
-            ultimo_bloco = time.monotonic()
+            ultimoBloco = time.monotonic()
             if bloco is None:
                 break
 
-            tem_voz = float(np.sqrt(np.mean(bloco**2))) > self._limiar
+            temVoz = float(np.sqrt(np.mean(bloco**2))) > self.limiar
 
             if not falando:
-                self._antes.append(bloco)
-                if tem_voz:
+                self.antes.append(bloco)
+                if temVoz:
                     # A fala já começou antes de passarmos do limiar; o que
                     # ficou guardado é justamente a primeira sílaba.
-                    falando = list(self._antes)
-                    self._antes.clear()
+                    falando = list(self.antes)
+                    self.antes.clear()
                     quieto = 0
-                    com_voz = 1
-                    voz_seguida = 1
+                    comVoz = 1
+                    vozSeguida = 1
                 continue
 
             falando.append(bloco)
-            if tem_voz:
-                com_voz += 1
-                voz_seguida += 1
+            if temVoz:
+                comVoz += 1
+                vozSeguida += 1
                 # Só uma sequência conta como "ainda falando". Ver
                 # `VOZ_PARA_CONTINUAR`: um bloco solto zerando o silêncio é o
                 # que fazia a frase nunca fechar.
-                if voz_seguida >= VOZ_PARA_CONTINUAR:
+                if vozSeguida >= VOZ_PARA_CONTINUAR:
                     quieto = 0
             else:
-                voz_seguida = 0
+                vozSeguida = 0
                 quieto += 1
 
-            no_teto = len(falando) >= self._maximo
-            if quieto >= self._silencio or no_teto:
+            noTeto = len(falando) >= self.maximo
+            if quieto >= self.silencio or noTeto:
                 trecho, falando = falando, []
-                self._antes.clear()
+                self.antes.clear()
                 segundos = len(trecho) * BLOCO / TAXA
-                if no_teto:
+                if noTeto:
                     logger.warning(
                         "frase cortada no teto de %.0fs (só %.1fs com voz) — "
                         "o limiar de %.4f pode estar alto para esta sala",
                         segundos,
-                        com_voz * BLOCO / TAXA,
-                        self._limiar,
+                        comVoz * BLOCO / TAXA,
+                        self.limiar,
                     )
-                if com_voz >= self._minimo:
-                    self._avisar_que_fechou()
-                    logger.info("frase de %.1fs (%.1fs com voz)", segundos, com_voz * BLOCO / TAXA)
+                if comVoz >= self.minimo:
+                    self.avisarQueFechou()
+                    logger.info("frase de %.1fs (%.1fs com voz)", segundos, comVoz * BLOCO / TAXA)
                     yield np.concatenate(trecho)
                 else:
-                    logger.debug("so %d blocos com voz; era ruido, nao pergunta", com_voz)
-                com_voz = 0
-                voz_seguida = 0
+                    logger.debug("so %d blocos com voz; era ruido, nao pergunta", comVoz)
+                comVoz = 0
+                vozSeguida = 0

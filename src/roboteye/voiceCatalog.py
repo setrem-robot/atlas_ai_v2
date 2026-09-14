@@ -57,85 +57,85 @@ class VoiceSpec:
     #: Codigo do idioma que a voz fala ("en", "pt"). Define tambem em que idioma
     #: o assistente responde, a menos que ROBOTEYE_REPLY_LANGUAGE diga outra coisa.
     language: str
-    model_url: str
+    modelUrl: str
     #: `.onnx.json` no Piper; o pacote de vozes no Kokoro.
-    config_url: str
+    configUrl: str
     #: Nome da voz dentro do pacote — so o Kokoro usa.
     speaker: str | None = None
-    license_note: str = ""
+    licenseNote: str = ""
 
-    def target_paths(self, models_dir: Path) -> tuple[Path, Path]:
+    def targetPaths(self, modelsDir: Path) -> tuple[Path, Path]:
         """Caminhos do modelo e do arquivo que o acompanha.
 
         No Kokoro o par e compartilhado por todas as vozes do motor, entao ele
         nao depende de `key`.
         """
         if self.engine == "kokoro":
-            directory = models_dir / KOKORO_DIR
+            directory = modelsDir / KOKORO_DIR
             return directory / "kokoro.onnx", directory / "voices.bin"
 
-        model = models_dir / self.key / f"{self.key}.onnx"
+        model = modelsDir / self.key / f"{self.key}.onnx"
         return model, model.with_suffix(".onnx.json")
 
 
-def _piper(
-    key: str, description: str, language: str, model: str, license_note: str = ""
+def piper(
+    key: str, description: str, language: str, model: str, licenseNote: str = ""
 ) -> VoiceSpec:
     return VoiceSpec(
         key=key,
         engine="piper",
         description=description,
         language=language,
-        model_url=model,
-        config_url=model + ".json",
-        license_note=license_note,
+        modelUrl=model,
+        configUrl=model + ".json",
+        licenseNote=licenseNote,
     )
 
 
-def _kokoro(key: str, description: str, language: str, speaker: str) -> VoiceSpec:
+def kokoro(key: str, description: str, language: str, speaker: str) -> VoiceSpec:
     return VoiceSpec(
         key=key,
         engine="kokoro",
         description=description,
         language=language,
-        model_url=f"{_KOKORO_RELEASE}/kokoro-v1.0.onnx",
-        config_url=f"{_KOKORO_RELEASE}/voices-v1.0.bin",
+        modelUrl=f"{_KOKORO_RELEASE}/kokoro-v1.0.onnx",
+        configUrl=f"{_KOKORO_RELEASE}/voices-v1.0.bin",
         speaker=speaker,
-        license_note="Apache 2.0",
+        licenseNote="Apache 2.0",
     )
 
 
-def _edge(key: str, description: str, language: str, speaker: str) -> VoiceSpec:
+def edge(key: str, description: str, language: str, speaker: str) -> VoiceSpec:
     """Voz da nuvem: nao ha arquivo para baixar, so um nome para pedir."""
     return VoiceSpec(
         key=key,
         engine="edge",
         description=description,
         language=language,
-        model_url="",
-        config_url="",
+        modelUrl="",
+        configUrl="",
         speaker=speaker,
-        license_note="Servico da Microsoft; uso sujeito aos termos deles.",
+        licenseNote="Servico da Microsoft; uso sujeito aos termos deles.",
     )
 
 
 CATALOG: dict[str, VoiceSpec] = {
     # -- Piper: leves e rapidas ------------------------------------------
-    "dii": _piper(
+    "dii": piper(
         "dii",
         "Dii — feminina, portugues do Brasil",
         "pt",
         f"{_HF}/csukuangfj/vits-piper-pt_BR-dii-high/resolve/main/pt_BR-dii-high.onnx",
         "Licenca nao declarada pelo autor; confirme antes de uso comercial.",
     ),
-    "faber": _piper(
+    "faber": piper(
         "faber",
         "Faber — masculina, portugues do Brasil",
         "pt",
         f"{_HF}/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx",
         "CC0 (dominio publico)",
     ),
-    "lessac": _piper(
+    "lessac": piper(
         "lessac",
         "Lessac — feminina, ingles, voz neutra do Piper",
         "en",
@@ -143,22 +143,22 @@ CATALOG: dict[str, VoiceSpec] = {
         "MIT",
     ),
     # -- Kokoro: qualidade alta, 24 kHz ----------------------------------
-    "dora": _kokoro(
+    "dora": kokoro(
         "dora",
         "Dora — feminina, portugues do Brasil (melhor voz feminina offline)",
         "pt",
         "pf_dora",
     ),
-    "alex": _kokoro("alex", "Alex — masculina, portugues do Brasil", "pt", "pm_alex"),
-    "heart": _kokoro("heart", "Heart — feminina, ingles", "en", "af_heart"),
+    "alex": kokoro("alex", "Alex — masculina, portugues do Brasil", "pt", "pm_alex"),
+    "heart": kokoro("heart", "Heart — feminina, ingles", "en", "af_heart"),
     # -- Edge: as mais naturais em pt-BR, mas precisam de internet --------
-    "thalita": _edge(
+    "thalita": edge(
         "thalita",
         "Thalita — feminina, portugues do Brasil (online, a mais natural)",
         "pt",
         "pt-BR-ThalitaMultilingualNeural",
     ),
-    "francisca": _edge(
+    "francisca": edge(
         "francisca",
         "Francisca — feminina, portugues do Brasil (online)",
         "pt",
@@ -177,13 +177,13 @@ OFFLINE_FALLBACK = {"pt": "dora", "en": "heart"}
 OFFLINE_FALLBACK_LIGHT = {"pt": "dii", "en": "lessac"}
 
 
-def needs_download(key: str) -> bool:
+def needsDownload(key: str) -> bool:
     """Se esta voz tem arquivos para baixar antes do primeiro uso."""
     spec = get(key)
-    return bool(spec and spec.model_url)
+    return bool(spec and spec.modelUrl)
 
 
-def fallback_for(key: str, *, light: bool | None = None) -> str | None:
+def fallbackFor(key: str, *, light: bool | None = None) -> str | None:
     """Voz offline que substitui `key` quando a rede falha.
 
     Devolve None para vozes que ja rodam offline: elas nao precisam de reserva.
@@ -194,12 +194,12 @@ def fallback_for(key: str, *, light: bool | None = None) -> str | None:
         return None
 
     if light is None:
-        light = _is_modest_hardware()
+        light = isModestHardware()
     table = OFFLINE_FALLBACK_LIGHT if light else OFFLINE_FALLBACK
     return table.get(spec.language)
 
 
-def _is_modest_hardware() -> bool:
+def isModestHardware() -> bool:
     """Heuristica de maquina modesta: ARM cobre o Raspberry Pi, que e o alvo."""
     import platform
 
@@ -211,13 +211,13 @@ def get(key: str) -> VoiceSpec | None:
     return CATALOG.get(key.strip().lower())
 
 
-def language_of(key: str, default: str = "en") -> str:
+def languageOf(key: str, default: str = "en") -> str:
     """Idioma falado por uma voz do catalogo."""
     spec = get(key)
     return spec.language if spec else default
 
 
-def engine_of(key: str, default: str = "piper") -> str:
+def engineOf(key: str, default: str = "piper") -> str:
     """Motor que executa uma voz do catalogo."""
     spec = get(key)
     return spec.engine if spec else default

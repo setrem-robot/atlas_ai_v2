@@ -4,57 +4,57 @@ from __future__ import annotations
 
 import pytest
 
-from roboteye.core.text import clean_for_speech, split_sentences, stream_sentences, truncate
+from roboteye.core.text import cleanForSpeech, splitSentences, streamSentences, truncate
 
 
 class TestSplitSentences:
-    def test_divide_em_frases_preservando_pontuacao(self) -> None:
-        assert split_sentences("Olá. Tudo bem? Claro!") == ["Olá.", "Tudo bem?", "Claro!"]
+    def testDivideEmFrasesPreservandoPontuacao(self) -> None:
+        assert splitSentences("Olá. Tudo bem? Claro!") == ["Olá.", "Tudo bem?", "Claro!"]
 
-    def test_texto_sem_pontuacao_final_vira_uma_frase(self) -> None:
-        assert split_sentences("sem ponto final") == ["sem ponto final"]
+    def testTextoSemPontuacaoFinalViraUmaFrase(self) -> None:
+        assert splitSentences("sem ponto final") == ["sem ponto final"]
 
-    def test_texto_vazio_nao_gera_frases(self) -> None:
-        assert split_sentences("   ") == []
+    def testTextoVazioNaoGeraFrases(self) -> None:
+        assert splitSentences("   ") == []
 
-    def test_reticencias_no_meio_nao_quebram_a_frase(self) -> None:
+    def testReticenciasNoMeioNaoQuebramAFrase(self) -> None:
         # Regressão: "Your response is... predictable." era falado como duas frases.
-        assert split_sentences("Sua resposta é... previsível.") == ["Sua resposta é... previsível."]
+        assert splitSentences("Sua resposta é... previsível.") == ["Sua resposta é... previsível."]
 
-    def test_reticencias_seguidas_de_maiuscula_quebram(self) -> None:
-        assert split_sentences("Pense nisso... Depois volte.") == [
+    def testReticenciasSeguidasDeMaiusculaQuebram(self) -> None:
+        assert splitSentences("Pense nisso... Depois volte.") == [
             "Pense nisso...",
             "Depois volte.",
         ]
 
 
 class TestStreamSentences:
-    def test_reagrupa_tokens_em_frases(self) -> None:
+    def testReagrupaTokensEmFrases(self) -> None:
         tokens = ["A ciência ", "não ", "espera ninguém. ", "Continue ", "o teste agora."]
-        assert list(stream_sentences(tokens)) == [
+        assert list(streamSentences(tokens)) == [
             "A ciência não espera ninguém.",
             "Continue o teste agora.",
         ]
 
-    def test_frases_curtas_sao_agrupadas_com_a_seguinte(self) -> None:
+    def testFrasesCurtasSaoAgrupadasComASeguinte(self) -> None:
         # "Ok." sozinho soaria picotado no TTS.
-        resultado = list(stream_sentences(["Ok. ", "Agora preste muita atenção nisto aqui."]))
+        resultado = list(streamSentences(["Ok. ", "Agora preste muita atenção nisto aqui."]))
         assert resultado == ["Ok. Agora preste muita atenção nisto aqui."]
 
-    def test_resto_sem_pontuacao_e_emitido_no_final(self) -> None:
-        assert list(stream_sentences(["Uma frase completa aqui. ", "E um resto"])) == [
+    def testRestoSemPontuacaoEEmitidoNoFinal(self) -> None:
+        assert list(streamSentences(["Uma frase completa aqui. ", "E um resto"])) == [
             "Uma frase completa aqui.",
             "E um resto",
         ]
 
-    def test_minuscula_apos_o_ponto_nao_quebra(self) -> None:
+    def testMinusculaAposOPontoNaoQuebra(self) -> None:
         # Sinal de continuação (reticências, abreviação): melhor falar junto.
-        assert list(stream_sentences(["Uma frase completa aqui. ", "e um resto"])) == [
+        assert list(streamSentences(["Uma frase completa aqui. ", "e um resto"])) == [
             "Uma frase completa aqui. e um resto",
         ]
 
-    def test_fluxo_vazio_nao_emite_nada(self) -> None:
-        assert list(stream_sentences([])) == []
+    def testFluxoVazioNaoEmiteNada(self) -> None:
+        assert list(streamSentences([])) == []
 
 
 class TestCleanForSpeech:
@@ -68,13 +68,13 @@ class TestCleanForSpeech:
             ("espaços     demais", "espaços demais"),
         ],
     )
-    def test_remove_ruido(self, entrada: str, esperado: str) -> None:
-        assert clean_for_speech(entrada) == esperado
+    def testRemoveRuido(self, entrada: str, esperado: str) -> None:
+        assert cleanForSpeech(entrada) == esperado
 
 
 class TestTruncate:
-    def test_encurta_textos_longos(self) -> None:
+    def testEncurtaTextosLongos(self) -> None:
         assert truncate("a" * 100, limit=10) == "a" * 9 + "…"
 
-    def test_mantem_textos_curtos(self) -> None:
+    def testMantemTextosCurtos(self) -> None:
         assert truncate("curto", limit=10) == "curto"

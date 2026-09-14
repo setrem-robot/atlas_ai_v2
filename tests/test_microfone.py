@@ -24,26 +24,26 @@ def silencio(blocos: int) -> list[np.ndarray]:
 
 def escutar(microfone: Microfone, entrada: list[np.ndarray]) -> list[np.ndarray]:
     for bloco in entrada:
-        microfone._blocos.put_nowait(bloco)
+        microfone.blocos.put_nowait(bloco)
     # `None` e o sinal de fim de captura. Chamar `fechar()` aqui faria o laco
     # nem comecar, e o teste passaria a nao testar nada.
-    microfone._blocos.put_nowait(None)
-    return list(microfone._cortar_em_frases())
+    microfone.blocos.put_nowait(None)
+    return list(microfone.cortarEmFrases())
 
 
 @pytest.fixture
 def mic() -> Microfone:
     # `limiar` explicito: sem ele o microfone mede a sala no arranque, e aqui
     # nao ha sala — os blocos vem da fila, na mao.
-    return Microfone(limiar=0.02, silencio_s=0.3, minimo_s=0.15, maximo_s=1.0)
+    return Microfone(limiar=0.02, silencioS=0.3, minimoS=0.15, maximoS=1.0)
 
 
 class TestUmaFrase:
-    def test_fala_seguida_de_silencio_vira_uma_frase(self, mic: Microfone) -> None:
+    def testFalaSeguidaDeSilencioViraUmaFrase(self, mic: Microfone) -> None:
         frases = escutar(mic, silencio(3) + voz(20) + silencio(15))
         assert len(frases) == 1
 
-    def test_o_comeco_da_fala_nao_se_perde(self, mic: Microfone) -> None:
+    def testOComecoDaFalaNaoSePerde(self, mic: Microfone) -> None:
         # A primeira silaba ja passou quando o som cruza o limiar; o trecho
         # entregue tem de ser maior que os blocos de voz sozinhos.
         frases = escutar(mic, silencio(8) + voz(20) + silencio(15))
@@ -51,28 +51,28 @@ class TestUmaFrase:
 
 
 class TestDuasFrases:
-    def test_pausa_curta_nao_parte_a_frase(self, mic: Microfone) -> None:
+    def testPausaCurtaNaoParteAFrase(self, mic: Microfone) -> None:
         # A virgula de "Atlas, quantos alunos tem?" nao pode virar duas frases.
         frases = escutar(mic, voz(10) + silencio(4) + voz(10) + silencio(15))
         assert len(frases) == 1
 
-    def test_pausa_longa_separa_duas_perguntas(self, mic: Microfone) -> None:
+    def testPausaLongaSeparaDuasPerguntas(self, mic: Microfone) -> None:
         frases = escutar(mic, voz(10) + silencio(15) + voz(10) + silencio(15))
         assert len(frases) == 2
 
 
 class TestRuido:
-    def test_estalo_curto_e_descartado(self, mic: Microfone) -> None:
+    def testEstaloCurtoEDescartado(self, mic: Microfone) -> None:
         # Uma porta batendo, uma cadeira arrastando: som alto e curto demais
         # para ser pergunta.
         assert escutar(mic, silencio(3) + voz(2) + silencio(15)) == []
 
-    def test_sala_quieta_nao_produz_nada(self, mic: Microfone) -> None:
+    def testSalaQuietaNaoProduzNada(self, mic: Microfone) -> None:
         assert escutar(mic, silencio(50)) == []
 
 
 class TestTetoDeSeguranca:
-    def test_som_continuo_e_cortado_em_vez_de_crescer_para_sempre(self, mic: Microfone) -> None:
+    def testSomContinuoECortadoEmVezDeCrescerParaSempre(self, mic: Microfone) -> None:
         # Um ventilador que liga nao pode gravar ate a memoria acabar.
         frases = escutar(mic, voz(120))
         assert frases
@@ -80,7 +80,7 @@ class TestTetoDeSeguranca:
 
 
 class TestPausa:
-    def test_pausado_nao_e_o_mesmo_que_fechado(self, mic: Microfone) -> None:
+    def testPausadoNaoEOMesmoQueFechado(self, mic: Microfone) -> None:
         mic.pausar()
         mic.retomar()
         frases = escutar(mic, voz(20) + silencio(15))
@@ -104,7 +104,7 @@ class TestAFraseQueNaoFechava:
     silêncio nunca chegava ao fim.
     """
 
-    def blocos_alternados(self, quantos: int) -> list[np.ndarray]:
+    def blocosAlternados(self, quantos: int) -> list[np.ndarray]:
         """Um bloco acima do limiar a cada quatro — o padrão que travava tudo.
 
         É o que uma voz baixa produz quando o limiar ficou alto demais: picos
@@ -116,27 +116,27 @@ class TestAFraseQueNaoFechava:
             saida.append(np.full(BLOCO, volume, dtype=np.float32))
         return saida
 
-    def test_picos_isolados_nao_seguram_a_gravacao(self, mic: Microfone) -> None:
+    def testPicosIsoladosNaoSeguramAGravacao(self, mic: Microfone) -> None:
         # `maximo_s=1.0` na fixture: 33 blocos. Sem a correção, os picos
         # isolados impedem o fechamento e a frase só sai no teto.
-        frases = escutar(mic, voz(6) + self.blocos_alternados(60) + silencio(15))
+        frases = escutar(mic, voz(6) + self.blocosAlternados(60) + silencio(15))
 
         assert frases, "nada saiu"
         assert len(frases[0]) < 33 * BLOCO, (
             "a frase foi até o teto: um pico isolado ainda está zerando o silêncio"
         )
 
-    def test_uma_pausa_de_verdade_continua_fechando_a_frase(self, mic: Microfone) -> None:
+    def testUmaPausaDeVerdadeContinuaFechandoAFrase(self, mic: Microfone) -> None:
         """A correção não pode deixar a frase fechar tarde demais."""
         frases = escutar(mic, voz(20) + silencio(15))
         assert len(frases) == 1
 
-    def test_uma_virgula_continua_nao_partindo_a_frase(self, mic: Microfone) -> None:
+    def testUmaVirgulaContinuaNaoPartindoAFrase(self, mic: Microfone) -> None:
         """O motivo de `silencio_s` ser 0,8: "Atlas, quantos alunos tem?"."""
         frases = escutar(mic, voz(10) + silencio(4) + voz(10) + silencio(15))
         assert len(frases) == 1
 
-    def test_dois_blocos_seguidos_ainda_contam_como_fala(self, mic: Microfone) -> None:
+    def testDoisBlocosSeguidosAindaContamComoFala(self, mic: Microfone) -> None:
         """Sílaba de verdade tem mais que um bloco de 30 ms."""
         pares = []
         for _ in range(15):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from roboteye.hearing.gatilho import Conversa, dirigido_ao_robo
+from roboteye.hearing.gatilho import Conversa, dirigidoAoRobo
 
 
 class TestFalaramComEle:
@@ -19,40 +19,40 @@ class TestFalaramComEle:
             ("atlas por favor conte uma piada", "conte uma piada"),
         ],
     )
-    def test_devolve_a_pergunta_sem_o_nome(self, ouvido: str, esperado: str) -> None:
-        assert dirigido_ao_robo(ouvido, "atlas") == esperado
+    def testDevolveAPerguntaSemONome(self, ouvido: str, esperado: str) -> None:
+        assert dirigidoAoRobo(ouvido, "atlas") == esperado
 
-    def test_o_nome_no_meio_corta_o_que_veio_antes(self) -> None:
+    def testONomeNoMeioCortaOQueVeioAntes(self) -> None:
         # "...e ai a gente pergunta, Atlas, que horas sao?" — o comeco e outra
         # conversa, nao parte da pergunta.
         ouvido = "e ai a gente pergunta atlas que horas sao"
-        assert dirigido_ao_robo(ouvido, "atlas") == "que horas sao"
+        assert dirigidoAoRobo(ouvido, "atlas") == "que horas sao"
 
-    def test_so_o_nome_conta_como_chamado(self) -> None:
+    def testSoONomeContaComoChamado(self) -> None:
         # Sem janela, alguem que chama merece resposta em vez de silencio.
-        assert dirigido_ao_robo("atlas", "atlas") == "atlas"
+        assert dirigidoAoRobo("atlas", "atlas") == "atlas"
 
 
 class TestNaoEraComEle:
-    def test_conversa_alheia_e_ignorada(self) -> None:
-        assert dirigido_ao_robo("quantos alunos tem o curso", "atlas") is None
+    def testConversaAlheiaEIgnorada(self) -> None:
+        assert dirigidoAoRobo("quantos alunos tem o curso", "atlas") is None
 
-    def test_silencio_e_ignorado(self) -> None:
-        assert dirigido_ao_robo("", "atlas") is None
-        assert dirigido_ao_robo("   ", "atlas") is None
+    def testSilencioEIgnorado(self) -> None:
+        assert dirigidoAoRobo("", "atlas") is None
+        assert dirigidoAoRobo("   ", "atlas") is None
 
-    def test_nome_dentro_de_outra_palavra_nao_conta(self) -> None:
+    def testNomeDentroDeOutraPalavraNaoConta(self) -> None:
         # "atlasse" nao e o nome dela; comparar por pedaco de texto acharia.
-        assert dirigido_ao_robo("o atlasse do mapa", "atlas") is None
+        assert dirigidoAoRobo("o atlasse do mapa", "atlas") is None
 
 
 class TestSemPalavraDeAtivacao:
-    def test_tudo_passa(self) -> None:
+    def testTudoPassa(self) -> None:
         # Modo de teste, ou robo em sala silenciosa.
-        assert dirigido_ao_robo("que horas sao", "") == "que horas sao"
+        assert dirigidoAoRobo("que horas sao", "") == "que horas sao"
 
-    def test_mas_silencio_continua_silencio(self) -> None:
-        assert dirigido_ao_robo("  ", "") is None
+    def testMasSilencioContinuaSilencio(self) -> None:
+        assert dirigidoAoRobo("  ", "") is None
 
 
 class TestJanelaDeConversa:
@@ -62,36 +62,36 @@ class TestJanelaDeConversa:
     olhar, e so entao pergunta.
     """
 
-    def test_chamar_e_perguntar_depois_funciona(self) -> None:
-        conversa = Conversa(janela_s=8.0)
+    def testChamarEPerguntarDepoisFunciona(self) -> None:
+        conversa = Conversa(janelaS=8.0)
         # "Atlas!" — so o chamado; ela fica esperando, sem responder nada.
-        assert dirigido_ao_robo("atlas", "atlas", conversa=conversa, agora=0.0) is None
+        assert dirigidoAoRobo("atlas", "atlas", conversa=conversa, agora=0.0) is None
         # "quanto e dois mais dois?" — sem o nome, e vale.
         assert (
-            dirigido_ao_robo("quanto e dois mais dois", "atlas", conversa=conversa, agora=2.0)
+            dirigidoAoRobo("quanto e dois mais dois", "atlas", conversa=conversa, agora=2.0)
             == "quanto e dois mais dois"
         )
 
-    def test_a_janela_fecha_sozinha(self) -> None:
-        conversa = Conversa(janela_s=8.0)
-        dirigido_ao_robo("atlas", "atlas", conversa=conversa, agora=0.0)
+    def testAJanelaFechaSozinha(self) -> None:
+        conversa = Conversa(janelaS=8.0)
+        dirigidoAoRobo("atlas", "atlas", conversa=conversa, agora=0.0)
         # Passou da janela: e a sala conversando de novo, nao a pergunta.
-        assert dirigido_ao_robo("que horas sao", "atlas", conversa=conversa, agora=20.0) is None
+        assert dirigidoAoRobo("que horas sao", "atlas", conversa=conversa, agora=20.0) is None
 
-    def test_responder_fecha_a_janela(self) -> None:
+    def testResponderFechaAJanela(self) -> None:
         # Senao a conversa ao lado emendaria na frase seguinte.
-        conversa = Conversa(janela_s=8.0)
-        dirigido_ao_robo("atlas", "atlas", conversa=conversa, agora=0.0)
-        assert dirigido_ao_robo("que horas sao", "atlas", conversa=conversa, agora=1.0)
-        assert dirigido_ao_robo("e amanha", "atlas", conversa=conversa, agora=2.0) is None
+        conversa = Conversa(janelaS=8.0)
+        dirigidoAoRobo("atlas", "atlas", conversa=conversa, agora=0.0)
+        assert dirigidoAoRobo("que horas sao", "atlas", conversa=conversa, agora=1.0)
+        assert dirigidoAoRobo("e amanha", "atlas", conversa=conversa, agora=2.0) is None
 
-    def test_a_pergunta_completa_tambem_abre_a_janela(self) -> None:
+    def testAPerguntaCompletaTambemAbreAJanela(self) -> None:
         # "Atlas, que horas sao?" responde e deixa a porta aberta para o
         # complemento — "e amanha?" — sem precisar chamar de novo.
-        conversa = Conversa(janela_s=8.0)
-        assert dirigido_ao_robo("atlas que horas sao", "atlas", conversa=conversa, agora=0.0)
-        assert dirigido_ao_robo("e amanha", "atlas", conversa=conversa, agora=1.0) == "e amanha"
+        conversa = Conversa(janelaS=8.0)
+        assert dirigidoAoRobo("atlas que horas sao", "atlas", conversa=conversa, agora=0.0)
+        assert dirigidoAoRobo("e amanha", "atlas", conversa=conversa, agora=1.0) == "e amanha"
 
-    def test_sem_ser_chamada_continua_ignorando(self) -> None:
-        conversa = Conversa(janela_s=8.0)
-        assert dirigido_ao_robo("que horas sao", "atlas", conversa=conversa, agora=0.0) is None
+    def testSemSerChamadaContinuaIgnorando(self) -> None:
+        conversa = Conversa(janelaS=8.0)
+        assert dirigidoAoRobo("que horas sao", "atlas", conversa=conversa, agora=0.0) is None

@@ -38,14 +38,14 @@ from typing import Any
 from urllib.parse import urlparse
 
 from roboteye.config import PROJECT_ROOT, Settings
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.web import envfile
 from roboteye.web.comandos import ComandosRecebidos
 from roboteye.web.conversa import ConversaWeb
 from roboteye.web.estado import instantaneo
 from roboteye.web.page import PAGE
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 DEFAULT_PORT = 8080
 
@@ -86,7 +86,7 @@ class WebConfig:
     host: str = "0.0.0.0"
     port: int = DEFAULT_PORT
     pin: str = ""
-    env_path: Path = PROJECT_ROOT / ".env"
+    envPath: Path = PROJECT_ROOT / ".env"
     #: Presente quando ha um robo vivo do outro lado para conversar. Ausente
     #: quando a pagina sobe sozinha (`roboteye web`), onde nao ha com quem falar.
     conversa: ConversaWeb | None = None
@@ -97,18 +97,18 @@ class WebConfig:
     comandos: ComandosRecebidos | None = None
 
 
-class _Gatekeeper:
+class Gatekeeper:
     """Confere o PIN e segura quem erra demais."""
 
     def __init__(self, pin: str) -> None:
-        self._pin = pin
-        self._lock = threading.Lock()
-        self._failures = 0
-        self._blocked_until = 0.0
+        self.pin = pin
+        self.lock = threading.Lock()
+        self.failures = 0
+        self.blockedUntil = 0.0
 
     def allows(self, offered: str | None) -> bool:
-        with self._lock:
-            if time.monotonic() < self._blocked_until:
+        with self.lock:
+            if time.monotonic() < self.blockedUntil:
                 return False
             # Comparacao em tempo constante: um PIN curto comparado com `==`
             # vaza, pelo tempo de resposta, quantos digitos ja estao certos.
@@ -117,14 +117,14 @@ class _Gatekeeper:
             # levanta TypeError em vez de devolver False, e isso acontece fora
             # do `try` de quem chama — a requisicao morre sem resposta e o
             # cliente fica esperando. Um PIN nao-ASCII simplesmente nao confere.
-            if offered and offered.isascii() and secrets.compare_digest(offered, self._pin):
-                self._failures = 0
+            if offered and offered.isascii() and secrets.compare_digest(offered, self.pin):
+                self.failures = 0
                 return True
 
-            self._failures += 1
-            if self._failures >= MAX_ATTEMPTS:
-                self._failures = 0
-                self._blocked_until = time.monotonic() + LOCKOUT_SECONDS
+            self.failures += 1
+            if self.failures >= MAX_ATTEMPTS:
+                self.failures = 0
+                self.blockedUntil = time.monotonic() + LOCKOUT_SECONDS
                 logger.warning(
                     "PIN errado %d vezes; pausando por %ds", MAX_ATTEMPTS, LOCKOUT_SECONDS
                 )
@@ -135,33 +135,33 @@ class ConfigServer:
     """Servidor da pagina de configuracao, rodando numa thread propria."""
 
     def __init__(self, config: WebConfig) -> None:
-        self._config = config
-        self._gate = _Gatekeeper(config.pin)
-        self._server: ThreadingHTTPServer | None = None
-        self._thread: threading.Thread | None = None
+        self.config = config
+        self.gate = Gatekeeper(config.pin)
+        self.server: ThreadingHTTPServer | None = None
+        self.thread: threading.Thread | None = None
 
     @property
     def port(self) -> int:
-        return self._server.server_address[1] if self._server else self._config.port
+        return self.server.server_address[1] if self.server else self.config.port
 
     def start(self) -> None:
         """Sobe o servidor em segundo plano. Idempotente."""
-        if self._thread is not None:
+        if self.thread is not None:
             return
 
-        handler = _make_handler(self._config, self._gate)
-        self._server = ThreadingHTTPServer((self._config.host, self._config.port), handler)
-        self._server.daemon_threads = True
-        self._thread = threading.Thread(target=self._server.serve_forever, name="web", daemon=True)
-        self._thread.start()
-        logger.info("configuracao em http://%s:%d", _readable_host(self._config.host), self.port)
+        handler = makeHandler(self.config, self.gate)
+        self.server = ThreadingHTTPServer((self.config.host, self.config.port), handler)
+        self.server.daemon_threads = True
+        self.thread = threading.Thread(target=self.server.serve_forever, name="web", daemon=True)
+        self.thread.start()
+        logger.info("configuracao em http://%s:%d", readableHost(self.config.host), self.port)
 
     def stop(self) -> None:
-        if self._server is not None:
-            self._server.shutdown()
-            self._server.server_close()
-            self._server = None
-        self._thread = None
+        if self.server is not None:
+            self.server.shutdown()
+            self.server.server_close()
+            self.server = None
+        self.thread = None
 
     def __enter__(self) -> ConfigServer:
         self.start()
@@ -174,9 +174,9 @@ class ConfigServer:
 # ---------------------------------------------------------------------------
 # Rotas
 # ---------------------------------------------------------------------------
-def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestHandler]:
+def makeHandler(config: WebConfig, gate: Gatekeeper) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "RobotEye"
+        serverVersion = "RobotEye"
 
         def log_message(self, fmt: str, *args: Any) -> None:
             # O log padrao do http.server escreve em stderr e polui o terminal
@@ -186,18 +186,18 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
         # -- entrada -----------------------------------------------------
         def do_GET(self) -> None:
             path = urlparse(self.path).path
-            corpo = self._body()
+            corpo = self.body()
             if path in {"/", "/index.html"}:
-                self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+                self.send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif path == "/api/state":
-                self._guarded(lambda _: _state(config), corpo)
+                self.guarded(lambda _: state(config), corpo)
             elif path == "/api/robo":
                 # Separado do `/api/state` de proposito: este e consultado a
                 # cada poucos segundos por uma pagina aberta, enquanto aquele
                 # le o `.env` e o catalogo de vozes, que nao mudam sozinhos.
-                self._guarded(lambda _: _robo(config), corpo)
+                self.guarded(lambda _: robo(config), corpo)
             else:
-                self._json(404, {"erro": "rota desconhecida"})
+                self.json(404, {"erro": "rota desconhecida"})
 
         def do_POST(self) -> None:
             path = urlparse(self.path).path
@@ -207,33 +207,33 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
             # cliente recebe "conexao anulada" no lugar do 404 que o servidor
             # escreveu de verdade (WinError 10053 no Windows; no Linux depende
             # do tamanho do corpo e passa batido quase sempre).
-            corpo = self._body()
+            corpo = self.body()
             rotas = {
-                "/api/config": lambda body: _save(config, body),
-                "/api/test/llm": _test_llm,
-                "/api/test/voice": _test_voice,
-                "/api/restart": _restart,
-                "/api/conversar": lambda body: _conversar(config, body),
-                "/api/atualizar": _atualizar,
+                "/api/config": lambda body: save(config, body),
+                "/api/test/llm": testLlm,
+                "/api/test/voice": testVoice,
+                "/api/restart": restart,
+                "/api/conversar": lambda body: conversar(config, body),
+                "/api/atualizar": atualizar,
             }
             handler = rotas.get(path)
             if handler is None:
-                self._json(404, {"erro": "rota desconhecida"})
+                self.json(404, {"erro": "rota desconhecida"})
                 return
-            self._guarded(handler, corpo)
+            self.guarded(handler, corpo)
 
         # -- apoio -------------------------------------------------------
-        def _guarded(self, action, corpo: dict[str, Any]) -> None:
+        def guarded(self, action, corpo: dict[str, Any]) -> None:
             if not gate.allows(self.headers.get("X-Pin")):
-                self._json(401, {"erro": "PIN invalido ou tentativas demais"})
+                self.json(401, {"erro": "PIN invalido ou tentativas demais"})
                 return
             try:
-                self._json(200, action(corpo))
+                self.json(200, action(corpo))
             except Exception as exc:
                 logger.exception("falha na pagina de configuracao")
-                self._json(500, {"erro": str(exc)})
+                self.json(500, {"erro": str(exc)})
 
-        def _body(self) -> dict[str, Any]:
+        def body(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0:
                 return {}
@@ -244,12 +244,12 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
                 return {}
             return data if isinstance(data, dict) else {}
 
-        def _json(self, status: int, payload: dict[str, Any]) -> None:
-            self._send(status, json.dumps(payload).encode("utf-8"), "application/json")
+        def json(self, status: int, payload: dict[str, Any]) -> None:
+            self.send(status, json.dumps(payload).encode("utf-8"), "application/json")
 
-        def _send(self, status: int, body: bytes, content_type: str) -> None:
+        def send(self, status: int, body: bytes, contentType: str) -> None:
             self.send_response(status)
-            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Type", contentType)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -258,11 +258,11 @@ def _make_handler(config: WebConfig, gate: _Gatekeeper) -> type[BaseHTTPRequestH
     return Handler
 
 
-def _state(config: WebConfig) -> dict[str, Any]:
+def state(config: WebConfig) -> dict[str, Any]:
     """Configuracao atual mais o que o catalogo oferece."""
-    from roboteye import voice_catalog
+    from roboteye import voiceCatalog
 
-    valores = envfile.read(config.env_path)
+    valores = envfile.read(config.envPath)
     vozes = [
         {
             "key": key,
@@ -270,7 +270,7 @@ def _state(config: WebConfig) -> dict[str, Any]:
             "idioma": spec.language,
             "online": spec.engine == "edge",
         }
-        for key, spec in sorted(voice_catalog.CATALOG.items())
+        for key, spec in sorted(voiceCatalog.CATALOG.items())
     ]
     personas = sorted(
         p.stem for p in (PROJECT_ROOT / "persona").glob("*.md") if not p.stem.endswith(".memoria")
@@ -284,11 +284,11 @@ def _state(config: WebConfig) -> dict[str, Any]:
             "falas": config.conversa.falas() if config.conversa else [],
         },
         "ocupado": bool(config.ocupado and config.ocupado()),
-        "atualizacao": {"disponivel": _atualizacao_instalada()},
+        "atualizacao": {"disponivel": atualizacaoInstalada()},
     }
 
 
-def _robo(config: WebConfig) -> dict[str, Any]:
+def robo(config: WebConfig) -> dict[str, Any]:
     """Como o robo esta, mais o que ele esta obedecendo."""
     estado = instantaneo(PROJECT_ROOT)
     estado["controle"] = (
@@ -303,7 +303,7 @@ def _robo(config: WebConfig) -> dict[str, Any]:
 UPDATE_UNIT = "roboteye-update.service"
 
 
-def _atualizacao_instalada() -> bool:
+def atualizacaoInstalada() -> bool:
     """Se ha um robo instalado como servico, com o atualizador junto.
 
     Rodando da arvore de desenvolvimento nao ha unidade nenhuma, e o botao nao
@@ -322,7 +322,7 @@ def _atualizacao_instalada() -> bool:
         return False
 
 
-def _atualizar(_: dict[str, Any]) -> dict[str, Any]:
+def atualizar(_: dict[str, Any]) -> dict[str, Any]:
     """Dispara a busca pela versao publicada e volta na hora.
 
     Nao espera o resultado de proposito: a atualizacao reinicia justamente o
@@ -330,7 +330,7 @@ def _atualizar(_: dict[str, Any]) -> dict[str, Any]:
     propria morte. O `--no-block` entrega ao systemd e devolve; quem quiser
     acompanhar le `journalctl -u roboteye-update`.
     """
-    if not _atualizacao_instalada():
+    if not atualizacaoInstalada():
         return {"erro": f"{UPDATE_UNIT} nao esta instalado (rode o setup com --service)"}
 
     try:
@@ -351,7 +351,7 @@ def _atualizar(_: dict[str, Any]) -> dict[str, Any]:
     return {"disparado": True}
 
 
-def _conversar(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
+def conversar(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
     """Entrega ao robo o que foi digitado no celular.
 
     A resposta desta chamada e so o aceite. O que a Atlas responde sai pela voz
@@ -368,21 +368,21 @@ def _conversar(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
     return {"enviado": texto}
 
 
-def _save(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
+def save(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
     """Grava as chaves permitidas e confere que o resultado ainda carrega."""
     changes = {chave: str(body[chave]).strip() for chave in EDITABLE if chave in body}
     if not changes:
         return {"salvo": 0}
 
-    anterior = envfile.read(config.env_path)
-    envfile.update(config.env_path, changes)
+    anterior = envfile.read(config.envPath)
+    envfile.update(config.envPath, changes)
 
     # Uma configuracao invalida so apareceria no proximo arranque, quando o robo
     # ja nao teria como avisar. Melhor conferir agora e desfazer.
     try:
-        validate(config.env_path)
+        validate(config.envPath)
     except Exception as exc:
-        envfile.update(config.env_path, {c: anterior.get(c, "") for c in changes})
+        envfile.update(config.envPath, {c: anterior.get(c, "") for c in changes})
         raise ValueError(f"configuracao recusada, nada foi mudado: {exc}") from exc
 
     return {"salvo": len(changes), "reiniciar": True}
@@ -393,7 +393,7 @@ def _save(config: WebConfig, body: dict[str, Any]) -> dict[str, Any]:
 _ENV_LOCK = threading.Lock()
 
 
-def validate(env_path: Path) -> Settings:
+def validate(envPath: Path) -> Settings:
     """Confere se o arquivo, como esta agora, produz uma configuracao valida.
 
     Nao da para simplesmente chamar `Settings.from_env(env_file=...)`: ela usa
@@ -406,7 +406,7 @@ def validate(env_path: Path) -> Settings:
     montada, e o ambiente volta ao que era. O robo em execucao nao percebe:
     ele so le a configuracao ao arrancar.
     """
-    valores = envfile.read(env_path)
+    valores = envfile.read(envPath)
     anterior = dict(os.environ)
 
     with _ENV_LOCK:
@@ -416,46 +416,46 @@ def validate(env_path: Path) -> Settings:
             os.environ.update({c: v for c, v in valores.items() if c.startswith("ROBOTEYE_")})
             # Um caminho inexistente impede `from_env` de recarregar o arquivo
             # por cima do ambiente que acabamos de montar.
-            return Settings.from_env(env_file=env_path.parent / ".env.nao-existe")
+            return Settings.fromEnv(envFile=envPath.parent / ".env.nao-existe")
         finally:
             os.environ.clear()
             os.environ.update(anterior)
 
 
-def _test_llm(body: dict[str, Any]) -> dict[str, Any]:
+def testLlm(body: dict[str, Any]) -> dict[str, Any]:
     """Bate na maquina da IA e diz o que achou — sem precisar salvar antes.
 
     E o coracao da pagina. O endereco vem por VPN e muda de lugar; poder testar
     um candidato antes de grava-lo evita o ciclo de salvar, reiniciar e esperar
     o robo falhar falando para so entao descobrir que o IP estava errado.
     """
-    from roboteye.llm.probe import probe_ollama
+    from roboteye.llm.probe import probeOllama
 
-    resultado = probe_ollama(str(body.get("host") or ""))
+    resultado = probeOllama(str(body.get("host") or ""))
     if not resultado.ok:
         return {"ok": False, "erro": resultado.error, "host": resultado.host}
     return {
         "ok": True,
         "host": resultado.host,
-        "ms": resultado.latency_ms,
+        "ms": resultado.latencyMs,
         "modelos": list(resultado.models),
     }
 
 
-def _test_voice(body: dict[str, Any]) -> dict[str, Any]:
+def testVoice(body: dict[str, Any]) -> dict[str, Any]:
     """Faz o robo falar uma frase, para conferir voz e alto-falante de uma vez."""
-    from roboteye.speech.factory import create_tts_engine
-    from roboteye.speech.player import create_audio_sink
-    from roboteye.speech.speaker import synthesize_polished
+    from roboteye.speech.factory import createTtsEngine
+    from roboteye.speech.player import createAudioSink
+    from roboteye.speech.speaker import synthesizePolished
 
     texto = str(body.get("texto") or "Oi! Estou funcionando.").strip()[:200]
-    settings = Settings.from_env()
+    settings = Settings.fromEnv()
 
-    engine = create_tts_engine(settings.voice)
-    sink = create_audio_sink(settings.voice)
+    engine = createTtsEngine(settings.voice)
+    sink = createAudioSink(settings.voice)
     try:
         blocos = 0
-        for chunk in synthesize_polished(engine, texto, language=settings.voice.language):
+        for chunk in synthesizePolished(engine, texto, language=settings.voice.language):
             sink.start(chunk.format)
             sink.write(chunk.audio)
             blocos += 1
@@ -466,7 +466,7 @@ def _test_voice(body: dict[str, Any]) -> dict[str, Any]:
     return {"ok": blocos > 0, "voz": settings.voice.voice, "motor": settings.voice.engine}
 
 
-def _restart(_: dict[str, Any]) -> dict[str, Any]:
+def restart(_: dict[str, Any]) -> dict[str, Any]:
     """Reinicia o servico para a configuracao nova valer.
 
     Tenta sem `sudo` primeiro (vale quando a pagina roda como root ou ha sessao
@@ -503,10 +503,10 @@ def _restart(_: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _readable_host(host: str) -> str:
+def readableHost(host: str) -> str:
     return "<ip-do-robo>" if host in {"0.0.0.0", ""} else host
 
 
-def generate_pin() -> str:
+def generatePin() -> str:
     """PIN de seis digitos, sorteado de forma criptografica."""
     return f"{secrets.randbelow(1_000_000):06d}"

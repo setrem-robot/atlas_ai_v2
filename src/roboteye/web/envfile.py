@@ -36,7 +36,7 @@ def read(path: Path) -> dict[str, str]:
             continue
         match = _LINE.match(line)
         if match:
-            values[match.group(2)] = _unquote(match.group(4).strip())
+            values[match.group(2)] = unquote(match.group(4).strip())
     return values
 
 
@@ -64,7 +64,7 @@ def update(path: Path, changes: dict[str, str]) -> None:
         # continuaria devolvendo a ultima — a antiga —, e salvar pela pagina
         # pareceria nao ter efeito nenhum.
         prefix, equals = match.group(1), match.group(3)
-        lines[index] = f"{prefix}{key}{equals}{_quote(pending[key])}"
+        lines[index] = f"{prefix}{key}{equals}{quote(pending[key])}"
         seen.add(key)
 
     pending = {key: value for key, value in pending.items() if key not in seen}
@@ -72,12 +72,12 @@ def update(path: Path, changes: dict[str, str]) -> None:
         if lines and lines[-1].strip():
             lines.append("")
         lines.append("# Ajustado pela interface de configuracao")
-        lines += [f"{key}={_quote(value)}" for key, value in pending.items()]
+        lines += [f"{key}={quote(value)}" for key, value in pending.items()]
 
-    _write_atomic(path, "\n".join(lines) + "\n")
+    writeAtomic(path, "\n".join(lines) + "\n")
 
 
-def _quote(value: str) -> str:
+def quote(value: str) -> str:
     """Poe aspas so quando o valor precisa delas."""
     if value == "" or any(c in value for c in " \t\"#'"):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
@@ -85,7 +85,7 @@ def _quote(value: str) -> str:
     return value
 
 
-def _unquote(value: str) -> str:
+def unquote(value: str) -> str:
     # Um comentario no fim da linha nao faz parte do valor, mas so quando o
     # valor nao esta entre aspas — `SENHA="a#b"` tem cerquilha de verdade.
     if value[:1] in {'"', "'"} and value[-1:] == value[:1] and len(value) >= 2:
@@ -93,7 +93,7 @@ def _unquote(value: str) -> str:
     return value.split(" #", 1)[0].strip()
 
 
-def _write_atomic(path: Path, content: str) -> None:
+def writeAtomic(path: Path, content: str) -> None:
     """Escreve num arquivo temporario e o move por cima do original.
 
     O temporario nasce no mesmo diretorio de proposito: `os.replace` so e

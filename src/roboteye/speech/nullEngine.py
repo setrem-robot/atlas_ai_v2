@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import SpeechChunk
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 class NullEngine:
@@ -23,7 +23,7 @@ class NullEngine:
         logger.debug("TTS desativado, texto nao falado: %s", text)
         return iter(())
 
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         return None
 
     def close(self) -> None:

@@ -27,17 +27,17 @@ class Expression(Enum):
     LISTENING = "listening"
 
     @property
-    def is_mood(self) -> bool:
+    def isMood(self) -> bool:
         """Se pode ser definida como humor de repouso."""
         return self in _MOODS
 
     @property
-    def is_activity(self) -> bool:
+    def isActivity(self) -> bool:
         """Se e imposta pelo assistente, tendo prioridade sobre o humor."""
         return self in _ACTIVITIES
 
     @property
-    def is_transient(self) -> bool:
+    def isTransient(self) -> bool:
         """Se volta sozinha ao repouso depois de um tempo."""
         return self in _TRANSIENT
 

@@ -31,7 +31,7 @@ class Transcricao:
     #: Media do log-prob dos trechos: perto de 0 e alta, -1 ja e baixa.
     confianca: float | None = None
     #: Probabilidade de o trecho ser silencio/ruido, e nao fala.
-    sem_fala: float | None = None
+    semFala: float | None = None
 
 
 @runtime_checkable
@@ -55,7 +55,7 @@ class Ouvido(Protocol):
         """Volta a escutar. Deve ser idempotente."""
         ...
 
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         """Carrega o modelo. Deve ser idempotente e nunca levantar."""
         ...
 
@@ -80,6 +80,6 @@ class AvisaAoFecharFrase(Protocol):
     chegaria depois de ela já ter desistido de esperar.
     """
 
-    def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
+    def aoFecharFrase(self, callback: Callable[[], None] | None) -> None:
         """Registra quem avisar. `None` desliga."""
         ...

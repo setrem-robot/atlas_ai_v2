@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Iterator
 
-from roboteye.core.normalize_pt import normalize as normalize_pt
+from roboteye.core.normalizePt import normalize as normalizePt
 
 # Fim de frase: pontuacao final, espaco, e algo que nao seja letra minuscula.
 # O lookahead evita cortar em reticencias no meio de uma frase ("bem... talvez"),
@@ -25,7 +25,7 @@ _EMOJI_AND_SYMBOLS = re.compile(
 _WHITESPACE = re.compile(r"\s+")
 
 
-def clean_for_speech(text: str, *, language: str = "") -> str:
+def cleanForSpeech(text: str, *, language: str = "") -> str:
     """Prepara um texto para a sintese.
 
     Sempre tira marcacao e emojis, que o TTS soletraria ou leria errado. Em
@@ -41,11 +41,11 @@ def clean_for_speech(text: str, *, language: str = "") -> str:
     cleaned = _WHITESPACE.sub(" ", cleaned).strip()
 
     if language.lower().startswith("pt"):
-        cleaned = normalize_pt(cleaned)
+        cleaned = normalizePt(cleaned)
     return cleaned
 
 
-def split_sentences(text: str) -> list[str]:
+def splitSentences(text: str) -> list[str]:
     """Divide um texto em frases, preservando a pontuacao."""
     sentences: list[str] = []
     start = 0
@@ -61,7 +61,7 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def stream_sentences(tokens: Iterable[str], *, min_chars: int = 24) -> Iterator[str]:
+def streamSentences(tokens: Iterable[str], *, minChars: int = 24) -> Iterator[str]:
     """Reagrupa um fluxo de tokens do LLM em frases completas.
 
     E o que permite comecar a falar antes de o modelo terminar de responder:
@@ -78,7 +78,7 @@ def stream_sentences(tokens: Iterable[str], *, min_chars: int = 24) -> Iterator[
             if match is None:
                 break
             candidate = buffer[: match.end()].strip()
-            if len(candidate) < min_chars:
+            if len(candidate) < minChars:
                 break
             buffer = buffer[match.end() :]
             if candidate:

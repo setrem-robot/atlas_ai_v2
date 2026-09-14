@@ -22,39 +22,39 @@ import pytest
 
 from roboteye.hearing.base import AvisaAoFecharFrase, HearingError
 from roboteye.hearing.microfone import BLOCO, TAXA, CapturaParou
-from roboteye.hearing.vosk_ears import SILENCIO_DE_PARTIDA_S, VoskEars
+from roboteye.hearing.voskEars import SILENCIO_DE_PARTIDA_S, VoskEars
 
 
 class ReconhecedorFalso:
     """Fecha uma frase a cada `a_cada` blocos, como o `KaldiRecognizer` faria."""
 
-    def __init__(self, texto: str = "quantos alunos tem a setrem", a_cada: int = 3) -> None:
-        self._texto = texto
-        self._a_cada = a_cada
+    def __init__(self, texto: str = "quantos alunos tem a setrem", aCada: int = 3) -> None:
+        self.texto = texto
+        self.aCada = aCada
         self.blocos = 0
 
     def AcceptWaveform(self, bloco: bytes) -> bool:
         self.blocos += 1
-        return self.blocos % self._a_cada == 0
+        return self.blocos % self.aCada == 0
 
     def Result(self) -> str:
-        return json.dumps({"text": self._texto})
+        return json.dumps({"text": self.texto})
 
 
 def ouvido(**kwargs) -> VoskEars:
     """Um `VoskEars` com o modelo já "carregado", sem tocar no disco."""
-    ears = VoskEars(model_path=kwargs.pop("model_path", "/nao/existe"), **kwargs)
-    ears._model = object()  # o `warm_up` real precisaria do pacote e do modelo
+    ears = VoskEars(modelPath=kwargs.pop("model_path", "/nao/existe"), **kwargs)
+    ears.model = object()  # o `warm_up` real precisaria do pacote e do modelo
     return ears
 
 
 class TestOFormatoQueOVoskLe:
-    def test_converte_para_int16(self) -> None:
+    def testConverteParaInt16(self) -> None:
         bloco = np.array([0.0, 0.5, -0.5], dtype=np.float32)
-        amostras = np.frombuffer(VoskEars._para_int16(bloco), dtype=np.int16)
+        amostras = np.frombuffer(VoskEars.paraInt16(bloco), dtype=np.int16)
         assert list(amostras) == [0, 16383, -16383]
 
-    def test_um_pico_acima_de_um_nao_vira_estalo(self) -> None:
+    def testUmPicoAcimaDeUmNaoViraEstalo(self) -> None:
         """Sem o corte, 1,5 transborda o `int16` e sai negativo.
 
         O efeito é um estalo no meio da fala, bem onde o reconhecimento mais
@@ -62,7 +62,7 @@ class TestOFormatoQueOVoskLe:
         transcrever como sílaba.
         """
         bloco = np.array([1.5, -1.5], dtype=np.float32)
-        amostras = np.frombuffer(VoskEars._para_int16(bloco), dtype=np.int16)
+        amostras = np.frombuffer(VoskEars.paraInt16(bloco), dtype=np.int16)
         assert list(amostras) == [32767, -32767]
         assert all(a > 0 for a in amostras[:1]), "o pico positivo virou negativo"
 
@@ -71,60 +71,60 @@ class TestOAvisoDeFimDeFrase:
     """O bipe de "terminei de ouvir". O Vosk não passa pelo `Microfone`, então
     sem isto o robô trocaria de motor de escuta e emudeceria os dois sinais."""
 
-    def test_o_vosk_sabe_avisar(self) -> None:
+    def testOVoskSabeAvisar(self) -> None:
         assert isinstance(ouvido(), AvisaAoFecharFrase), (
             "o `app` só liga o bipe em quem satisfaz este protocolo"
         )
 
-    def test_avisa_ao_fechar_cada_frase(self) -> None:
+    def testAvisaAoFecharCadaFrase(self) -> None:
         ears = ouvido()
         avisos: list[int] = []
-        ears.ao_fechar_frase(lambda: avisos.append(1))
+        ears.aoFecharFrase(lambda: avisos.append(1))
         for _ in range(6):
-            ears._blocos.put(b"\x00" * BLOCO)
-        ears._blocos.put(None)
+            ears.blocos.put(b"\x00" * BLOCO)
+        ears.blocos.put(None)
 
-        frases = list(ears._reconhecer(ReconhecedorFalso(a_cada=3)))
+        frases = list(ears.reconhecer(ReconhecedorFalso(aCada=3)))
 
         assert len(frases) == 2
         assert len(avisos) == 2
 
-    def test_o_aviso_sai_antes_da_frase(self) -> None:
+    def testOAvisoSaiAntesDaFrase(self) -> None:
         """Tocar depois de entregar o texto poria o bipe atrás da resposta."""
         ears = ouvido()
         ordem: list[str] = []
-        ears.ao_fechar_frase(lambda: ordem.append("bipe"))
+        ears.aoFecharFrase(lambda: ordem.append("bipe"))
         for _ in range(3):
-            ears._blocos.put(b"\x00" * BLOCO)
-        ears._blocos.put(None)
+            ears.blocos.put(b"\x00" * BLOCO)
+        ears.blocos.put(None)
 
-        for _ in ears._reconhecer(ReconhecedorFalso(a_cada=3)):
+        for _ in ears.reconhecer(ReconhecedorFalso(aCada=3)):
             ordem.append("frase")
 
         assert ordem == ["bipe", "frase"]
 
-    def test_um_aviso_que_falha_nao_custa_a_frase(self) -> None:
+    def testUmAvisoQueFalhaNaoCustaAFrase(self) -> None:
         ears = ouvido()
 
         def explodir() -> None:
             raise RuntimeError("caixinha ocupada")
 
-        ears.ao_fechar_frase(explodir)
+        ears.aoFecharFrase(explodir)
         for _ in range(3):
-            ears._blocos.put(b"\x00" * BLOCO)
-        ears._blocos.put(None)
+            ears.blocos.put(b"\x00" * BLOCO)
+        ears.blocos.put(None)
 
-        frases = list(ears._reconhecer(ReconhecedorFalso(a_cada=3)))
+        frases = list(ears.reconhecer(ReconhecedorFalso(aCada=3)))
 
         assert len(frases) == 1, "a frase reconhecida é o motivo de tudo isto existir"
 
-    def test_sem_ninguem_registrado_nao_quebra(self) -> None:
+    def testSemNinguemRegistradoNaoQuebra(self) -> None:
         ears = ouvido()
         for _ in range(3):
-            ears._blocos.put(b"\x00" * BLOCO)
-        ears._blocos.put(None)
+            ears.blocos.put(b"\x00" * BLOCO)
+        ears.blocos.put(None)
 
-        assert len(list(ears._reconhecer(ReconhecedorFalso(a_cada=3)))) == 1
+        assert len(list(ears.reconhecer(ReconhecedorFalso(aCada=3)))) == 1
 
 
 class TestOSilencioQueDaContextoAoReconhecedor:
@@ -145,36 +145,36 @@ class TestOSilencioQueDaContextoAoReconhecedor:
     inteira e concluiria que não era com ele.
     """
 
-    def test_retomar_enfileira_silencio_antes_da_fala(self) -> None:
+    def testRetomarEnfileiraSilencioAntesDaFala(self) -> None:
         ears = ouvido()
         ears.pausar()
 
         ears.retomar()
 
-        assert ears._blocos.qsize() > 0, "o reconhecimento recomecaria direto na fala"
+        assert ears.blocos.qsize() > 0, "o reconhecimento recomecaria direto na fala"
 
-    def test_o_silencio_e_silencio_mesmo(self) -> None:
+    def testOSilencioESilencioMesmo(self) -> None:
         """Ruído no lugar do silêncio seria pior que não ter nada."""
         ears = ouvido()
         ears.pausar()
         ears.retomar()
 
-        bloco = ears._blocos.get_nowait()
+        bloco = ears.blocos.get_nowait()
         assert set(np.frombuffer(bloco, dtype=np.int16)) == {0}
 
-    def test_meio_segundo_e_o_que_foi_medido(self) -> None:
+    def testMeioSegundoEOQueFoiMedido(self) -> None:
         ears = ouvido()
         ears.pausar()
         ears.retomar()
 
-        blocos = ears._blocos.qsize()
+        blocos = ears.blocos.qsize()
         segundos = blocos * BLOCO / TAXA
         assert segundos == pytest.approx(SILENCIO_DE_PARTIDA_S, abs=0.05), (
             f"{blocos} blocos = {segundos:.2f}s; a medida que corrigiu o defeito foi "
             f"{SILENCIO_DE_PARTIDA_S}s"
         )
 
-    def test_retomar_sem_ter_pausado_nao_enche_a_fila(self) -> None:
+    def testRetomarSemTerPausadoNaoEncheAFila(self) -> None:
         """`retomar` é idempotente, e o `app` chama em mais de um evento.
 
         Sem a guarda, um turno com erro (que publica `ErrorOccurred` e
@@ -185,9 +185,9 @@ class TestOSilencioQueDaContextoAoReconhecedor:
         ears.retomar()
         ears.retomar()
 
-        assert ears._blocos.empty()
+        assert ears.blocos.empty()
 
-    def test_a_fila_cheia_nao_trava_quem_retoma(self) -> None:
+    def testAFilaCheiaNaoTravaQuemRetoma(self) -> None:
         """`retomar` roda na thread do barramento de eventos.
 
         Se ela bloqueasse numa fila cheia, a Atlas terminaria de falar e o robô
@@ -197,13 +197,13 @@ class TestOSilencioQueDaContextoAoReconhecedor:
         ears.pausar()
         while True:
             try:
-                ears._blocos.put_nowait(b"\x00" * BLOCO)
+                ears.blocos.put_nowait(b"\x00" * BLOCO)
             except queue.Full:
                 break
 
         ears.retomar()  # não deve levantar nem bloquear
 
-        assert ears._blocos.full()
+        assert ears.blocos.full()
 
 
 class TestONuncaFicarSurdo:
@@ -213,17 +213,17 @@ class TestONuncaFicarSurdo:
     existe mais: um núcleo a 100%, o robô surdo, e nada no log.
     """
 
-    def test_silencio_longo_demais_derruba_a_captura(self, monkeypatch) -> None:
+    def testSilencioLongoDemaisDerrubaACaptura(self, monkeypatch) -> None:
         ears = ouvido()
         relogio = iter([0.0, 0.0, 10.0])
         monkeypatch.setattr(
-            "roboteye.hearing.vosk_ears.time.monotonic", lambda: next(relogio, 10.0)
+            "roboteye.hearing.voskEars.time.monotonic", lambda: next(relogio, 10.0)
         )
 
         with pytest.raises(CapturaParou):
-            list(ears._reconhecer(ReconhecedorFalso()))
+            list(ears.reconhecer(ReconhecedorFalso()))
 
-    def test_pausada_nao_conta_como_dispositivo_morto(self, monkeypatch) -> None:
+    def testPausadaNaoContaComoDispositivoMorto(self, monkeypatch) -> None:
         """A Atlas falando por mais de três segundos não é microfone quebrado.
 
         Sem esta guarda, toda resposta longa reabriria o dispositivo — e a
@@ -238,25 +238,25 @@ class TestONuncaFicarSurdo:
             agora[0] += 10.0  # muito além do limite, a cada consulta
             return agora[0]
 
-        monkeypatch.setattr("roboteye.hearing.vosk_ears.time.monotonic", relogio)
+        monkeypatch.setattr("roboteye.hearing.voskEars.time.monotonic", relogio)
 
-        def parar_depois(*_a, **_k):
-            ears._fechado.set()
+        def pararDepois(*a, **k):
+            ears.fechado.set()
             raise queue.Empty
 
-        monkeypatch.setattr(ears._blocos, "get", parar_depois)
+        monkeypatch.setattr(ears.blocos, "get", pararDepois)
 
-        assert list(ears._reconhecer(ReconhecedorFalso())) == []
+        assert list(ears.reconhecer(ReconhecedorFalso())) == []
 
-    def test_a_fila_velha_e_descartada_antes_de_reabrir(self) -> None:
+    def testAFilaVelhaEDescartadaAntesDeReabrir(self) -> None:
         """Áudio de antes da queda colaria meia frase velha na próxima."""
         ears = ouvido()
         for _ in range(5):
-            ears._blocos.put(b"\x00" * BLOCO)
+            ears.blocos.put(b"\x00" * BLOCO)
 
-        ears._descartar_pendentes()
+        ears.descartarPendentes()
 
-        assert ears._blocos.empty()
+        assert ears.blocos.empty()
 
 
 class TestATaxaDaPlaca:
@@ -266,11 +266,11 @@ class TestATaxaDaPlaca:
     Abrir direto na taxa do reconhecimento morre com `Invalid sample rate`.
     """
 
-    def _sd_falso(self, aceitas: set[int]):
+    def sdFalso(self, aceitas: set[int]):
         abertas: list[int] = []
 
         class Stream:
-            def __init__(self, *, samplerate, **_kwargs) -> None:
+            def __init__(self, *, samplerate, **kwargs) -> None:
                 abertas.append(samplerate)
                 if samplerate not in aceitas:
                     raise ValueError("Invalid sample rate")
@@ -278,30 +278,30 @@ class TestATaxaDaPlaca:
             def __enter__(self):
                 return self
 
-            def __exit__(self, *_exc) -> None: ...
+            def __exit__(self, *exc) -> None: ...
 
         return types.SimpleNamespace(InputStream=Stream), abertas
 
-    def test_placa_de_48k_e_negociada_e_nao_derruba_a_escuta(self, monkeypatch) -> None:
-        sd, abertas = self._sd_falso(aceitas={48000})
+    def testPlacaDe48kENegociadaENaoDerrubaAEscuta(self, monkeypatch) -> None:
+        sd, abertas = self.sdFalso(aceitas={48000})
         monkeypatch.setitem(sys.modules, "sounddevice", sd)
         monkeypatch.setitem(
-            sys.modules, "vosk", types.SimpleNamespace(KaldiRecognizer=lambda *_a: None)
+            sys.modules, "vosk", types.SimpleNamespace(KaldiRecognizer=lambda *a: None)
         )
         ears = ouvido()
         # Encerra na primeira leitura: o teste é sobre a abertura, e `close()`
         # antes de `escutar()` impediria o laço de chegar até ela.
-        ears._blocos.put(None)
+        ears.blocos.put(None)
 
         list(ears.escutar())
 
         assert 48000 in abertas, "não tentou a taxa que a placa aceita"
 
-    def test_nenhuma_taxa_util_avisa_em_vez_de_ficar_calado(self, monkeypatch) -> None:
-        sd, _ = self._sd_falso(aceitas=set())
+    def testNenhumaTaxaUtilAvisaEmVezDeFicarCalado(self, monkeypatch) -> None:
+        sd, _ = self.sdFalso(aceitas=set())
         monkeypatch.setitem(sys.modules, "sounddevice", sd)
         monkeypatch.setitem(
-            sys.modules, "vosk", types.SimpleNamespace(KaldiRecognizer=lambda *_a: None)
+            sys.modules, "vosk", types.SimpleNamespace(KaldiRecognizer=lambda *a: None)
         )
         ears = ouvido()
 
@@ -310,8 +310,8 @@ class TestATaxaDaPlaca:
 
 
 class TestOModeloAusente:
-    def test_diz_o_caminho_e_o_comando(self) -> None:
-        ears = VoskEars(model_path="/models/escuta/vosk-pt")
+    def testDizOCaminhoEOComando(self) -> None:
+        ears = VoskEars(modelPath="/models/escuta/vosk-pt")
 
         with pytest.raises(HearingError) as erro:
             list(ears.escutar())

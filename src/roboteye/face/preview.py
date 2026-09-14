@@ -11,20 +11,20 @@ from dataclasses import replace
 from pathlib import Path
 
 from roboteye.config import FaceSettings
-from roboteye.face.animator import EyeFrame, close_lids
+from roboteye.face.animator import EyeFrame, closeLids
 from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
-from roboteye.face.shapes import EyeShape, preset_for
+from roboteye.face.shapes import EyeShape, presetFor
 from roboteye.face.theme import Theme
 
 COLUMNS = 3
 LABEL_MARGIN = 14
 
 
-def _panels() -> list[tuple[str, EyeShape, EyeShape]]:
+def montarPaineis() -> list[tuple[str, EyeShape, EyeShape]]:
     """Os quadros da folha: expressoes de repouso e instantes de movimento."""
-    neutral = preset_for(Expression.NEUTRAL)
-    thinking = preset_for(Expression.THINKING)
+    neutral = presetFor(Expression.NEUTRAL)
+    thinking = presetFor(Expression.THINKING)
 
     panels: list[tuple[str, EyeShape, EyeShape]] = []
     for expression in (
@@ -35,50 +35,50 @@ def _panels() -> list[tuple[str, EyeShape, EyeShape]]:
         Expression.LAUGH,
         Expression.SLEEP,
     ):
-        shape = preset_for(expression)
+        shape = presetFor(expression)
         panels.append((expression.value.upper(), shape, shape))
 
     panels += [
         (
             "PENSANDO",
-            replace(thinking, top_lid=0.09, offset_x=-115, offset_y=-78),
-            replace(thinking, top_lid=0.21, offset_x=-115, offset_y=-78),
+            replace(thinking, topLid=0.09, offsetX=-115, offsetY=-78),
+            replace(thinking, topLid=0.21, offsetX=-115, offsetY=-78),
         ),
         (
             "FALANDO (pico)",
-            replace(neutral, height=1.055, width=0.972, offset_y=-6),
-            replace(neutral, height=1.055, width=0.972, offset_y=-6),
+            replace(neutral, height=1.055, width=0.972, offsetY=-6),
+            replace(neutral, height=1.055, width=0.972, offsetY=-6),
         ),
         (
             "PISCANDO (meio)",
-            close_lids(neutral, 0.55),
-            close_lids(neutral, 0.55),
+            closeLids(neutral, 0.55),
+            closeLids(neutral, 0.55),
         ),
         (
             "CURIOSO",
-            replace(neutral, height=0.94, offset_x=380),
-            replace(neutral, height=1.16, offset_x=380),
+            replace(neutral, height=0.94, offsetX=380),
+            replace(neutral, height=1.16, offsetX=380),
         ),
         (
             "BRAVO -> FELIZ (meio)",
-            preset_for(Expression.ANGRY).lerp(preset_for(Expression.HAPPY), 0.5),
-            preset_for(Expression.ANGRY).lerp(preset_for(Expression.HAPPY), 0.5),
+            presetFor(Expression.ANGRY).lerp(presetFor(Expression.HAPPY), 0.5),
+            presetFor(Expression.ANGRY).lerp(presetFor(Expression.HAPPY), 0.5),
         ),
         (
             "PISCANDO (fundo)",
-            close_lids(neutral, 1.0),
-            close_lids(neutral, 1.0),
+            closeLids(neutral, 1.0),
+            closeLids(neutral, 1.0),
         ),
     ]
     return panels
 
 
-def render_sheet(
+def renderSheet(
     settings: FaceSettings,
     destination: Path,
     *,
-    panel_width: int = 640,
-    panel_height: int = 360,
+    panelWidth: int = 640,
+    panelHeight: int = 360,
 ) -> Path:
     """Desenha todas as expressoes num unico PNG e devolve o caminho salvo."""
     # O driver dummy permite gerar a folha sem abrir janela nenhuma.
@@ -87,37 +87,37 @@ def render_sheet(
 
     import pygame
 
-    from roboteye.face.renderer import EyeRenderer, quality_for
+    from roboteye.face.renderer import EyeRenderer, qualityFor
 
     pygame.init()
     pygame.display.set_mode((64, 64))
 
     # A folha e estatica: nao ha orcamento de quadro a respeitar, entao ela sai
     # sempre no nivel mais alto, independente do que o robo usaria em execucao.
-    quality = quality_for("high")
-    panels = _panels()
+    quality = qualityFor("high")
+    panels = montarPaineis()
     rows = (len(panels) + COLUMNS - 1) // COLUMNS
-    theme = Theme.from_settings(settings)
+    theme = Theme.fromSettings(settings)
 
-    sheet = pygame.Surface((panel_width * COLUMNS, panel_height * rows))
+    sheet = pygame.Surface((panelWidth * COLUMNS, panelHeight * rows))
     sheet.fill(theme.background)
-    font = pygame.font.Font(None, max(16, panel_height // 16))
+    font = pygame.font.Font(None, max(16, panelHeight // 16))
 
-    layout = EyeLayout.for_screen(panel_width, panel_height)
+    layout = EyeLayout.forScreen(panelWidth, panelHeight)
     for index, (label, left, right) in enumerate(panels):
-        panel = pygame.Surface((panel_width, panel_height))
+        panel = pygame.Surface((panelWidth, panelHeight))
         renderer = EyeRenderer(
             panel,
             layout,
             theme,
             quality=quality,
-            corner_radius=settings.corner_radius,
+            cornerRadius=settings.cornerRadius,
         )
         renderer.draw(EyeFrame(expression=Expression.NEUTRAL, left=left, right=right))
 
         panel.blit(font.render(label, True, theme.caption), (LABEL_MARGIN, LABEL_MARGIN))
-        pygame.draw.rect(panel, theme.caption, (0, 0, panel_width, panel_height), 1)
-        sheet.blit(panel, ((index % COLUMNS) * panel_width, (index // COLUMNS) * panel_height))
+        pygame.draw.rect(panel, theme.caption, (0, 0, panelWidth, panelHeight), 1)
+        sheet.blit(panel, ((index % COLUMNS) * panelWidth, (index // COLUMNS) * panelHeight))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     pygame.image.save(sheet, str(destination))

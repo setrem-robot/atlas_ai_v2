@@ -28,13 +28,13 @@ import socket
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import AudioFormat, SpeechChunk, SpeechError
 
 if TYPE_CHECKING:
     from roboteye.config import VoiceSettings
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 _INSTALL_HINT = 'Vozes online nao instaladas. Rode: pip install -e ".[online]"'
 
@@ -65,20 +65,20 @@ class EdgeEngine:
     name = "edge"
 
     def __init__(self, settings: VoiceSettings) -> None:
-        self._settings = settings
-        self._speaker = settings.speaker or DEFAULT_SPEAKER
-        self._ready = False
+        self.settings = settings
+        self.speaker = settings.speaker or DEFAULT_SPEAKER
+        self.ready = False
 
     # -- ciclo de vida -----------------------------------------------------
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         """Confere que as dependencias existem. Nao ha modelo para carregar."""
-        if self._ready:
+        if self.ready:
             return
-        _imports()
-        self._ready = True
+        imports()
+        self.ready = True
 
     def close(self) -> None:
-        self._ready = False
+        self.ready = False
 
     def alcancavel(self) -> bool:
         """Se da para chegar ao servidor de sintese agora.
@@ -102,24 +102,24 @@ class EdgeEngine:
         if not text.strip():
             return
 
-        self.warm_up()
-        audio = asyncio.run(self._download(text))
+        self.warmUp()
+        audio = asyncio.run(self.download(text))
         if not audio:
             raise SpeechError("a sintese online nao devolveu audio")
 
         yield SpeechChunk(
-            audio=_decode_mp3(audio),
-            format=AudioFormat(sample_rate=SAMPLE_RATE, channels=1, sample_width=2),
+            audio=decodeMp3(audio),
+            format=AudioFormat(sampleRate=SAMPLE_RATE, channels=1, sampleWidth=2),
         )
 
-    async def _download(self, text: str) -> bytes:
-        edge_tts, _ = _imports()
+    async def download(self, text: str) -> bytes:
+        edge_tts, _ = imports()
 
         speech = edge_tts.Communicate(
             text,
-            self._speaker,
-            rate=self._rate(),
-            pitch=self._pitch(),
+            self.speaker,
+            rate=self.rate(),
+            pitch=self.pitch(),
             connect_timeout=CONNECT_TIMEOUT,
             receive_timeout=RECEIVE_TIMEOUT,
         )
@@ -129,31 +129,31 @@ class EdgeEngine:
                 if chunk["type"] == "audio":
                     chunks.append(chunk["data"])
         except Exception as exc:
-            raise SpeechError(f"falha na sintese online ({self._speaker}): {exc}") from exc
+            raise SpeechError(f"falha na sintese online ({self.speaker}): {exc}") from exc
 
         return b"".join(chunks)
 
-    def _rate(self) -> str:
+    def rate(self) -> str:
         """Converte `length_scale` no formato de porcentagem que a API espera.
 
         `length_scale` estica a fala (1,2 = 20% mais lenta), enquanto a API pede
         a variacao de *velocidade*: uma e o inverso da outra.
         """
-        scale = max(0.1, self._settings.length_scale)
+        scale = max(0.1, self.settings.lengthScale)
         percent = round((1.0 / scale - 1.0) * 100.0)
         return f"{percent:+d}%"
 
-    def _pitch(self) -> str:
+    def pitch(self) -> str:
         """Tom, no formato de Hz por semitom que a API espera.
 
         Descer o tom e o que mais deixa a voz macia — mais que falar devagar,
         que soa arrastado. A API fala em Hz; um semitom vale cerca de 12 Hz na
         faixa de uma voz feminina, que e a aproximacao que ela mesma usa.
         """
-        return f"{round(self._settings.pitch * 12):+d}Hz"
+        return f"{round(self.settings.pitch * 12):+d}Hz"
 
 
-def _imports() -> tuple[Any, Any]:
+def imports() -> tuple[Any, Any]:
     try:
         import edge_tts
         import miniaudio
@@ -162,16 +162,16 @@ def _imports() -> tuple[Any, Any]:
     return edge_tts, miniaudio
 
 
-def _decode_mp3(data: bytes) -> bytes:
+def decodeMp3(data: bytes) -> bytes:
     """Converte o MP3 devolvido pela API em PCM de 16 bits."""
-    _, miniaudio = _imports()
+    _, miniaudio = imports()
 
     try:
         decoded = miniaudio.decode(
             data,
             output_format=miniaudio.SampleFormat.SIGNED16,
             nchannels=1,
-            sample_rate=SAMPLE_RATE,
+            sampleRate=SAMPLE_RATE,
         )
     except Exception as exc:
         raise SpeechError(f"falha ao decodificar o audio online: {exc}") from exc

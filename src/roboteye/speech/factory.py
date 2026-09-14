@@ -5,24 +5,24 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import TTSEngine
-from roboteye.speech.edge_engine import EdgeEngine
+from roboteye.speech.edgeEngine import EdgeEngine
 from roboteye.speech.fallback import FallbackEngine
-from roboteye.speech.kokoro_engine import KokoroEngine
-from roboteye.speech.null_engine import NullEngine
-from roboteye.speech.piper_engine import PiperEngine
+from roboteye.speech.kokoroEngine import KokoroEngine
+from roboteye.speech.nullEngine import NullEngine
+from roboteye.speech.piperEngine import PiperEngine
 
 if TYPE_CHECKING:
     from roboteye.config import VoiceSettings
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
-def create_tts_engine(
+def createTtsEngine(
     settings: VoiceSettings,
     *,
-    on_voice_switch: Callable[[str], None] | None = None,
+    onVoiceSwitch: Callable[[str], None] | None = None,
 ) -> TTSEngine:
     """Instancia o motor pedido na configuracao.
 
@@ -35,21 +35,21 @@ def create_tts_engine(
 
     O motor e criado sem carregar modelos; use `warm_up()` para isso.
     """
-    engine = _build(settings)
+    engine = build(settings)
 
-    backup_voice = settings.fallback_voice()
-    if backup_voice is None:
+    backupVoice = settings.fallbackVoice()
+    if backupVoice is None:
         return engine
 
-    logger.debug("voz %s tera %s como reserva offline", settings.voice, backup_voice)
+    logger.debug("voz %s tera %s como reserva offline", settings.voice, backupVoice)
     return FallbackEngine(
         engine,
-        _build(settings.for_voice(backup_voice)),
-        on_switch=on_voice_switch,
+        build(settings.forVoice(backupVoice)),
+        onSwitch=onVoiceSwitch,
     )
 
 
-def _build(settings: VoiceSettings) -> TTSEngine:
+def build(settings: VoiceSettings) -> TTSEngine:
     engine = settings.engine
     logger.debug("motor de voz: %s (voz %s)", engine, settings.voice)
 

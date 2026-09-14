@@ -27,9 +27,9 @@ from collections.abc import Callable, Iterator
 
 from roboteye.hearing.base import HearingError, Transcricao
 from roboteye.hearing.microfone import Microfone
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 class WhisperEars:
@@ -43,37 +43,37 @@ class WhisperEars:
         *,
         device: str | int | None = None,
         idioma: str = "pt",
-        cpu_threads: int = 3,
-        model_dir: str | None = None,
+        cpuThreads: int = 3,
+        modelDir: str | None = None,
         limiar: float | None = None,
     ) -> None:
-        self._nome_modelo = modelo
-        self._idioma = idioma
-        self._cpu_threads = cpu_threads
-        self._model_dir = model_dir
-        self._modelo = None
-        self._microfone = Microfone(device=device, limiar=limiar)
+        self.nomeModelo = modelo
+        self.idioma = idioma
+        self.cpuThreads = cpuThreads
+        self.modelDir = modelDir
+        self.modelo = None
+        self.microfone = Microfone(device=device, limiar=limiar)
 
-    def ao_fechar_frase(self, callback: Callable[[], None] | None) -> None:
+    def aoFecharFrase(self, callback: Callable[[], None] | None) -> None:
         """Repassa ao microfone quem avisar quando uma frase fecha."""
-        self._microfone.ao_fechar_frase(callback)
+        self.microfone.aoFecharFrase(callback)
 
     # -- ciclo de vida -----------------------------------------------------
-    def warm_up(self) -> None:
+    def warmUp(self) -> None:
         """Carrega o modelo — segundos num cartao SD, pagos uma vez."""
-        if self._modelo is not None:
+        if self.modelo is not None:
             return
         try:
-            from faster_whisper import WhisperModel
+            from fasterWhisper import WhisperModel
 
-            self._modelo = WhisperModel(
-                self._nome_modelo,
+            self.modelo = WhisperModel(
+                self.nomeModelo,
                 device="cpu",
                 # `int8` e o que torna isto viavel num Pi: sem a quantizacao, o
                 # mesmo modelo passa do tempo real e ocupa varias vezes a memoria.
                 compute_type="int8",
-                cpu_threads=self._cpu_threads,
-                download_root=self._model_dir,
+                cpu_threads=self.cpuThreads,
+                download_root=self.modelDir,
             )
         except Exception as exc:
             # Amplo de proposito: um modelo que nao carrega deixa o robo sem
@@ -81,30 +81,30 @@ class WhisperEars:
             logger.warning("nao consegui carregar o modelo de escuta: %s", exc)
 
     def close(self) -> None:
-        self._microfone.fechar()
+        self.microfone.fechar()
 
     def pausar(self) -> None:
-        self._microfone.pausar()
+        self.microfone.pausar()
 
     def retomar(self) -> None:
-        self._microfone.retomar()
+        self.microfone.retomar()
 
     # -- escuta ------------------------------------------------------------
     def escutar(self) -> Iterator[Transcricao]:
-        self.warm_up()
-        if self._modelo is None:
+        self.warmUp()
+        if self.modelo is None:
             raise HearingError(
-                f"modelo de escuta {self._nome_modelo!r} indisponivel "
+                f"modelo de escuta {self.nomeModelo!r} indisponivel "
                 '(instale com: pip install -e ".[stt]")'
             )
 
-        for trecho in self._microfone.frases():
-            transcricao = self._transcrever(trecho)
+        for trecho in self.microfone.frases():
+            transcricao = self.transcrever(trecho)
             if transcricao.texto:
                 yield transcricao
 
-    def _transcrever(self, audio) -> Transcricao:
-        modelo = self._modelo
+    def transcrever(self, audio) -> Transcricao:
+        modelo = self.modelo
         if modelo is None:  # pragma: no cover - `escutar` ja garantiu
             return Transcricao("")
         # A transcricao acontece de verdade ao percorrer os segmentos (o
@@ -113,7 +113,7 @@ class WhisperEars:
         try:
             segmentos, _ = modelo.transcribe(
                 audio,
-                language=self._idioma,
+                language=self.idioma,
                 # `beam_size=1` e busca gulosa: num Pi, o beam maior custa tempo
                 # de resposta e devolve quase sempre a mesma frase.
                 beam_size=1,
@@ -143,5 +143,5 @@ class WhisperEars:
             texto=" ".join(p.strip() for p in partes if p.strip()),
             ms=ms,
             confianca=sum(logprobs) / len(logprobs) if logprobs else None,
-            sem_fala=max(silencios) if silencios else None,
+            semFala=max(silencios) if silencios else None,
         )

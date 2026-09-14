@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from roboteye.llm.base import ChatMessage, LLMError
-from roboteye.logging_setup import get_logger
+from roboteye.loggingSetup import getLogger
 
 if TYPE_CHECKING:
     from roboteye.config import LLMSettings
 
-logger = get_logger(__name__)
+logger = getLogger(__name__)
 
 
 class OllamaClient:
@@ -27,29 +27,29 @@ class OllamaClient:
 
     name = "ollama"
 
-    def __init__(self, settings: LLMSettings, *, keep_alive: str | None = None) -> None:
-        self._host = settings.host
-        self._model = settings.model
-        self._num_predict = settings.max_tokens
-        self._num_ctx = settings.num_ctx
-        self._num_thread = settings.num_thread
+    def __init__(self, settings: LLMSettings, *, keepAlive: str | None = None) -> None:
+        self.host = settings.host
+        self.model = settings.model
+        self.numPredict = settings.maxTokens
+        self.numCtx = settings.numCtx
+        self.numThread = settings.numThread
         #: Mutavel de proposito — ver `set_keep_alive`.
-        self._keep_alive = keep_alive if keep_alive is not None else settings.keep_alive
-        self._timeout = httpx.Timeout(
+        self.keepAlive = keepAlive if keepAlive is not None else settings.keepAlive
+        self.timeout = httpx.Timeout(
             connect=5.0,
             read=settings.timeout,
             write=10.0,
             pool=5.0,
         )
-        self._client: httpx.Client | None = None
+        self.client: httpx.Client | None = None
 
     # -- ciclo de vida -----------------------------------------------------
-    def _http(self) -> httpx.Client:
-        if self._client is None:
-            self._client = httpx.Client(base_url=self._host, timeout=self._timeout)
-        return self._client
+    def http(self) -> httpx.Client:
+        if self.client is None:
+            self.client = httpx.Client(base_url=self.host, timeout=self.timeout)
+        return self.client
 
-    def warm_up(self, messages: Sequence[ChatMessage] = ()) -> None:
+    def warmUp(self, messages: Sequence[ChatMessage] = ()) -> None:
         """Abre a conexao e deixa o modelo pronto na memoria.
 
         A primeira chamada de uma conexao custa cerca de 2 s a mais que as
@@ -63,13 +63,13 @@ class OllamaClient:
         pergunta e exatamente quem espera por eles. Medido, na mesma pergunta:
         12 s na primeira vez, 2 s da segunda em diante.
         """
-        corpo = [message.as_dict() for message in messages]
+        corpo = [message.asDict() for message in messages]
         corpo.append({"role": "user", "content": "oi"})
         try:
-            self._http().post(
+            self.http().post(
                 "/api/chat",
                 json={
-                    "model": self._model,
+                    "model": self.model,
                     "messages": corpo,
                     "stream": False,
                     "think": False,
@@ -77,25 +77,25 @@ class OllamaClient:
                     # `keep_alive` valendo "0", o Ollama carrega o modelo,
                     # responde e o descarrega antes da primeira pergunta de
                     # verdade. Quem manda aquecer quer o modelo *residente*.
-                    "keep_alive": self._keep_alive_de_aquecimento(),
-                    "options": {"num_predict": 1, "num_ctx": self._num_ctx},
+                    "keep_alive": self.keepAliveDeAquecimento(),
+                    "options": {"num_predict": 1, "num_ctx": self.numCtx},
                 },
                 timeout=60.0,
             )
         except httpx.HTTPError as exc:
             logger.debug("aquecimento do LLM falhou (segue o jogo): %s", exc)
 
-    def _keep_alive_de_aquecimento(self) -> str:
-        return "5m" if self._keep_alive.strip() in {"0", "0s", ""} else self._keep_alive
+    def keepAliveDeAquecimento(self) -> str:
+        return "5m" if self.keepAlive.strip() in {"0", "0s", ""} else self.keepAlive
 
-    def set_keep_alive(self, valor: str) -> None:
+    def setKeepAlive(self, valor: str) -> None:
         """Muda quanto tempo o modelo fica residente depois de responder.
 
         Existe para o reserva local: enquanto a IA de rede responde, ele nao
         deve ocupar nada; no momento em que ela cai, passa a valer a pena
         segura-lo na memoria. Ver `FallbackLLMClient`.
         """
-        self._keep_alive = valor
+        self.keepAlive = valor
 
     def unload(self) -> bool:
         """Pede ao Ollama que solte este modelo da memoria agora.
@@ -106,37 +106,37 @@ class OllamaClient:
         ate o tempo dela expirar.
         """
         try:
-            resposta = self._http().post(
+            resposta = self.http().post(
                 "/api/chat",
-                json={"model": self._model, "messages": [], "keep_alive": 0},
+                json={"model": self.model, "messages": [], "keep_alive": 0},
                 timeout=10.0,
             )
             resposta.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.debug("nao consegui descarregar %s: %s", self._model, exc)
+            logger.debug("nao consegui descarregar %s: %s", self.model, exc)
             return False
-        logger.info("modelo %s descarregado da memoria", self._model)
+        logger.info("modelo %s descarregado da memoria", self.model)
         return True
 
     def close(self) -> None:
-        if self._client is not None:
-            self._client.close()
-            self._client = None
+        if self.client is not None:
+            self.client.close()
+            self.client = None
 
     # -- diagnostico -------------------------------------------------------
-    def is_available(self) -> bool:
+    def isAvailable(self) -> bool:
         try:
-            response = self._http().get("/api/tags", timeout=5.0)
+            response = self.http().get("/api/tags", timeout=5.0)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.debug("Ollama indisponivel em %s: %s", self._host, exc)
+            logger.debug("Ollama indisponivel em %s: %s", self.host, exc)
             return False
         return True
 
-    def list_models(self) -> list[str]:
+    def listModels(self) -> list[str]:
         """Modelos disponiveis no servidor."""
         try:
-            response = self._http().get("/api/tags", timeout=5.0)
+            response = self.http().get("/api/tags", timeout=5.0)
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
@@ -144,43 +144,43 @@ class OllamaClient:
         return [model["name"] for model in payload.get("models", [])]
 
     # -- inferencia --------------------------------------------------------
-    def stream_reply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
+    def streamReply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
         payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": [message.as_dict() for message in messages],
+            "model": self.model,
+            "messages": [message.asDict() for message in messages],
             "stream": True,
             # Modelos com modo de raciocinio (Qwen3 e afins) gastariam a cota de
             # tokens pensando em voz alta — e o robo falaria o raciocinio inteiro.
             "think": False,
-            "keep_alive": self._keep_alive,
+            "keep_alive": self.keepAlive,
             "options": {
                 # Respostas curtas: o robo fala, nao redige.
-                "num_predict": self._num_predict,
+                "num_predict": self.numPredict,
                 # O cache de atencao e reservado pelo tamanho declarado, e nao
                 # pelo texto que chega: cada token de contexto a mais e memoria
                 # presa no Pi mesmo numa conversa de duas frases.
-                "num_ctx": self._num_ctx,
+                "num_ctx": self.numCtx,
                 "temperature": 0.8,
                 # Ausente quando vale 0: o Ollama so aceita a chave com um
                 # numero util, e o padrao dele (todos os nucleos) e o certo
                 # numa maquina de mesa.
-                **({"num_thread": self._num_thread} if self._num_thread else {}),
+                **({"num_thread": self.numThread} if self.numThread else {}),
             },
         }
 
         try:
-            with self._http().stream("POST", "/api/chat", json=payload) as response:
+            with self.http().stream("POST", "/api/chat", json=payload) as response:
                 if response.status_code == 404:
                     response.read()
                     raise LLMError(
-                        f"modelo {self._model!r} nao encontrado em {self._host}. "
-                        f"Instale com: ollama pull {self._model}"
+                        f"modelo {self.model!r} nao encontrado em {self.host}. "
+                        f"Instale com: ollama pull {self.model}"
                     )
                 response.raise_for_status()
-                yield from _iter_content(response.iter_lines())
+                yield from iterContent(response.iter_lines())
         except httpx.ConnectError as exc:
             raise LLMError(
-                f"nao foi possivel conectar ao Ollama em {self._host}. "
+                f"nao foi possivel conectar ao Ollama em {self.host}. "
                 "Verifique se ele esta rodando e acessivel na rede."
             ) from exc
         except httpx.TimeoutException as exc:
@@ -189,7 +189,7 @@ class OllamaClient:
             raise LLMError(f"erro na chamada ao Ollama: {exc}") from exc
 
 
-def _iter_content(lines: Iterator[str]) -> Iterator[str]:
+def iterContent(lines: Iterator[str]) -> Iterator[str]:
     """Extrai o texto das linhas NDJSON devolvidas pelo Ollama."""
     for line in lines:
         line = line.strip()

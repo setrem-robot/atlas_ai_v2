@@ -17,7 +17,7 @@ _LEVEL_COLORS = {
 _RESET = "\033[0m"
 
 
-class _ConsoleFormatter(logging.Formatter):
+class ConsoleFormatter(logging.Formatter):
     """Formato compacto, com cor apenas quando a saida e um terminal."""
 
     def __init__(self, *, colorize: bool) -> None:
@@ -25,17 +25,17 @@ class _ConsoleFormatter(logging.Formatter):
             fmt="%(asctime)s %(levelname)-7s %(name)-22s %(message)s",
             datefmt="%H:%M:%S",
         )
-        self._colorize = colorize
+        self.colorize = colorize
 
     def format(self, record: logging.LogRecord) -> str:
         message = super().format(record)
-        if not self._colorize:
+        if not self.colorize:
             return message
         color = _LEVEL_COLORS.get(record.levelno)
         return f"{color}{message}{_RESET}" if color else message
 
 
-def configure_logging(level: str = "INFO") -> None:
+def configureLogging(level: str = "INFO") -> None:
     """Instala o handler de console. Chamadas repetidas apenas ajustam o nivel."""
     global _CONFIGURED
 
@@ -44,7 +44,7 @@ def configure_logging(level: str = "INFO") -> None:
 
     if not _CONFIGURED:
         handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(_ConsoleFormatter(colorize=sys.stderr.isatty()))
+        handler.setFormatter(ConsoleFormatter(colorize=sys.stderr.isatty()))
         root.addHandler(handler)
         # Bibliotecas HTTP sao verbosas demais em DEBUG.
         logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -54,6 +54,6 @@ def configure_logging(level: str = "INFO") -> None:
     root.setLevel(resolved)
 
 
-def get_logger(name: str) -> logging.Logger:
+def getLogger(name: str) -> logging.Logger:
     """Logger nomeado dentro do namespace da aplicacao."""
     return logging.getLogger(name)

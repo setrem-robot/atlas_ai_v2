@@ -15,7 +15,7 @@ from typing import Final
 
 from dotenv import load_dotenv
 
-from roboteye import voice_catalog
+from roboteye import voiceCatalog
 
 ENV_PREFIX: Final = "ROBOTEYE_"
 
@@ -33,7 +33,7 @@ class ConfigError(ValueError):
 # ---------------------------------------------------------------------------
 # Leitura primitiva do ambiente
 # ---------------------------------------------------------------------------
-def _raw(name: str) -> str | None:
+def rawEnv(name: str) -> str | None:
     value = os.environ.get(ENV_PREFIX + name)
     if value is None:
         return None
@@ -41,15 +41,15 @@ def _raw(name: str) -> str | None:
     return value or None
 
 
-def _get_str(name: str, default: str) -> str:
-    return _raw(name) or default
+def getStr(name: str, default: str) -> str:
+    return rawEnv(name) or default
 
 
-def _get_optional_str(name: str) -> str | None:
-    return _raw(name)
+def getOptionalStr(name: str) -> str | None:
+    return rawEnv(name)
 
 
-def _get_texto(name: str, default: str) -> str:
+def getTexto(name: str, default: str) -> str:
     """Como `_get_str`, mas **vazio quer dizer vazio**.
 
     Alguns textos tem um significado proprio quando estao em branco: sem palavra
@@ -68,8 +68,8 @@ def _get_texto(name: str, default: str) -> str:
     return default if bruto is None else bruto.strip()
 
 
-def _get_bool(name: str, default: bool) -> bool:
-    raw = _raw(name)
+def getBool(name: str, default: bool) -> bool:
+    raw = rawEnv(name)
     if raw is None:
         return default
     lowered = raw.lower()
@@ -80,8 +80,8 @@ def _get_bool(name: str, default: bool) -> bool:
     raise ConfigError(f"{ENV_PREFIX}{name}: esperava um booleano, recebi {raw!r}")
 
 
-def _get_int(name: str, default: int, *, minimum: int | None = None) -> int:
-    raw = _raw(name)
+def getInt(name: str, default: int, *, minimum: int | None = None) -> int:
+    raw = rawEnv(name)
     if raw is None:
         return default
     try:
@@ -93,8 +93,8 @@ def _get_int(name: str, default: int, *, minimum: int | None = None) -> int:
     return value
 
 
-def _get_float(name: str, default: float, *, minimum: float | None = None) -> float:
-    raw = _raw(name)
+def getFloat(name: str, default: float, *, minimum: float | None = None) -> float:
+    raw = rawEnv(name)
     if raw is None:
         return default
     try:
@@ -106,15 +106,15 @@ def _get_float(name: str, default: float, *, minimum: float | None = None) -> fl
     return value
 
 
-def _get_choice(name: str, default: str, allowed: frozenset[str]) -> str:
-    value = _get_str(name, default).lower()
+def getChoice(name: str, default: str, allowed: frozenset[str]) -> str:
+    value = getStr(name, default).lower()
     if value not in allowed:
         options = ", ".join(sorted(allowed))
         raise ConfigError(f"{ENV_PREFIX}{name}: {value!r} invalido (use: {options})")
     return value
 
 
-def parse_color(raw: str) -> tuple[int, int, int]:
+def parseColor(raw: str) -> tuple[int, int, int]:
     """Converte `#RRGGBB`, `RRGGBB` ou `r,g,b` numa tupla RGB."""
     text = raw.strip()
     if "," in text:
@@ -126,11 +126,11 @@ def parse_color(raw: str) -> tuple[int, int, int]:
         except ValueError as exc:
             raise ConfigError(f"cor invalida: {raw!r}") from exc
     else:
-        hex_text = text.lstrip("#")
-        if len(hex_text) != 6:
+        hexText = text.lstrip("#")
+        if len(hexText) != 6:
             raise ConfigError(f"cor invalida: {raw!r} (esperava #RRGGBB)")
         try:
-            rgb = tuple(int(hex_text[i : i + 2], 16) for i in (0, 2, 4))
+            rgb = tuple(int(hexText[i : i + 2], 16) for i in (0, 2, 4))
         except ValueError as exc:
             raise ConfigError(f"cor invalida: {raw!r}") from exc
 
@@ -139,11 +139,11 @@ def parse_color(raw: str) -> tuple[int, int, int]:
     return rgb  # type: ignore[return-value]
 
 
-def _get_color(name: str, default: str) -> tuple[int, int, int]:
-    return parse_color(_get_str(name, default))
+def getColor(name: str, default: str) -> tuple[int, int, int]:
+    return parseColor(getStr(name, default))
 
 
-def is_arm() -> bool:
+def isArm() -> bool:
     """Se a maquina e ARM — na pratica, se este e o Raspberry Pi de producao.
 
     Mora aqui, e nao no renderizador, porque a face nao e a unica coisa cujo
@@ -152,7 +152,7 @@ def is_arm() -> bool:
     return platform.machine().lower().startswith(("arm", "aarch"))
 
 
-def default_fps() -> int:
+def defaultFps() -> int:
     """Quadros por segundo quando ninguem escolheu.
 
     A face redesenha todo quadro — respiracao, sacadas e piscada nunca param —
@@ -162,10 +162,10 @@ def default_fps() -> int:
     desta face — todos lentos, medidos em decimos de segundo — nao se
     distinguem dos de 60; num monitor de mesa, onde CPU sobra, fica em 60.
     """
-    return 30 if is_arm() else 60
+    return 30 if isArm() else 60
 
 
-def _resolve_path(raw: str) -> Path:
+def resolvePath(raw: str) -> Path:
     """Resolve caminhos relativos a partir da raiz do projeto, nao do cwd."""
     path = Path(raw).expanduser()
     return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
@@ -208,10 +208,10 @@ class LLMSettings:
     host: str = "http://localhost:11434"
     model: str = "llama3.2:1b"
     timeout: float = 60.0
-    history_messages: int = 8
-    reply_language: str = "en"
+    historyMessages: int = 8
+    replyLanguage: str = "en"
     #: Teto de tokens por resposta. O robo fala, nao redige.
-    max_tokens: int = 120
+    maxTokens: int = 120
     #: Primeira coisa que o robo diz ao ligar. Serve de prova de vida: se sair
     #: som, a caixinha, o volume e o motor de voz estao todos de pe — e quem
     #: montou o robo descobre isso na hora, nao na frente da plateia. Vazio
@@ -219,15 +219,15 @@ class LLMSettings:
     saudacao: str = "Oi oi, acordei!"
     #: Nome da persona (arquivo `<nome>.md` dentro de `persona_dir`).
     persona: str = "atlas"
-    persona_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "persona")
+    personaDir: Path = field(default_factory=lambda: PROJECT_ROOT / "persona")
     #: Ollama de reserva, no proprio robo, para quando o de `host` nao responder.
     #: Vazio desliga a reserva e deixa a falha de rede virar erro, como antes.
-    fallback_host: str = ""
+    fallbackHost: str = ""
     #: Modelo do reserva. Vazio usa o mesmo `model` — o que so faz sentido se as
     #: duas maquinas tiverem o mesmo modelo instalado; num Pi ele costuma ser menor.
-    fallback_model: str = ""
+    fallbackModel: str = ""
     #: De quanto em quanto tempo perguntar se o `host` voltou.
-    probe_interval: float = 10.0
+    probeInterval: float = 10.0
     #: Tamanho da janela de contexto, em tokens. E o que mais pesa na memoria
     #: do robo depois do proprio modelo: o Ollama reserva o cache de atencao
     #: pelo tamanho declarado, nao pelo texto que chega.
@@ -241,7 +241,7 @@ class LLMSettings:
     #: 4096 e o que faz persona, historico e resposta caberem juntos. Custa
     #: memoria, e a alternativa honesta e mais barata continua sendo encurtar a
     #: persona — ver o aviso em `PersonaStore`.
-    num_ctx: int = DEFAULT_NUM_CTX
+    numCtx: int = DEFAULT_NUM_CTX
     #: Quantos nucleos o modelo pode usar. 0 deixa o Ollama decidir, e ele
     #: decide pegar **todos**.
     #:
@@ -256,21 +256,21 @@ class LLMSettings:
     #: disputa. Este teto e a segunda camada: a face desenha o tempo todo, e um
     #: modelo que toma a maquina inteira faz a animacao engasgar bem no momento
     #: em que a pessoa esta esperando resposta.
-    num_thread: int = 0
+    numThread: int = 0
     #: Quanto tempo o modelo fica na memoria depois de responder, no formato do
     #: Ollama ("5m", "30s", "0"). Vale para o `host` principal, que costuma ser
     #: a maquina de mesa — onde memoria sobra.
-    keep_alive: str = "5m"
+    keepAlive: str = "5m"
     #: O mesmo, para o reserva que roda no proprio Pi. "0" faz ele devolver a
     #: memoria assim que termina de falar, que e o que mantem ~1,5 GB livres
     #: enquanto a rede esta de pe. Quem paga por isso e a primeira resposta
     #: depois de uma queda — e mesmo essa e coberta na maior parte das vezes,
     #: porque o `FallbackLLMClient` carrega o modelo no instante em que percebe
     #: a queda, e nao na hora da pergunta.
-    fallback_keep_alive: str = "0"
+    fallbackKeepAlive: str = "0"
 
     @classmethod
-    def from_env(cls, *, default_language: str = "en") -> LLMSettings:
+    def fromEnv(cls, *, defaultLanguage: str = "en") -> LLMSettings:
         """Le a configuracao do LLM.
 
         `default_language` normalmente vem do idioma da voz escolhida: de nada
@@ -278,40 +278,40 @@ class LLMSettings:
         ROBOTEYE_REPLY_LANGUAGE continua tendo a palavra final.
         """
         return cls(
-            backend=_get_choice("LLM_BACKEND", "ollama", LLM_BACKENDS),
-            host=_get_str("OLLAMA_HOST", "http://localhost:11434").rstrip("/"),
-            model=_get_str("LLM_MODEL", "llama3.2:1b"),
-            timeout=_get_float("LLM_TIMEOUT", 60.0, minimum=1.0),
-            history_messages=_get_int("LLM_HISTORY", 8, minimum=0),
-            reply_language=_get_str("REPLY_LANGUAGE", default_language).lower(),
-            max_tokens=_get_int("LLM_MAX_TOKENS", 120, minimum=16),
-            saudacao=_get_texto("SAUDACAO", "Oi oi, acordei!"),
-            persona=_get_str("PERSONA", "atlas"),
-            persona_dir=_resolve_path(_get_str("PERSONA_DIR", "persona")),
-            fallback_host=_get_str("LLM_FALLBACK_HOST", "").rstrip("/"),
-            fallback_model=_get_str("LLM_FALLBACK_MODEL", ""),
-            probe_interval=_get_float("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
-            num_ctx=_get_int("LLM_NUM_CTX", DEFAULT_NUM_CTX, minimum=256),
-            num_thread=_get_int("LLM_NUM_THREAD", 0, minimum=0),
-            keep_alive=_get_str("LLM_KEEP_ALIVE", "5m"),
-            fallback_keep_alive=_get_str("LLM_FALLBACK_KEEP_ALIVE", "0"),
+            backend=getChoice("LLM_BACKEND", "ollama", LLM_BACKENDS),
+            host=getStr("OLLAMA_HOST", "http://localhost:11434").rstrip("/"),
+            model=getStr("LLM_MODEL", "llama3.2:1b"),
+            timeout=getFloat("LLM_TIMEOUT", 60.0, minimum=1.0),
+            historyMessages=getInt("LLM_HISTORY", 8, minimum=0),
+            replyLanguage=getStr("REPLY_LANGUAGE", defaultLanguage).lower(),
+            maxTokens=getInt("LLM_MAX_TOKENS", 120, minimum=16),
+            saudacao=getTexto("SAUDACAO", "Oi oi, acordei!"),
+            persona=getStr("PERSONA", "atlas"),
+            personaDir=resolvePath(getStr("PERSONA_DIR", "persona")),
+            fallbackHost=getStr("LLM_FALLBACK_HOST", "").rstrip("/"),
+            fallbackModel=getStr("LLM_FALLBACK_MODEL", ""),
+            probeInterval=getFloat("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
+            numCtx=getInt("LLM_NUM_CTX", DEFAULT_NUM_CTX, minimum=256),
+            numThread=getInt("LLM_NUM_THREAD", 0, minimum=0),
+            keepAlive=getStr("LLM_KEEP_ALIVE", "5m"),
+            fallbackKeepAlive=getStr("LLM_FALLBACK_KEEP_ALIVE", "0"),
         )
 
 
 MODELS_DIR: Final = PROJECT_ROOT / "models"
 
 
-def _spec_or_fail(key: str) -> voice_catalog.VoiceSpec:
-    spec = voice_catalog.get(key)
+def specOrFail(key: str) -> voiceCatalog.VoiceSpec:
+    spec = voiceCatalog.get(key)
     if spec is None:
-        options = ", ".join(voice_catalog.names())
+        options = ", ".join(voiceCatalog.names())
         raise ConfigError(f"{ENV_PREFIX}VOICE: voz desconhecida {key!r} (disponiveis: {options})")
     return spec
 
 
-def model_path_for_voice(key: str) -> Path:
+def modelPathForVoice(key: str) -> Path:
     """Onde o modelo de uma voz do catalogo fica depois de baixado."""
-    return _spec_or_fail(key).target_paths(MODELS_DIR)[0]
+    return specOrFail(key).targetPaths(MODELS_DIR)[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,24 +321,24 @@ class VoiceSettings:
     #: "auto" deixa a voz escolher o motor.
     backend: str = "auto"
     #: Nome da voz no catalogo. Trocar isto e a forma normal de trocar de voz.
-    voice: str = voice_catalog.DEFAULT_VOICE
-    model_path: Path = field(
-        default_factory=lambda: model_path_for_voice(voice_catalog.DEFAULT_VOICE)
+    voice: str = voiceCatalog.DEFAULT_VOICE
+    modelPath: Path = field(
+        default_factory=lambda: modelPathForVoice(voiceCatalog.DEFAULT_VOICE)
     )
-    config_path: Path | None = None
+    configPath: Path | None = None
     #: Nome da voz dentro do pacote — so o Kokoro usa.
     speaker: str | None = None
-    length_scale: float = 1.0
+    lengthScale: float = 1.0
     #: Tom da voz online, em semitons. Negativo desce a voz e a deixa mais
     #: macia; a velocidade quem controla e o `length_scale`. So a voz de rede
     #: entende isto — o Piper nao expoe controle de tom.
     pitch: float = 0.0
-    noise_scale: float = 0.667
-    noise_w: float = 0.8
+    noiseScale: float = 0.667
+    noiseW: float = 0.8
     #: Placa de som. "auto" procura uma USB antes de aceitar o padrao do
     #: sistema — num robo, quem plugou uma caixinha quer ouvir por ela, e o
     #: HDMI depende de a tela ter alto-falante. Ver `speech/devices.py`.
-    audio_device: str | None = "auto"
+    audioDevice: str | None = "auto"
     #: Reserva offline de uma voz online: "auto", "off" ou o nome de uma voz.
     #: "auto" escolhe pelo idioma e pela maquina — num Raspberry Pi cai numa voz
     #: leve, porque cair numa pesada trocaria "sem internet" por "fala arrastada".
@@ -358,60 +358,60 @@ class VoiceSettings:
     #: descreve a voz como "bugada" — nao e defeito de sintese nem de
     #: reamostragem, as duas foram descartadas por medida. 6500 foi o valor
     #: escolhido de ouvido neste robo, entre quatro variantes.
-    treble_hz: float = 0.0
+    trebleHz: float = 0.0
 
     @classmethod
-    def from_env(cls) -> VoiceSettings:
-        voice = _get_str("VOICE", voice_catalog.DEFAULT_VOICE).lower()
-        spec = _spec_or_fail(voice)
-        catalog_model, catalog_config = spec.target_paths(MODELS_DIR)
+    def fromEnv(cls) -> VoiceSettings:
+        voice = getStr("VOICE", voiceCatalog.DEFAULT_VOICE).lower()
+        spec = specOrFail(voice)
+        catalogModel, catalogConfig = spec.targetPaths(MODELS_DIR)
 
         # Um caminho explicito ganha do catalogo: e a saida para modelos que nao
         # estao na nossa lista. Nesse caso convem definir REPLY_LANGUAGE tambem.
-        model_raw = _get_optional_str("VOICE_MODEL")
-        config_raw = _get_optional_str("VOICE_CONFIG")
+        modelRaw = getOptionalStr("VOICE_MODEL")
+        configRaw = getOptionalStr("VOICE_CONFIG")
 
-        if model_raw:
-            model_path = _resolve_path(model_raw)
-            config_path = _resolve_path(config_raw) if config_raw else None
+        if modelRaw:
+            modelPath = resolvePath(modelRaw)
+            configPath = resolvePath(configRaw) if configRaw else None
         else:
-            model_path = catalog_model
-            config_path = _resolve_path(config_raw) if config_raw else catalog_config
+            modelPath = catalogModel
+            configPath = resolvePath(configRaw) if configRaw else catalogConfig
 
         return cls(
-            backend=_get_choice("TTS_BACKEND", "auto", TTS_BACKENDS),
+            backend=getChoice("TTS_BACKEND", "auto", TTS_BACKENDS),
             voice=voice,
-            model_path=model_path,
-            config_path=config_path,
-            speaker=_get_optional_str("VOICE_SPEAKER") or spec.speaker,
-            length_scale=_get_float("VOICE_LENGTH_SCALE", 1.0, minimum=0.1),
-            pitch=_get_float("VOICE_PITCH", 0.0),
-            noise_scale=_get_float("VOICE_NOISE_SCALE", 0.667, minimum=0.0),
-            noise_w=_get_float("VOICE_NOISE_W", 0.8, minimum=0.0),
-            audio_device=_get_str("AUDIO_DEVICE", "auto"),
-            fallback=_get_str("VOICE_FALLBACK", "auto").lower(),
-            gain=_get_float("VOICE_GAIN", 1.0, minimum=0.0),
-            treble_hz=_get_float("VOICE_TREBLE_HZ", 0.0, minimum=0.0),
+            modelPath=modelPath,
+            configPath=configPath,
+            speaker=getOptionalStr("VOICE_SPEAKER") or spec.speaker,
+            lengthScale=getFloat("VOICE_LENGTH_SCALE", 1.0, minimum=0.1),
+            pitch=getFloat("VOICE_PITCH", 0.0),
+            noiseScale=getFloat("VOICE_NOISE_SCALE", 0.667, minimum=0.0),
+            noiseW=getFloat("VOICE_NOISE_W", 0.8, minimum=0.0),
+            audioDevice=getStr("AUDIO_DEVICE", "auto"),
+            fallback=getStr("VOICE_FALLBACK", "auto").lower(),
+            gain=getFloat("VOICE_GAIN", 1.0, minimum=0.0),
+            trebleHz=getFloat("VOICE_TREBLE_HZ", 0.0, minimum=0.0),
         )
 
-    def for_voice(self, key: str) -> VoiceSettings:
+    def forVoice(self, key: str) -> VoiceSettings:
         """Copia apontando para outra voz do catalogo.
 
         Os caminhos de modelo sao recalculados a partir do catalogo: um caminho
         explicito valia para a voz que o usuario pediu, nao para a reserva.
         """
-        spec = _spec_or_fail(key)
-        model_path, config_path = spec.target_paths(MODELS_DIR)
+        spec = specOrFail(key)
+        modelPath, configPath = spec.targetPaths(MODELS_DIR)
         return replace(
             self,
             voice=key,
             backend="auto",
-            model_path=model_path,
-            config_path=config_path,
+            modelPath=modelPath,
+            configPath=configPath,
             speaker=spec.speaker,
         )
 
-    def fallback_voice(self) -> str | None:
+    def fallbackVoice(self) -> str | None:
         """Voz offline que assume se esta aqui nao conseguir falar.
 
         Aceita "auto" (o catalogo escolhe pelo idioma e pela maquina), "off"
@@ -425,31 +425,31 @@ class VoiceSettings:
         if choice in _FALSE_VALUES or choice == "off":
             return None
         if choice in _TRUE_VALUES or choice == "auto":
-            return voice_catalog.fallback_for(self.voice)
+            return voiceCatalog.fallbackFor(self.voice)
 
-        _spec_or_fail(choice)  # nome invalido falha aqui, e nao no meio de uma fala
+        specOrFail(choice)  # nome invalido falha aqui, e nao no meio de uma fala
         return choice
 
     @property
     def language(self) -> str:
         """Idioma que esta voz fala, segundo o catalogo."""
-        return voice_catalog.language_of(self.voice)
+        return voiceCatalog.languageOf(self.voice)
 
     @property
     def engine(self) -> str:
         """Motor que vai sintetizar: o pedido, ou o que a voz exige."""
         if self.backend != "auto":
             return self.backend
-        return voice_catalog.engine_of(self.voice)
+        return voiceCatalog.engineOf(self.voice)
 
-    def resolved_config_path(self) -> Path:
+    def resolvedConfigPath(self) -> Path:
         """Caminho do JSON de configuracao do modelo Piper.
 
         Por convencao o Piper usa `<modelo>.onnx.json` quando nao ha um explicito.
         """
-        if self.config_path is not None:
-            return self.config_path
-        return self.model_path.with_suffix(self.model_path.suffix + ".json")
+        if self.configPath is not None:
+            return self.configPath
+        return self.modelPath.with_suffix(self.modelPath.suffix + ".json")
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,14 +461,14 @@ class FaceSettings:
     width: int = 1280
     height: int = 720
     #: Ver `default_fps()`: cai para 30 em ARM, onde o quadro e gasto continuo.
-    fps: int = field(default_factory=default_fps)
-    eye_color: tuple[int, int, int] = (4, 201, 253)
-    background_color: tuple[int, int, int] = (0, 0, 0)
-    idle_animations: bool = True
+    fps: int = field(default_factory=defaultFps)
+    eyeColor: tuple[int, int, int] = (4, 201, 253)
+    backgroundColor: tuple[int, int, int] = (0, 0, 0)
+    idleAnimations: bool = True
 
     #: Raio dos cantos como fracao do menor lado do olho.
     #: 0.5 e um circulo; 0.30 e o quadrado de cantos macios; 0.1 e quase reto.
-    corner_radius: float = 0.30
+    cornerRadius: float = 0.30
 
     #: Quanto se pode gastar por quadro: "low", "medium", "high" ou "auto".
     #: O antialiasing nao depende disso — e analitico e sai igual nos tres. O
@@ -477,18 +477,18 @@ class FaceSettings:
     quality: str = "auto"
 
     @classmethod
-    def from_env(cls) -> FaceSettings:
+    def fromEnv(cls) -> FaceSettings:
         return cls(
-            enabled=_get_bool("FACE_ENABLED", True),
-            fullscreen=_get_bool("FACE_FULLSCREEN", False),
-            width=_get_int("FACE_WIDTH", 1280, minimum=320),
-            height=_get_int("FACE_HEIGHT", 720, minimum=240),
-            fps=_get_int("FACE_FPS", default_fps(), minimum=10),
-            eye_color=_get_color("EYE_COLOR", "#04C9FD"),
-            background_color=_get_color("BACKGROUND_COLOR", "#000000"),
-            idle_animations=_get_bool("IDLE_ANIMATIONS", True),
-            corner_radius=_get_float("EYE_CORNER_RADIUS", 0.30, minimum=0.0),
-            quality=_get_choice("FACE_QUALITY", "auto", FACE_QUALITIES),
+            enabled=getBool("FACE_ENABLED", True),
+            fullscreen=getBool("FACE_FULLSCREEN", False),
+            width=getInt("FACE_WIDTH", 1280, minimum=320),
+            height=getInt("FACE_HEIGHT", 720, minimum=240),
+            fps=getInt("FACE_FPS", defaultFps(), minimum=10),
+            eyeColor=getColor("EYE_COLOR", "#04C9FD"),
+            backgroundColor=getColor("BACKGROUND_COLOR", "#000000"),
+            idleAnimations=getBool("IDLE_ANIMATIONS", True),
+            cornerRadius=getFloat("EYE_CORNER_RADIUS", 0.30, minimum=0.0),
+            quality=getChoice("FACE_QUALITY", "auto", FACE_QUALITIES),
         )
 
 
@@ -527,9 +527,9 @@ class HearingSettings:
     #: contra 83-681 ms, e gasta oito vezes menos CPU. O que ele custa e
     #: memoria. Num Pi de 8 GB cabe junto com o Ollama (que usa ~1,3 GB), mas e
     #: a primeira coisa a rever se algo comecar a ser morto por falta dela.
-    vosk_model: str = "vosk-pt"
+    voskModel: str = "vosk-pt"
     #: Onde os modelos ficam. O Whisper baixa o seu na primeira vez.
-    model_path: Path = field(default_factory=lambda: MODELS_DIR / "escuta")
+    modelPath: Path = field(default_factory=lambda: MODELS_DIR / "escuta")
     #: Acima disto conta como fala. 0 mede a sala no arranque, que e o padrao e
     #: acerta na maioria das salas. Um numero fixo existe para quando ele erra:
     #: a medicao e feita uma vez, logo depois da saudacao, e uma sala que estava
@@ -538,37 +538,37 @@ class HearingSettings:
     #: 0.045, 0.057 — e nos mais altos ele passou a nao fechar as frases.
     limiar: float = 0.0
     #: Nucleos para transcrever. Um fica de fora para a face nao engasgar.
-    cpu_threads: int = 3
+    cpuThreads: int = 3
     #: Microfone. "auto" procura uma placa USB; ver `speech/devices.py`.
     device: str = "auto"
     #: Nome que acorda o robo. Vazio faz ele responder a tudo que ouvir — util
     #: para testar, ruim numa sala com gente conversando.
-    wake_word: str = "atlas"
+    wakeWord: str = "atlas"
     #: Segundos que a Atlas continua ouvindo depois de ser chamada, aceitando a
     #: pergunta seguinte sem o nome. 0 exige o nome em toda frase.
-    janela_s: float = 8.0
+    janelaS: float = 8.0
     #: O que ela diz quando chamam o nome e a pergunta nao vem. Sem isso, chamar
     #: a Atlas e nao ser respondido parece robo quebrado — e quem chamou repete
     #: o nome em vez de perguntar. Vazio faz ela so esperar, calada.
-    resposta_ao_chamado: str = "Oi?"
+    respostaAoChamado: str = "Oi?"
     #: Quanto esperar a pergunta antes de dizer aquilo.
-    espera_do_chamado_s: float = 3.0
+    esperaDoChamadoS: float = 3.0
 
     @classmethod
-    def from_env(cls) -> HearingSettings:
+    def fromEnv(cls) -> HearingSettings:
         return cls(
-            enabled=_get_bool("HEARING_ENABLED", False),
-            backend=_get_choice("HEARING_BACKEND", "vosk", HEARING_BACKENDS),
-            model=_get_choice("HEARING_MODEL_SIZE", "base", HEARING_MODEL_SIZES),
-            vosk_model=_get_str("HEARING_VOSK_MODEL", "vosk-pt"),
-            model_path=_resolve_path(_get_str("HEARING_MODEL_DIR", "models/escuta")),
-            limiar=_get_float("HEARING_LIMIAR", 0.0, minimum=0.0),
-            cpu_threads=_get_int("HEARING_THREADS", 3, minimum=1),
-            device=_get_str("HEARING_DEVICE", "auto"),
-            wake_word=_get_texto("WAKE_WORD", "atlas"),
-            janela_s=_get_float("WAKE_JANELA", 8.0, minimum=0.0),
-            resposta_ao_chamado=_get_texto("WAKE_RESPOSTA", "Oi?"),
-            espera_do_chamado_s=_get_float("WAKE_ESPERA", 3.0, minimum=0.5),
+            enabled=getBool("HEARING_ENABLED", False),
+            backend=getChoice("HEARING_BACKEND", "vosk", HEARING_BACKENDS),
+            model=getChoice("HEARING_MODEL_SIZE", "base", HEARING_MODEL_SIZES),
+            voskModel=getStr("HEARING_VOSK_MODEL", "vosk-pt"),
+            modelPath=resolvePath(getStr("HEARING_MODEL_DIR", "models/escuta")),
+            limiar=getFloat("HEARING_LIMIAR", 0.0, minimum=0.0),
+            cpuThreads=getInt("HEARING_THREADS", 3, minimum=1),
+            device=getStr("HEARING_DEVICE", "auto"),
+            wakeWord=getTexto("WAKE_WORD", "atlas"),
+            janelaS=getFloat("WAKE_JANELA", 8.0, minimum=0.0),
+            respostaAoChamado=getTexto("WAKE_RESPOSTA", "Oi?"),
+            esperaDoChamadoS=getFloat("WAKE_ESPERA", 3.0, minimum=0.5),
         )
 
 
@@ -580,9 +580,9 @@ class WebSettings:
     #: Mostra na pagina os comandos que chegam ao robo. Precisa de um broker
     #: MQTT local — que so existe quando o corpo do robo (o `orquestrador`)
     #: esta instalado na mesma maquina.
-    mostrar_comandos: bool = True
-    mqtt_host: str = "127.0.0.1"
-    mqtt_port: int = 1883
+    mostrarComandos: bool = True
+    mqttHost: str = "127.0.0.1"
+    mqttPort: int = 1883
     #: 0.0.0.0 de proposito: a pagina existe para ser aberta do celular.
     host: str = "0.0.0.0"
     port: int = 8080
@@ -590,15 +590,15 @@ class WebSettings:
     pin: str = ""
 
     @classmethod
-    def from_env(cls) -> WebSettings:
+    def fromEnv(cls) -> WebSettings:
         return cls(
-            enabled=_get_bool("WEB_ENABLED", True),
-            mostrar_comandos=_get_bool("WEB_COMANDOS", True),
-            mqtt_host=_get_str("WEB_MQTT_HOST", "127.0.0.1"),
-            mqtt_port=_get_int("WEB_MQTT_PORT", 1883, minimum=1),
-            host=_get_str("WEB_HOST", "0.0.0.0"),
-            port=_get_int("WEB_PORT", 8080, minimum=1),
-            pin=_get_str("WEB_PIN", ""),
+            enabled=getBool("WEB_ENABLED", True),
+            mostrarComandos=getBool("WEB_COMANDOS", True),
+            mqttHost=getStr("WEB_MQTT_HOST", "127.0.0.1"),
+            mqttPort=getInt("WEB_MQTT_PORT", 1883, minimum=1),
+            host=getStr("WEB_HOST", "0.0.0.0"),
+            port=getInt("WEB_PORT", 8080, minimum=1),
+            pin=getStr("WEB_PIN", ""),
         )
 
 
@@ -611,27 +611,27 @@ class Settings:
     face: FaceSettings = field(default_factory=FaceSettings)
     hearing: HearingSettings = field(default_factory=HearingSettings)
     web: WebSettings = field(default_factory=WebSettings)
-    log_level: str = "INFO"
+    logLevel: str = "INFO"
 
     @classmethod
-    def from_env(cls, *, env_file: Path | str | None = None) -> Settings:
+    def fromEnv(cls, *, envFile: Path | str | None = None) -> Settings:
         """Carrega a configuracao do ambiente (e de um `.env`, se existir).
 
         Variaveis ja presentes no ambiente tem prioridade sobre o arquivo.
         """
-        candidate = Path(env_file) if env_file else PROJECT_ROOT / ".env"
+        candidate = Path(envFile) if envFile else PROJECT_ROOT / ".env"
         if candidate.is_file():
             load_dotenv(candidate, override=False)
 
         # A voz vem primeiro: e ela que define em que idioma o assistente
         # responde, quando isso nao esta dito explicitamente.
-        voice = VoiceSettings.from_env()
+        voice = VoiceSettings.fromEnv()
 
         return cls(
-            llm=LLMSettings.from_env(default_language=voice.language),
+            llm=LLMSettings.fromEnv(defaultLanguage=voice.language),
             voice=voice,
-            face=FaceSettings.from_env(),
-            hearing=HearingSettings.from_env(),
-            web=WebSettings.from_env(),
-            log_level=_get_str("LOG_LEVEL", "INFO").upper(),
+            face=FaceSettings.fromEnv(),
+            hearing=HearingSettings.fromEnv(),
+            web=WebSettings.fromEnv(),
+            logLevel=getStr("LOG_LEVEL", "INFO").upper(),
         )

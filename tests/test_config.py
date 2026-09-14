@@ -10,7 +10,7 @@ from roboteye.config import (
     LLMSettings,
     Settings,
     VoiceSettings,
-    parse_color,
+    parseColor,
 )
 
 
@@ -24,50 +24,50 @@ class TestParseColor:
             ("  #000000  ", (0, 0, 0)),
         ],
     )
-    def test_formatos_aceitos(self, entrada: str, esperado: tuple[int, int, int]) -> None:
-        assert parse_color(entrada) == esperado
+    def testFormatosAceitos(self, entrada: str, esperado: tuple[int, int, int]) -> None:
+        assert parseColor(entrada) == esperado
 
     @pytest.mark.parametrize("entrada", ["#GGG", "1,2", "300,0,0", ""])
-    def test_valores_invalidos(self, entrada: str) -> None:
+    def testValoresInvalidos(self, entrada: str) -> None:
         with pytest.raises(ConfigError):
-            parse_color(entrada)
+            parseColor(entrada)
 
 
 class TestLLMSettings:
-    def test_usa_padroes_sem_variaveis(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testUsaPadroesSemVariaveis(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("ROBOTEYE_LLM_MODEL", raising=False)
-        assert LLMSettings.from_env().model == "llama3.2:1b"
+        assert LLMSettings.fromEnv().model == "llama3.2:1b"
 
-    def test_le_do_ambiente(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testLeDoAmbiente(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_LLM_MODEL", "qwen2.5:3b")
         monkeypatch.setenv("ROBOTEYE_OLLAMA_HOST", "http://10.0.0.5:11434/")
-        settings = LLMSettings.from_env()
+        settings = LLMSettings.fromEnv()
         assert settings.model == "qwen2.5:3b"
         assert settings.host == "http://10.0.0.5:11434"  # barra final removida
 
-    def test_backend_invalido_e_rejeitado(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testBackendInvalidoERejeitado(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_LLM_BACKEND", "gpt")
         with pytest.raises(ConfigError, match="invalido"):
-            LLMSettings.from_env()
+            LLMSettings.fromEnv()
 
 
 class TestVoiceSettings:
-    def test_config_derivada_do_modelo(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testConfigDerivadaDoModelo(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_VOICE_MODEL", "/tmp/voz/personalizada.onnx")
         monkeypatch.delenv("ROBOTEYE_VOICE_CONFIG", raising=False)
-        settings = VoiceSettings.from_env()
-        assert settings.resolved_config_path().name == "personalizada.onnx.json"
+        settings = VoiceSettings.fromEnv()
+        assert settings.resolvedConfigPath().name == "personalizada.onnx.json"
 
-    def test_config_explicita_tem_prioridade(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testConfigExplicitaTemPrioridade(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_VOICE_MODEL", "/tmp/voz/personalizada.onnx")
         monkeypatch.setenv("ROBOTEYE_VOICE_CONFIG", "/tmp/outro.json")
-        assert VoiceSettings.from_env().resolved_config_path().name == "outro.json"
+        assert VoiceSettings.fromEnv().resolvedConfigPath().name == "outro.json"
 
-    def test_caminho_relativo_resolve_a_partir_da_raiz(
+    def testCaminhoRelativoResolveAPartirDaRaiz(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("ROBOTEYE_VOICE_MODEL", "models/x/y.onnx")
-        assert VoiceSettings.from_env().model_path.is_absolute()
+        assert VoiceSettings.fromEnv().modelPath.is_absolute()
 
 
 class TestFaceSettings:
@@ -75,26 +75,26 @@ class TestFaceSettings:
         ("valor", "esperado"),
         [("true", True), ("1", True), ("yes", True), ("false", False), ("off", False)],
     )
-    def test_booleanos(self, monkeypatch: pytest.MonkeyPatch, valor: str, esperado: bool) -> None:
+    def testBooleanos(self, monkeypatch: pytest.MonkeyPatch, valor: str, esperado: bool) -> None:
         monkeypatch.setenv("ROBOTEYE_FACE_FULLSCREEN", valor)
-        assert FaceSettings.from_env().fullscreen is esperado
+        assert FaceSettings.fromEnv().fullscreen is esperado
 
-    def test_booleano_invalido(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testBooleanoInvalido(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_FACE_ENABLED", "talvez")
         with pytest.raises(ConfigError, match="booleano"):
-            FaceSettings.from_env()
+            FaceSettings.fromEnv()
 
-    def test_dimensao_minima(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testDimensaoMinima(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_FACE_WIDTH", "10")
         with pytest.raises(ConfigError, match=">="):
-            FaceSettings.from_env()
+            FaceSettings.fromEnv()
 
 
 class TestSettings:
-    def test_monta_todas_as_secoes(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def testMontaTodasAsSecoes(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_LOG_LEVEL", "debug")
-        settings = Settings.from_env(env_file=tmp_path / "inexistente.env")
-        assert settings.log_level == "DEBUG"
+        settings = Settings.fromEnv(envFile=tmp_path / "inexistente.env")
+        assert settings.logLevel == "DEBUG"
         assert isinstance(settings.llm, LLMSettings)
         assert isinstance(settings.voice, VoiceSettings)
         assert isinstance(settings.face, FaceSettings)
@@ -109,15 +109,15 @@ class TestOPadraoValeOndeImporta:
     2048 depois de o padrão já ter "virado" 4096.
     """
 
-    def test_o_padrao_da_classe_e_o_do_ambiente_sao_o_mesmo(self, monkeypatch) -> None:
+    def testOPadraoDaClasseEODoAmbienteSaoOMesmo(self, monkeypatch) -> None:
         from roboteye.config import DEFAULT_NUM_CTX, LLMSettings, Settings
 
         monkeypatch.delenv("ROBOTEYE_LLM_NUM_CTX", raising=False)
 
-        assert LLMSettings().num_ctx == DEFAULT_NUM_CTX
-        assert Settings.from_env(env_file=None).llm.num_ctx == DEFAULT_NUM_CTX
+        assert LLMSettings().numCtx == DEFAULT_NUM_CTX
+        assert Settings.fromEnv(envFile=None).llm.numCtx == DEFAULT_NUM_CTX
 
-    def test_a_persona_deste_robo_cabe_no_padrao(self) -> None:
+    def testAPersonaDesteRoboCabeNoPadrao(self) -> None:
         """~1950 tokens de persona + 220 de resposta precisam caber juntos.
 
         Com 2048 não cabiam, e o Ollama passava a deslocar a janela no meio da
@@ -125,6 +125,6 @@ class TestOPadraoValeOndeImporta:
         """
         from roboteye.config import DEFAULT_NUM_CTX
 
-        persona_deste_robo = 1950
+        personaDesteRobo = 1950
         resposta = 220
-        assert persona_deste_robo + resposta < DEFAULT_NUM_CTX
+        assert personaDesteRobo + resposta < DEFAULT_NUM_CTX

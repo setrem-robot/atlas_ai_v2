@@ -30,120 +30,120 @@ SEM_CONEXAO = "Not connected.\n"
 
 
 class TestLeituraDoLink:
-    def test_le_ssid_frequencia_e_sinal(self) -> None:
-        assert radio.ler_link(LINK_5GHZ) == ("Setrem", 5180, -47)
+    def testLeSsidFrequenciaESinal(self) -> None:
+        assert radio.lerLink(LINK_5GHZ) == ("Setrem", 5180, -47)
 
-    def test_le_a_saida_curta_de_uma_conexao_em_24ghz(self) -> None:
+    def testLeASaidaCurtaDeUmaConexaoEm24ghz(self) -> None:
         # A saída do `iw` varia com o que o driver reporta: sem taxa, sem RX/TX.
         # O que precisa sair certo é a frequência, que é o que decide a banda.
-        assert radio.ler_link(LINK_24GHZ) == ("Setrem", 2437, -58)
+        assert radio.lerLink(LINK_24GHZ) == ("Setrem", 2437, -58)
 
-    def test_sem_conexao_devolve_o_estado_neutro(self) -> None:
+    def testSemConexaoDevolveOEstadoNeutro(self) -> None:
         # Não estar conectado é um estado normal do robô, não uma falha de
         # leitura: ele sobe antes de a rede existir.
-        assert radio.ler_link(SEM_CONEXAO) == ("", 0, 0)
+        assert radio.lerLink(SEM_CONEXAO) == ("", 0, 0)
 
-    def test_power_save(self) -> None:
-        assert radio.ler_power_save("Power save: on") is True
-        assert radio.ler_power_save("Power save: off") is False
-        assert radio.ler_power_save("qualquer outra coisa") is None
+    def testPowerSave(self) -> None:
+        assert radio.lerPowerSave("Power save: on") is True
+        assert radio.lerPowerSave("Power save: off") is False
+        assert radio.lerPowerSave("qualquer outra coisa") is None
 
 
 class TestBanda:
-    def test_5ghz(self) -> None:
-        assert radio.EstadoRadio(frequencia_mhz=5180).banda == "5 GHz"
+    def test5ghz(self) -> None:
+        assert radio.EstadoRadio(frequenciaMhz=5180).banda == "5 GHz"
 
-    def test_24ghz(self) -> None:
-        assert radio.EstadoRadio(frequencia_mhz=2437).banda == "2,4 GHz"
+    def test24ghz(self) -> None:
+        assert radio.EstadoRadio(frequenciaMhz=2437).banda == "2,4 GHz"
 
-    def test_sem_conexao_nao_tem_banda(self) -> None:
+    def testSemConexaoNaoTemBanda(self) -> None:
         assert radio.EstadoRadio().banda == ""
 
 
 class TestDisputa:
-    def test_em_24ghz_com_bluetooth_ligado_ha_disputa(self) -> None:
-        estado = radio.EstadoRadio(ssid="Setrem", frequencia_mhz=2437, bluetooth_ligado=True)
+    def testEm24ghzComBluetoothLigadoHaDisputa(self) -> None:
+        estado = radio.EstadoRadio(ssid="Setrem", frequenciaMhz=2437, bluetoothLigado=True)
         assert estado.disputando
 
-    def test_em_5ghz_nao_ha(self) -> None:
+    def testEm5ghzNaoHa(self) -> None:
         # É o ponto inteiro do exercício: o Bluetooth só existe em 2,4 GHz, e
         # levar o Wi-Fi para 5 GHz acaba com a disputa em vez de administrá-la.
-        estado = radio.EstadoRadio(ssid="Setrem", frequencia_mhz=5180, bluetooth_ligado=True)
+        estado = radio.EstadoRadio(ssid="Setrem", frequenciaMhz=5180, bluetoothLigado=True)
         assert not estado.disputando
 
-    def test_sem_bluetooth_nao_ha(self) -> None:
-        estado = radio.EstadoRadio(ssid="Setrem", frequencia_mhz=2437, bluetooth_ligado=False)
+    def testSemBluetoothNaoHa(self) -> None:
+        estado = radio.EstadoRadio(ssid="Setrem", frequenciaMhz=2437, bluetoothLigado=False)
         assert not estado.disputando
 
 
 class TestConselhos:
-    def test_em_5ghz_e_sem_economia_nao_ha_o_que_dizer(self) -> None:
+    def testEm5ghzESemEconomiaNaoHaOQueDizer(self) -> None:
         estado = radio.EstadoRadio(
             interface="wlan0",
             ssid="Setrem",
-            frequencia_mhz=5180,
-            power_save=False,
-            bluetooth_ligado=True,
+            frequenciaMhz=5180,
+            powerSave=False,
+            bluetoothLigado=True,
         )
         assert radio.aconselhar(estado) == []
         assert "não estão se atrapalhando" in radio.render(estado)
 
-    def test_disputa_vira_comando_com_o_ssid_certo(self) -> None:
+    def testDisputaViraComandoComOSsidCerto(self) -> None:
         estado = radio.EstadoRadio(
             interface="wlan0",
             ssid="Setrem",
-            frequencia_mhz=2437,
-            power_save=False,
-            bluetooth_ligado=True,
+            frequenciaMhz=2437,
+            powerSave=False,
+            bluetoothLigado=True,
         )
         conselhos = radio.aconselhar(estado)
         assert len(conselhos) == 1
         assert "wifi.band a" in conselhos[0].comando
         assert "Setrem" in conselhos[0].comando
 
-    def test_economia_ligada_tambem_vira_conselho(self) -> None:
+    def testEconomiaLigadaTambemViraConselho(self) -> None:
         estado = radio.EstadoRadio(
             interface="wlan0",
             ssid="Setrem",
-            frequencia_mhz=5180,
-            power_save=True,
-            bluetooth_ligado=True,
+            frequenciaMhz=5180,
+            powerSave=True,
+            bluetoothLigado=True,
         )
         conselhos = radio.aconselhar(estado)
         assert [c.titulo for c in conselhos] == ["desligar a economia de energia do Wi-Fi"]
 
-    def test_os_dois_problemas_juntos_dao_os_dois_conselhos(self) -> None:
+    def testOsDoisProblemasJuntosDaoOsDoisConselhos(self) -> None:
         estado = radio.EstadoRadio(
             interface="wlan0",
             ssid="Setrem",
-            frequencia_mhz=2437,
-            power_save=True,
-            bluetooth_ligado=True,
+            frequenciaMhz=2437,
+            powerSave=True,
+            bluetoothLigado=True,
         )
         assert len(radio.aconselhar(estado)) == 2
 
-    def test_power_save_desconhecido_nao_inventa_conselho(self) -> None:
+    def testPowerSaveDesconhecidoNaoInventaConselho(self) -> None:
         # `None` é "não consegui ler", e não "está ligado": aconselhar por cima
         # de uma leitura que falhou mandaria mexer no que talvez já esteja certo.
-        estado = radio.EstadoRadio(ssid="Setrem", frequencia_mhz=5180, power_save=None)
+        estado = radio.EstadoRadio(ssid="Setrem", frequenciaMhz=5180, powerSave=None)
         assert radio.aconselhar(estado) == []
 
 
 class TestRelatorio:
-    def test_sem_radio_explica_em_vez_de_quebrar(self) -> None:
+    def testSemRadioExplicaEmVezDeQuebrar(self) -> None:
         assert "instalado" in radio.render(
             radio.EstadoRadio(erro="o comando `iw` não está instalado")
         )
 
-    def test_mostra_a_banda_e_o_bluetooth(self) -> None:
+    def testMostraABandaEOBluetooth(self) -> None:
         texto = radio.render(
             radio.EstadoRadio(
                 interface="wlan0",
                 ssid="Setrem",
-                frequencia_mhz=2437,
-                sinal_dbm=-58,
-                power_save=False,
-                bluetooth_ligado=True,
+                frequenciaMhz=2437,
+                sinalDbm=-58,
+                powerSave=False,
+                bluetoothLigado=True,
             )
         )
         assert "2,4 GHz" in texto
