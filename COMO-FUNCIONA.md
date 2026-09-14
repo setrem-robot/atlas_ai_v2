@@ -297,7 +297,7 @@ sequenceDiagram
 | Contrato | Aqui | Do outro lado |
 |---|---|---|
 | UUIDs do serviço BLE | `ble/nus.py` | `RobotBleIds` no app, `.ino` do ESP32 |
-| Nome do tópico MQTT | `ble/mqtt.py` | `robo_common/topics.py` |
+| Nome do tópico MQTT | `ble/mqtt.py` | `roboCommon/topics.py` |
 | Teto de uma linha | `MAX_LINHA = 512` | `MAX_LINE` no ESP32 |
 
 > ⚠️ **A ponte publica, mas hoje ninguém consome o comando.** Do `orquestrador`,

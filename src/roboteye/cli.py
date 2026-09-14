@@ -319,7 +319,7 @@ def commandFace(args: argparse.Namespace, settings: Settings) -> int:
 def commandBle(args: argparse.Namespace, settings: Settings) -> int:
     """Poe o robo no ar pelo bluetooth e entrega os comandos aos motores.
 
-    Substitui o par ESP32 + `serial_ingestor`: o celular fala com o Pi direto, e
+    Substitui o par ESP32 + `serialIngestor`: o celular fala com o Pi direto, e
     o que chega vai para o mesmo topico MQTT de sempre.
     """
     from roboteye.ble import EntregaMqtt, PonteBLE, anunciarPeloKernel

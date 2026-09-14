@@ -1,11 +1,11 @@
 """Onde o comando vai depois de chegar pelo Bluetooth.
 
-O `serial_ingestor` do orquestrador lia linhas da serial e publicava cada uma em
+O `serialIngestor` do orquestrador lia linhas da serial e publicava cada uma em
 `robo/comando/entrada`, sem interpretar. Com o Pi recebendo o Bluetooth direto,
 essa ponte de serial deixa de existir — e este modulo faz a mesma coisa que ela
 fazia, do outro lado do radio.
 
-O topico e o contrato do outro repositorio (`robo_common/topics.py`). Mudar o
+O topico e o contrato do outro repositorio (`roboCommon/topics.py`). Mudar o
 nome aqui sem mudar la faz o robo aceitar comandos e nao mover nada.
 """
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-#: O mesmo topico que o `serial_ingestor` alimentava.
+#: O mesmo topico que o `serialIngestor` alimentava.
 TOPICO_ENTRADA = "robo/comando/entrada"
 
 

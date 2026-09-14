@@ -11,7 +11,7 @@ anunciando o mesmo servico, com os mesmos UUIDs e o mesmo formato de mensagem,
 busca.
 
 O que chega aqui vai para o mesmo lugar de sempre: `robo/comando/entrada`, o
-topico que o `serial_ingestor` alimentava. O orquestrador e os motores nao sabem
+topico que o `serialIngestor` alimentava. O orquestrador e os motores nao sabem
 a diferenca.
 
 **Perder a conexao para o robo.** O app manda "F" quando o dedo desce e "S"
