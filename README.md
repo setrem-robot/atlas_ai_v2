@@ -479,15 +479,15 @@ src/roboteye/
 ├── cli.py            Interface de linha de comando
 ├── config.py         Configuração tipada, lida do ambiente
 ├── diagnostics.py    O comando `doctor`
-├── setup_wizard.py   O assistente de primeira configuração
+├── setupWizard.py   O assistente de primeira configuração
 ├── voices.py         Catálogo e download dos modelos de voz
 │
 ├── core/             Regras que não dependem de biblioteca externa
 │   ├── events.py     Barramento pub/sub e os tipos de evento
 │   ├── assistant.py  Orquestra: mensagem → LLM → frases → voz
 │   ├── text.py       Limpeza e segmentação de texto em frases
-│   ├── normalize_pt.py  "R$ 25,90" → "vinte e cinco reais e noventa centavos"
-│   └── numbers_pt.py    Números por extenso, com gênero e o "e" no lugar certo
+│   ├── normalizePt.py  "R$ 25,90" → "vinte e cinco reais e noventa centavos"
+│   └── numbersPt.py    Números por extenso, com gênero e o "e" no lugar certo
 │
 ├── llm/              Modelo de linguagem
 │   ├── base.py       Protocolo LLMClient
@@ -499,9 +499,9 @@ src/roboteye/
 │
 ├── speech/           Voz
 │   ├── base.py       Protocolo TTSEngine
-│   ├── piper_engine.py  TTS local, leve (bom num Raspberry Pi)
-│   ├── kokoro_engine.py TTS local 24 kHz, melhor prosódia
-│   ├── edge_engine.py   TTS na nuvem, o mais natural em pt-BR
+│   ├── piperEngine.py  TTS local, leve (bom num Raspberry Pi)
+│   ├── kokoroEngine.py TTS local 24 kHz, melhor prosódia
+│   ├── edgeEngine.py   TTS na nuvem, o mais natural em pt-BR
 │   ├── fallback.py   Voz online com queda automática para a offline
 │   ├── polish.py     Rampas nas pontas, respiro entre frases, limitador
 │   ├── envelope.py   Amplitude do áudio tocando, para a face animar junto

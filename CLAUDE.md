@@ -68,8 +68,8 @@ os pontos mais fortes (com arquivo:linha) são:
   `AssistantReply`, `SpeechStarted`, `SpeechFinished`, `SpeechHeard`,
   `ListeningChanged`, `ErrorOccurred`, `Notice`, `Shutdown`); `EventBus.publish` despacha por `isinstance`. É o
   exemplo mais "de livro-texto" do projeto inteiro.
-- **Factory Method**: `llm/factory.py::create_llm_client` e
-  `speech/factory.py::create_tts_engine` escolhem a implementação concreta
+- **Factory Method**: `llm/factory.py::createLlmClient` e
+  `speech/factory.py::createTtsEngine` escolhem a implementação concreta
   (`match backend: case "ollama"/"echo"` e `case "piper"/"kokoro"/"edge"/"null"`).
 - **Decorator**: `speech/fallback.py::FallbackEngine` embrulha dois
   `TTSEngine` (primário + reserva) atrás da mesma interface.
@@ -82,4 +82,4 @@ os pontos mais fortes (com arquivo:linha) são:
   no `__init__`, guarda tudo como atributo privado, e implementa o protocolo
   de context manager (`__enter__`/`__exit__`).
 - **Dataclasses `frozen=True, slots=True`** em todo `config.py`, com
-  `from_env()` como construtor alternativo (classmethod).
+  `fromEnv()` como construtor alternativo (classmethod).

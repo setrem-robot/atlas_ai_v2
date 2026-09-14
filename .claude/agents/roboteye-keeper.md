@@ -57,7 +57,7 @@ Fronteiras que **nao** podem ser rompidas — cada uma existe por um motivo:
 A face redesenha **todo quadro** — respiracao, sacadas, piscada nunca param. Entao
 o custo do quadro e custo continuo.
 
-Medido com `scripts/bench_face.py` num i5-12400F (driver dummy do SDL):
+Medido com `scripts/benchFace.py` num i5-12400F (driver dummy do SDL):
 
 | Tela | Qualidade | Mediana | p95 |
 |---|---|---|---|
@@ -74,11 +74,11 @@ consome mais de meio nucleo o tempo todo.
 - Antes de otimizar, meca. Depois de otimizar, meca de novo e ponha os dois numeros
   na mensagem de commit. Nunca aceite "ficou mais rapido" sem numero.
 - Mudou `face/mask.py`, `face/renderer.py` ou `face/animator.py`? Rode
-  `python scripts/bench_face.py` e compare. Uma regressao no p95 e um bug.
+  `python scripts/benchFace.py` e compare. Uma regressao no p95 e um bug.
 - Teto sugerido: **40% do quadro** no p95, na resolucao alvo. Sobra folga para o
   Piper sintetizar e para o servidor web responder no mesmo nucleo.
-  `python scripts/bench_face.py --orcamento 40` falha com codigo 1 se estourar.
-- `quality_for("auto")` ja cai para `LOW` em ARM (`face/renderer.py`). Preserve essa
+  `python scripts/benchFace.py --orcamento 40` falha com codigo 1 se estourar.
+- `qualityFor("auto")` ja cai para `LOW` em ARM (`face/renderer.py`). Preserve essa
   heuristica em qualquer refatoracao do renderizador.
 
 ## Orcamento de memoria
@@ -121,7 +121,7 @@ A animacao ja e boa; o risco e estragar sem perceber. Ao mexer nela, proteja:
 - **Antialiasing analitico.** A opacidade sai da distancia ate a borda. Nunca troque
   por superamostragem "para simplificar": custa muito mais e fica pior nas diagonais.
 - **Nada de troca seca.** Expressoes se alcancam por interpolacao (`easing.py`).
-- **A piscada parte de onde o olho esta.** `close_lids` interpola ate um alvo que
+- **A piscada parte de onde o olho esta.** `closeLids` interpola ate um alvo que
   depende da expressao: a palpebra de baixo nunca recua (senao o sorriso se desmancha
   no meio da piscada) e a inclinacao afrouxa ate zero (senao a raiva fecha em cunha).
   Alvo fixo aqui foi bug de verdade — nao volte a ele.
@@ -155,7 +155,7 @@ caminho exige compilador no Pi.
 
 Kokoro sintetiza a ~0,25x do tempo real numa maquina de mesa; num Pi isso vira fala
 arrastada. O catalogo ja evita cair nele por fallback em ARM — mantenha esse cuidado
-em qualquer mudanca no `voice_catalog.py`.
+em qualquer mudanca no `voiceCatalog.py`.
 
 A voz padrao (`francisca`, motor `edge`) fala pela rede. Isso e deliberado: no Pi ela
 nao custa CPU nenhuma, e a reserva offline entra sozinha quando a internet falta. Nao
@@ -195,7 +195,7 @@ pytest
 E, se tocou na face, tambem:
 
 ```bash
-python scripts/bench_face.py --resolucao 1920x1080 --qualidade low --orcamento 40
+python scripts/benchFace.py --resolucao 1920x1080 --qualidade low --orcamento 40
 ```
 
 Codigo novo em `src/` vem com teste em `tests/`. A suite roda com `SDL_VIDEODRIVER=dummy`,
@@ -208,7 +208,7 @@ sem tela e sem placa de som — mantenha assim: nada de teste que exija hardware
 Levantadas em auditoria; nao mexa nelas de passagem, mas conheca-as:
 
 1. Escolher uma voz Kokoro num Pi passa em silencio; `roboteye doctor` poderia avisar.
-2. `tests/test_speaker.py::test_lote_respeita_o_teto_de_tamanho` e sensivel ao
+2. `tests/test_speaker.py::testLoteRespeitaOTetoDeTamanho` e sensivel ao
    escalonador: ele conta com o consumidor **nao** vencer a fila antes das 12
    frases entrarem. Falha isolada sob carga (visto uma vez em tres suites
    seguidas, com o mypy rodando junto). Nao e regressao; e um teste que mede

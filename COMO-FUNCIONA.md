@@ -33,7 +33,7 @@ flowchart TB
     end
 
     subgraph CEREBRO["O TURNO DE CONVERSA"]
-        STT["Reconhecimento<br/>hearing/vosk_ears.py"]
+        STT["Reconhecimento<br/>hearing/voskEars.py"]
         GATILHO["Foi comigo?<br/>hearing/gatilho.py"]
         ASSIST["Assistant<br/>core/assistant.py"]
         MEM["Historico + persona<br/>llm/memory.py · llm/persona.py"]
@@ -85,13 +85,13 @@ Alguém diz *“Atlas, quantos alunos tem a Setrem?”*. Isto é o que acontece:
 
 | # | Onde | O que acontece |
 |---|---|---|
-| 1 | `hearing/vosk_ears.py` | A placa entrega blocos de 30 ms; um passa-alta tira o zumbido. Cada bloco é entregue ao Vosk **na hora**, e é o próprio Vosk quem diz quando a frase terminou. Quando a pessoa para de falar, o texto **já está pronto**. |
-| 2 | — | *(No caminho do Whisper este é um passo separado e caro: o `microfone.py` corta a frase por energia, e só então o `whisper_ears.py` transcreve o trecho inteiro — a 0,59x do tempo real, quase 2 s de silêncio. Ver [§4](#4-as-pastas-uma-a-uma).)* |
+| 1 | `hearing/voskEars.py` | A placa entrega blocos de 30 ms; um passa-alta tira o zumbido. Cada bloco é entregue ao Vosk **na hora**, e é o próprio Vosk quem diz quando a frase terminou. Quando a pessoa para de falar, o texto **já está pronto**. |
+| 2 | — | *(No caminho do Whisper este é um passo separado e caro: o `microfone.py` corta a frase por energia, e só então o `whisperEars.py` transcreve o trecho inteiro — a 0,59x do tempo real, quase 2 s de silêncio. Ver [§4](#4-as-pastas-uma-a-uma).)* |
 | 3 | `hearing/gatilho.py` | O texto começa com o nome dela? Então a pergunta é o resto. Dizer só *“Atlas!”* abre uma **janela de 8 segundos** em que a frase seguinte é aceita sem o nome — que é como as pessoas realmente falam. |
-| 4 | `app.py::_escutar` | Publica `SpeechHeard` no barramento (para a tela de depuração ver até o que foi ignorado) e entrega a pergunta ao `Assistant`. |
+| 4 | `app.py::escutar` | Publica `SpeechHeard` no barramento (para a tela de depuração ver até o que foi ignorado) e entrega a pergunta ao `Assistant`. |
 | 5 | `core/assistant.py` | **Interrompe a fala em curso** — quem fala por último é a pessoa —, guarda a pergunta no histórico e publica `ThinkingStarted`. A face muda de expressão. |
 | 6 | `llm/fallback.py` | Pergunta ao modelo da rede. Se ele sumiu, cai para o modelo local do próprio Pi, **sem esperar o tempo limite estourar** (ver [§5](#5-as-quatro-decisões-que-explicam-o-desenho)). |
-| 7 | `core/text.py::stream_sentences` | A resposta chega token a token. Assim que uma **frase fecha**, ela já é entregue à voz — a Atlas começa a falar enquanto o modelo ainda escreve o resto. |
+| 7 | `core/text.py::streamSentences` | A resposta chega token a token. Assim que uma **frase fecha**, ela já é entregue à voz — a Atlas começa a falar enquanto o modelo ainda escreve o resto. |
 | 8 | `speech/speaker.py` | Sintetiza e toca. Enquanto uma frase toca, **a próxima já está sendo sintetizada** numa thread paralela. |
 | 9 | `speech/envelope.py` | O mesmo PCM que vai para o alto-falante passa por um medidor de amplitude, um valor a cada 20 ms. |
 | 10 | `face/animator.py` | A face lê esse valor e move os olhos **junto com a voz de verdade**, e não com uma oscilação inventada. |
@@ -114,9 +114,9 @@ Também é quem decide os **modos de execução**:
 
 | Modo | Comando | O que roda |
 |---|---|---|
-| `run_interactive` | `roboteye run` | Face na thread principal + chat de texto ao fundo |
-| `run_face` | `roboteye face` | Só a face (é o que o robô instalado usa) |
-| `run_chat` | `roboteye chat` | Só o terminal, sem pygame |
+| `runInteractive` | `roboteye run` | Face na thread principal + chat de texto ao fundo |
+| `runFace` | `roboteye face` | Só a face (é o que o robô instalado usa) |
+| `runChat` | `roboteye chat` | Só o terminal, sem pygame |
 
 ### `core/` — o coração
 
@@ -128,9 +128,9 @@ Também é quem decide os **modos de execução**:
 - **`assistant.py`** — o turno de conversa, numa thread própria para a interface
   nunca travar esperando o modelo. Também é onde moram `teach()` / `forget()`,
   que deixam a Atlas aprender fatos em tempo de execução.
-- **`text.py`** — o corte em frases (`stream_sentences`), que é o que permite
+- **`text.py`** — o corte em frases (`streamSentences`), que é o que permite
   falar antes de o modelo terminar.
-- **`normalize_pt.py` / `numbers_pt.py`** — preparam o texto para a voz: “1.500”
+- **`normalizePt.py` / `numbersPt.py`** — preparam o texto para a voz: “1.500”
   vira “mil e quinhentos”, “Dr.” vira “doutor”. Sem isso a Atlas leria os
   símbolos.
 
@@ -140,7 +140,7 @@ Também é quem decide os **modos de execução**:
 escolha entre elas é **a maior decisão de tempo de resposta do robô inteiro**, e
 não existe opção que ganhe nos dois lados:
 
-| | `vosk_ears.py` — o padrão | `whisper_ears.py` |
+| | `voskEars.py` — o padrão | `whisperEars.py` |
 |---|---|---|
 | **Quando reconhece** | enquanto a pessoa fala | só depois da frase inteira |
 | **Espera depois do último som** | ~0 — o texto já existe | **~1,9 s** num Pi (`base` a 0,59x do tempo real) |
@@ -223,7 +223,7 @@ fica mudo por vários segundos depois de cada pergunta, e a conversa morre.
 
 **2. Duas IAs, e a troca é invisível.** O modelo bom não cabe no Pi: roda numa
 máquina de mesa, alcançada por Wi-Fi. Wi-Fi cai. Uma thread de fundo pergunta de
-tempos em tempos se a rede voltou, e `stream_reply` só lê um sinalizador já
+tempos em tempos se a rede voltou, e `streamReply` só lê um sinalizador já
 pronto — assim a única pergunta que paga o preço da queda é a que estava no ar
 quando ela aconteceu.
 
