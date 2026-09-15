@@ -16,13 +16,13 @@ O RobotEye (a "cara" da Atlas) e o `orquestrador` (o "corpo": motores, GPS,
 Wi-Fi) continuam sendo dois programas separados. Mas **deixaram de ser
 desacoplados**: a ponte Bluetooth trouxe um ponto de contato, e ele é o único.
 
-- **`src/roboteye/ble/`** — o Pi anuncia o serviço BLE que era do ESP32 e
-  publica o que chega do celular em `robo/comando/entrada`, o mesmo tópico que
-  o `serialIngestor` alimentava. Daí para a frente o caminho é todo do
-  `orquestrador`: ele roteia para `robo/motores/comando`, e o serviço `motores`
-  executa. O contrato desse tópico mora em `roboCommon/topics.py`, no outro
-  repositório — mudar o nome aqui sem mudar lá faz o robô aceitar comandos e
-  não mover nada.
+- **`src/roboteye/ble/`** — o Pi anuncia o serviço BLE e publica o que chega
+  do celular em `robo/comando/entrada`. (Essa ponte era um ESP32 à parte, que
+  foi removido: tudo foi centralizado no Pi.) Daí para a frente o caminho é
+  todo do `orquestrador`: ele roteia para `robo/motores/comando`, e o serviço
+  `motores` executa. O contrato desse tópico mora em `roboCommon/topics.py`, no
+  outro repositório — mudar o nome aqui sem mudar lá faz o robô aceitar comandos
+  e não mover nada.
 - **`src/roboteye/web/comandos.py`** — a página do celular assina o mesmo
   barramento só para *mostrar* o que o robô está obedecendo. Lê, não escreve.
 

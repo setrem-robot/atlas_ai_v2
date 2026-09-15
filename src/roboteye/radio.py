@@ -6,9 +6,8 @@ Bluetooth so transmite nas frestas que o Wi-Fi deixa, e vice-versa. Medido neste
 robo com `scripts/bench-radio.sh`, o efeito no Wi-Fi e visivel — media 18% maior
 e picos cinco vezes maiores com o anuncio BLE no ar.
 
-Enquanto o ESP32 existia o problema nao existia: o radio Bluetooth era dele, do
-outro lado de um cabo. Com a ponte rodando no proprio Pi, os dois passaram a
-disputar.
+Como o anuncio BLE roda no proprio Pi, Wi-Fi e Bluetooth passam a disputar esse
+mesmo radio.
 
 **A saida e de banda, nao de ajuste fino.** O Bluetooth so existe em 2,4 GHz e
 nao ha o que fazer quanto a isso — mas o Wi-Fi tambem fala 5 GHz, onde nao ha

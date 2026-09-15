@@ -7,9 +7,9 @@ nada acontece, nao ha como saber de que lado esta o problema — se o comando na
 saiu do app, se nao chegou ao Pi, ou se chegou e os motores nao responderam.
 
 Escuta o mesmo topico que os motores escutam, e nao a ponte Bluetooth: assim
-aparece tambem o que vier de outro lugar — do ESP32, se ainda estiver montado, ou
-de um teste publicado a mao. O que a pagina mostra e o que o robo recebeu, nao o
-que alguem acha que mandou.
+aparece tambem o que vier de outro lugar — um teste publicado a mao, por
+exemplo. O que a pagina mostra e o que o robo recebeu, nao o que alguem acha
+que mandou.
 
 Tolerante de proposito. Um broker fora do ar deixa este painel vazio e nao pode
 derrubar a pagina, que serve para outras coisas — inclusive para descobrir que o

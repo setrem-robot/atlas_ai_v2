@@ -1,23 +1,15 @@
 """Ponte Bluetooth: o celular manda comandos direto para o Pi.
 
-Hoje o caminho de um comando de motor e celular -> BLE -> ESP32 -> serial -> Pi.
-O ESP32 nao interpreta nada: confere que a mensagem e JSON e repassa pelo fio.
-E o Pi tem radio Bluetooth proprio, parado.
+O caminho de um comando de motor e celular -> BLE -> Pi. Esta ponte anuncia um
+servico BLE **padrao** — o Nordic UART Service —, recebe cada linha, confere que
+e JSON e a repassa; nao interpreta nada.
 
-Esta ponte assume o papel que o ESP32 fazia. O detalhe que torna a troca barata
-e que o ESP32 anuncia um servico **padrao** — o Nordic UART Service —, entao
-anunciando o mesmo servico, com os mesmos UUIDs e o mesmo formato de mensagem,
-**o app nao precisa saber que o hardware mudou**. Muda so o nome que aparece na
-busca.
-
-O que chega aqui vai para o mesmo lugar de sempre: `robo/comando/entrada`, o
-topico que o `serialIngestor` alimentava. O orquestrador e os motores nao sabem
-a diferenca.
+O que chega aqui vai para `robo/comando/entrada`. O orquestrador e os motores
+leem desse topico e nao sabem por onde o comando entrou.
 
 **Perder a conexao para o robo.** O app manda "F" quando o dedo desce e "S"
-quando sobe; se a conexao morre entre os dois, o "S" nunca chega. O firmware do
-ESP32 aprendeu a mandar uma parada de emergencia ao perder o BLE, e esta ponte
-faz o mesmo — direto no MQTT, sem atravessar serial nenhuma.
+quando sobe; se a conexao morre entre os dois, o "S" nunca chega. Esta ponte
+manda uma parada de emergencia ao perder o BLE — direto no MQTT.
 """
 
 from __future__ import annotations
@@ -29,20 +21,15 @@ from roboteye.loggingSetup import getLogger
 
 logger = getLogger(__name__)
 
-#: Nordic UART Service. Os mesmos do `esp32_ble_bridge.ino` e do
-#: `RobotBleIds` no app — mudou aqui, muda nos tres.
+#: Nordic UART Service. Os mesmos do `RobotBleIds` no app — mudou aqui, muda la.
 NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  # o celular escreve aqui
 NUS_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # o robo notifica aqui
 
-#: Teto de uma linha. E o mesmo `MAX_LINE` do `esp32_ble_bridge.ino`, e o mesmo
-#: que o app usa para fatiar a rota segura (`RotaSegura.paraMensagensBle`).
-#:
-#: Estava em 256, metade do contrato — as duas pontes aceitavam mensagens
-#: diferentes. Nenhuma mensagem de hoje chega perto (a maior, um ponto de rota,
-#: tem uns 65 bytes), entao a divergencia nao aparecia; apareceria na primeira
-#: mensagem entre 257 e 512 bytes, e apareceria so numa das duas pontes — que e
-#: o tipo de defeito que se procura no lugar errado por um dia inteiro.
+#: Teto de uma linha, o mesmo que o app usa para fatiar a rota segura
+#: (`RotaSegura.paraMensagensBle`). Precisa bater com o app: uma mensagem maior
+#: que isto seria recusada aqui e a rota chegaria pela metade. Nenhuma mensagem
+#: de hoje chega perto — a maior, um ponto de rota, tem uns 65 bytes.
 MAX_LINHA = 512
 
 

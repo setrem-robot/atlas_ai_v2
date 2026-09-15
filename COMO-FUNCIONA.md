@@ -275,8 +275,8 @@ mexendo” de “está no robô”.
 
 ## 7. A ponte Bluetooth: o único fio que sai daqui
 
-O celular precisa dirigir o robô, e o Pi tem rádio Bluetooth próprio. A ponte
-assume o papel que era do ESP32:
+O celular precisa dirigir o robô, e o Pi tem rádio Bluetooth próprio. Essa ponte
+era um ESP32 à parte, que foi removido — hoje ela roda no próprio Pi:
 
 ```mermaid
 sequenceDiagram
@@ -296,9 +296,9 @@ sequenceDiagram
 
 | Contrato | Aqui | Do outro lado |
 |---|---|---|
-| UUIDs do serviço BLE | `ble/nus.py` | `RobotBleIds` no app, `.ino` do ESP32 |
+| UUIDs do serviço BLE | `ble/nus.py` | `RobotBleIds` no app |
 | Nome do tópico MQTT | `ble/mqtt.py` | `roboCommon/topics.py` |
-| Teto de uma linha | `MAX_LINHA = 512` | `MAX_LINE` no ESP32 |
+| Teto de uma linha | `MAX_LINHA = 512` | o fatiamento do app (`RotaSegura.paraMensagensBle`) |
 
 > ⚠️ **A ponte publica, mas hoje ninguém consome o comando.** Do `orquestrador`,
 > só a `telemetria` (a saúde do Pi) está instalada no Pi; o roteador e o

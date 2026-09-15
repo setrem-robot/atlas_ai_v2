@@ -150,7 +150,9 @@ def buildParser() -> argparse.ArgumentParser:
     web.add_argument("--port", type=int, help="porta (padrao: 8080)")
     web.set_defaults(handler=commandWeb)
 
-    ble = subparsers.add_parser("ble", help="ponte bluetooth: o celular controla o robo sem ESP32")
+    ble = subparsers.add_parser(
+        "ble", help="ponte bluetooth: o celular controla o robo pelo Pi"
+    )
     ble.add_argument("--nome", default="Atlas", help="nome que aparece na busca do celular")
     ble.add_argument(
         "--mqtt-host", dest="mqttHost", default="127.0.0.1", help="broker (padrao: 127.0.0.1)"
@@ -319,8 +321,8 @@ def commandFace(args: argparse.Namespace, settings: Settings) -> int:
 def commandBle(args: argparse.Namespace, settings: Settings) -> int:
     """Poe o robo no ar pelo bluetooth e entrega os comandos aos motores.
 
-    Substitui o par ESP32 + `serialIngestor`: o celular fala com o Pi direto, e
-    o que chega vai para o mesmo topico MQTT de sempre.
+    O celular fala com o Pi direto, e o que chega vai para o topico MQTT
+    `robo/comando/entrada`.
     """
     from roboteye.ble import EntregaMqtt, PonteBLE, anunciarPeloKernel
 

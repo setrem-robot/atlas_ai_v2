@@ -113,7 +113,7 @@ e o controle no celular em [`aplicativo`](https://github.com/setrem-robot/aplica
 
 **Há exatamente um ponto de contato entre as duas partes, e é de mão única.**
 Desde que o ESP32 saiu, a ponte Bluetooth roda aqui (`src/roboteye/ble/`): o Pi
-anuncia o serviço BLE que era do ESP32 e publica o que chega do celular em
+anuncia o serviço BLE e publica o que chega do celular em
 `robo/comando/entrada`. Daí para a frente o caminho é todo do `orquestrador`.
 Fora essa ponte, este repositório não fala MQTT, serial nem GPIO — e a Atlas
 continua sem saber a própria bateria e sem falar o que o app manda. Veja
