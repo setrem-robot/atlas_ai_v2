@@ -171,7 +171,7 @@ def decodeMp3(data: bytes) -> bytes:
             data,
             output_format=miniaudio.SampleFormat.SIGNED16,
             nchannels=1,
-            sampleRate=SAMPLE_RATE,
+            sample_rate=SAMPLE_RATE,
         )
     except Exception as exc:
         raise SpeechError(f"falha ao decodificar o audio online: {exc}") from exc

@@ -50,7 +50,7 @@ class PiperEngine:
 
         logger.info("carregando voz: %s", modelPath.name)
         try:
-            self.voice = PiperVoice.load(modelPath, configPath=configPath)
+            self.voice = PiperVoice.load(modelPath, config_path=configPath)
         except Exception as exc:
             raise SpeechError(f"falha ao carregar o modelo de voz {modelPath}: {exc}") from exc
 
@@ -78,9 +78,9 @@ class PiperEngine:
                 yield SpeechChunk(
                     audio=chunk.audio_int16_bytes,
                     format=AudioFormat(
-                        sampleRate=chunk.sampleRate,
+                        sampleRate=chunk.sample_rate,
                         channels=chunk.sample_channels,
-                        sampleWidth=chunk.sampleWidth,
+                        sampleWidth=chunk.sample_width,
                     ),
                 )
         except Exception as exc:
