@@ -13,6 +13,7 @@ from types import TracebackType
 
 from roboteye.config import LLMSettings, Settings, isArm
 from roboteye.core.assistant import Assistant
+from roboteye.core.controle import ControleRemoto
 from roboteye.core.events import (
     ErrorOccurred,
     Event,
@@ -78,6 +79,9 @@ class Application:
     #: Rede de seguranca da pausa da escuta. Um microfone que fica pausado e um
     #: robo surdo — pior que um lento —, entao a pausa tem prazo de validade.
     destravarEscuta: threading.Timer | None = None
+    #: Ouve o barramento MQTT pelo switch de IA do app (local/nuvem). None
+    #: enquanto a face nao subiu; nasce em `start`.
+    controle: ControleRemoto | None = None
 
     # -- construcao --------------------------------------------------------
     @classmethod
@@ -158,7 +162,21 @@ class Application:
             ).start()
 
         self.abrirOuvidos()
+        self.ouvirControle()
         self.darBomDia()
+
+    def ouvirControle(self) -> None:
+        """Passa a ouvir o switch de IA do app pelo barramento MQTT.
+
+        O comando entra pela ponte Bluetooth (outro processo) e sai no broker
+        local; e por ele que os dois processos se falam. Sem broker, o switch
+        fica sem efeito e a face segue no modo em que estava — por isso o
+        receptor nunca levanta.
+        """
+        if self.controle is not None:
+            return
+        self.controle = ControleRemoto(self.assistant.definirModoIa)
+        self.controle.escutar(host=self.settings.web.mqttHost, port=self.settings.web.mqttPort)
 
     def darBomDia(self) -> None:
         """Fala a primeira frase, se houver uma configurada.
@@ -406,6 +424,9 @@ class Application:
         logger.debug("encerrando aplicacao")
         self.cancelarPergunta()
         self.cancelarDestravamento()
+        if self.controle is not None:
+            self.controle.fechar()
+            self.controle = None
         if self.ears is not None:
             self.ears.close()
         self.assistant.close()

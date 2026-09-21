@@ -23,6 +23,7 @@ from roboteye.core.events import (
 )
 from roboteye.core.text import streamSentences, truncate
 from roboteye.llm.base import LLMClient, LLMError
+from roboteye.llm.fallback import FallbackLLMClient
 from roboteye.llm.memory import ConversationMemory
 from roboteye.llm.persona import PersonaStore
 from roboteye.loggingSetup import getLogger
@@ -152,6 +153,19 @@ class Assistant:
     @property
     def isBusy(self) -> bool:
         return self.busy.is_set()
+
+    # -- troca de IA -------------------------------------------------------
+    def definirModoIa(self, modo: str) -> None:
+        """Aplica o switch de IA do app: "local" (Pi) ou "nuvem" (rede).
+
+        So o cliente com reserva (`FallbackLLMClient`) sabe trocar. Sem reserva
+        configurada — um `.env` que so tem a IA de rede, ou so a local — nao ha
+        o que alternar, e o pedido apenas vira uma linha de log.
+        """
+        if isinstance(self.llm, FallbackLLMClient):
+            self.llm.definirModo(modo)
+        else:
+            logger.info("switch de IA ignorado: sem reserva local configurada (modo=%s)", modo)
 
     # -- thread ------------------------------------------------------------
     def run(self) -> None:

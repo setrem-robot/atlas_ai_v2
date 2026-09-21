@@ -119,7 +119,7 @@ class ComandosRecebidos:
                 logger.debug("comando ilegivel no topico; ignorado")
 
         try:
-            cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, clientId="roboteye-web")
+            cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="roboteye-web")
             cliente.on_connect = aoConectar
             cliente.on_message = aoReceber
             cliente.connect_async(host, port, keepalive=30)

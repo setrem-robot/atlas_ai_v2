@@ -105,6 +105,11 @@ class FallbackLLMClient:
         # Comeca otimista. O `warm_up` corrige em seguida, e uma pergunta feita
         # antes dele apenas cai para o modelo local sozinha.
         self.primaryUp = True
+        #: Override manual, vindo do app (switch "IA local" / "IA nuvem"). Quando
+        #: ligado, o robo responde sempre pelo modelo do proprio Pi e nem tenta a
+        #: rede — a sondagem continua rodando, mas quem manda e esta escolha. E
+        #: uma decisao de quem opera o robo, acima da troca automatica por queda.
+        self.forcarLocal = False
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.watcher: threading.Thread | None = None
@@ -112,17 +117,57 @@ class FallbackLLMClient:
     # -- estado ------------------------------------------------------------
     @property
     def usingPrimary(self) -> bool:
-        """Quem responderia agora. Lido pelo `doctor` e pela pagina web."""
+        """Quem responderia agora. Lido pelo `doctor` e pela pagina web.
+
+        O override manual tem a palavra final: forcado o modo local, quem
+        responde e sempre o Pi, mesmo com a rede de pe.
+        """
         with self.lock:
-            return self.primaryUp
+            return self.primaryUp and not self.forcarLocal
+
+    @property
+    def modo(self) -> str:
+        """O modo escolhido: "local" (forcado) ou "nuvem" (automatico)."""
+        with self.lock:
+            return "local" if self.forcarLocal else "nuvem"
+
+    def definirModo(self, modo: str) -> None:
+        """Aplica o switch do app: "local" forca o Pi; "nuvem" volta ao automatico.
+
+        No modo nuvem a troca automatica por queda de rede continua valendo —
+        "nuvem" quer dizer "use a rede quando der", e nao "use a rede a qualquer
+        custo". No modo local a rede e ignorada de proposito, e o modelo do Pi
+        e mantido residente para responder sem o atraso de carregar do cartao.
+        """
+        forcar = modo == "local"
+        with self.lock:
+            if forcar == self.forcarLocal:
+                return
+            self.forcarLocal = forcar
+            efetiva = self.primaryUp and not forcar
+        self.ajustarMemoria(efetiva)
+        if forcar:
+            logger.info("switch do app: IA local (modelo do proprio robo)")
+            self.notify("IA local: respondendo pelo modelo do proprio robo")
+        else:
+            logger.info("switch do app: IA de nuvem (modelo da rede quando disponivel)")
+            self.notify("IA de nuvem: usando o modelo da rede quando disponivel")
 
     def setPrimary(self, up: bool) -> None:
         with self.lock:
             mudou = up != self.primaryUp
             self.primaryUp = up
+            # A memoria segue quem de fato responde: forcado o modo local, a rede
+            # subir nao devolve a RAM do reserva, porque e ele quem esta falando.
+            efetiva = up and not self.forcarLocal
+            forcando = self.forcarLocal
         if not mudou:
             return
-        self.ajustarMemoria(up)
+        self.ajustarMemoria(efetiva)
+        # Enquanto o modo local esta forcado, a rede ir e vir nao muda a resposta;
+        # avisar disso so confundiria quem escolheu o modo de proposito.
+        if forcando:
+            return
         # Uma resposta que vem do modelo pequeno e mais curta e mais simples que
         # a de costume. Sem aviso, isso passa por "a IA ficou burra" — e quem
         # esta vendo vai procurar o erro no modelo, que e o lugar onde ele nao esta.

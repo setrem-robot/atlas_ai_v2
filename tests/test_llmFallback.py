@@ -297,3 +297,52 @@ class TestOFormatoDoKeepAlive:
             assert self.DURACAO.match(valor) or valor in {"0", ""}, (
                 f"{valor!r} nao e uma duracao que o Ollama aceite"
             )
+
+
+class TestSwitchDoApp:
+    """O override manual: o app forca "IA local" ou volta para "IA nuvem"."""
+
+    def testModoComecaEmNuvem(self) -> None:
+        assert montar(IAFalsa("rede"), IAFalsa("local")).modo == "nuvem"
+
+    def testForcarLocalRespondePeloLocalMesmoComRedeDePe(self) -> None:
+        rede, local = IAFalsa("rede"), IAFalsa("local")
+        cliente = montar(rede, local)
+        cliente.definirModo("local")
+        assert cliente.modo == "local"
+        assert responder(cliente) == ["local", "local"]
+        assert rede.perguntas == []  # a rede nem foi consultada
+
+    def testVoltarParaNuvemUsaARedeDeNovo(self) -> None:
+        rede, local = IAFalsa("rede"), IAFalsa("local")
+        cliente = montar(rede, local)
+        cliente.definirModo("local")
+        cliente.definirModo("nuvem")
+        assert cliente.modo == "nuvem"
+        assert responder(cliente) == ["rede", "rede"]
+
+    def testNoModoLocalARedeVoltarNaoTrocaOResponsavel(self) -> None:
+        rede, local = IAFalsa("rede"), IAFalsa("local")
+        cliente = montar(rede, local)
+        cliente.definirModo("local")
+        cliente.setPrimary(False)
+        cliente.setPrimary(True)  # a rede "voltou"
+        assert responder(cliente) == ["local", "local"]
+
+    def testAvisaAoTrocarDeModo(self) -> None:
+        avisos: list[str] = []
+        rede, local = IAFalsa("rede"), IAFalsa("local")
+        cliente = FallbackLLMClient(rede, local, probeInterval=0.0, onSwitch=avisos.append)
+        cliente.definirModo("local")
+        cliente.definirModo("nuvem")
+        assert len(avisos) == 2
+        assert "local" in avisos[0].lower()
+        assert "nuvem" in avisos[1].lower()
+
+    def testDefinirOMesmoModoNaoAvisaDeNovo(self) -> None:
+        avisos: list[str] = []
+        cliente = FallbackLLMClient(
+            IAFalsa("rede"), IAFalsa("local"), probeInterval=0.0, onSwitch=avisos.append
+        )
+        cliente.definirModo("nuvem")  # ja era o padrao
+        assert avisos == []

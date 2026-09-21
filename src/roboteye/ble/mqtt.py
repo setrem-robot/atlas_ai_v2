@@ -44,7 +44,7 @@ class EntregaMqtt:
         """Liga ao broker e passa a reconectar sozinho se ele cair."""
         import paho.mqtt.client as mqtt
 
-        cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, clientId=self.clientId)
+        cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.clientId)
         # `loop_start` poe a reconexao numa thread propria: sem isso, um broker
         # que reinicia deixaria o Bluetooth funcionando e os motores mudos, sem
         # nada no log dizendo por que.
