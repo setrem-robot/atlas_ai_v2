@@ -157,7 +157,7 @@ class TestServidor:
         """O PIN protege o que muda o robô, não a tela de digitar o PIN."""
         with urllib.request.urlopen(servidor + "/", timeout=10) as resposta:
             assert resposta.status == 200
-            assert b"RobotEye" in resposta.read()
+            assert b"<title>Atlas</title>" in resposta.read()
 
     def testApiExigePin(self, servidor: str) -> None:
         status, _ = self.pedir(servidor, "/api/state", pin="000000")

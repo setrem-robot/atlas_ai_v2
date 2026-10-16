@@ -67,6 +67,17 @@ class TestOutrasFormas:
         assert normalize("Sra. Costa") == "senhora Costa"
 
 
+class TestPronuncia:
+    @pytest.mark.parametrize("grafia", ["SETREM", "Setrem", "setrem"])
+    def testSetremEOxitona(self, grafia: str) -> None:
+        """Sem o acento o espeak lia "SÉ-trem"; quem é de lá diz "se-TREM"."""
+        assert normalize(f"Bem-vindo à {grafia}!") == "Bem-vindo à Setrém!"
+
+    def testSoAPalavraInteira(self) -> None:
+        """Uma palavra que só contém "setrem" não é a instituição."""
+        assert normalize("setremista") == "setremista"
+
+
 class TestNumerosSoltos:
     @pytest.mark.parametrize(
         ("entrada", "esperado"),

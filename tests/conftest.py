@@ -205,13 +205,23 @@ def makeAssistant(makeSpeaker, bus: EventBus):
         systemPrompt: str = "você é um robô de testes",
         history: int = 6,
         personaDir: Path | None = None,
+        language: str = "en",
+        linguagemNeutra: bool = False,
     ):
         store = PersonaStore(personaDir, "atlas") if personaDir else None
         prompt = store.load().systemPrompt() if store else systemPrompt
 
         memory = ConversationMemory(prompt, maxMessages=history)
         speaker = makeSpeaker()
-        assistant = Assistant(llm=llm, memory=memory, speaker=speaker, bus=bus, persona=store)
+        assistant = Assistant(
+            llm=llm,
+            memory=memory,
+            speaker=speaker,
+            bus=bus,
+            persona=store,
+            language=language,
+            linguagemNeutra=linguagemNeutra,
+        )
         assistant.start()
         criados.append(assistant)
         return assistant, memory

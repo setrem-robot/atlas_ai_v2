@@ -21,6 +21,7 @@ from roboteye.core.events import (
     ThinkingStarted,
     UserMessage,
 )
+from roboteye.core.neutroPt import neutralize
 from roboteye.core.text import streamSentences, truncate
 from roboteye.llm.base import LLMClient, LLMError
 from roboteye.llm.fallback import FallbackLLMClient
@@ -44,6 +45,7 @@ class Assistant:
         bus: EventBus,
         persona: PersonaStore | None = None,
         language: str = "en",
+        linguagemNeutra: bool = False,
     ) -> None:
         self.llm = llm
         self.memoryStore = memory
@@ -51,6 +53,10 @@ class Assistant:
         self.bus = bus
         self.persona = persona
         self.language = language
+        #: Reescreve o que o robo diz de si sem marcar genero (`core/neutroPt.py`).
+        #: So existe a versao em portugues: e a lingua em que quase todo
+        #: adjetivo flexiona, e a unica em que o robo fala hoje.
+        self.linguagemNeutra = linguagemNeutra and language.lower().startswith("pt")
 
         self.inbox: queue.Queue[str | None] = queue.Queue()
         self.thread: threading.Thread | None = None
@@ -220,6 +226,10 @@ class Assistant:
 
         spoken: list[str] = []
         for sentence in streamSentences(self.llm.streamReply(self.memoryStore.buildPrompt())):
+            # Antes da voz e da legenda, e tambem do historico: guardar a versao
+            # com genero ensinaria o modelo a repeti-la na resposta seguinte.
+            if self.linguagemNeutra:
+                sentence = neutralize(sentence)
             spoken.append(sentence)
             self.speaker.say(sentence)
 

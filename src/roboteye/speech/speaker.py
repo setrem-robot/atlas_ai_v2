@@ -11,7 +11,7 @@ import queue
 import threading
 import time
 from collections import deque
-from collections.abc import Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 
 from roboteye.core.events import ErrorOccurred, EventBus, SpeechFinished, SpeechStarted
@@ -43,6 +43,64 @@ MAX_BATCH_CHARS = 480
 #: fluidez: duas frases numa sintese so sao lidas com a entoacao de quem fala,
 #: com a pausa e a respiracao no lugar, em vez de duas leituras emendadas.
 ESPERA_LOTE_S = 0.25
+
+#: Quantos blocos de audio a sintese pode correr na frente do alto-falante.
+#:
+#: Um bloco do Piper e uma frase inteira, entao quatro ja cobrem a resposta
+#: falada tipica com folga. O teto existe so para uma resposta longa nao virar
+#: minutos de audio parados na memoria.
+BLOCOS_ADIANTE = 4
+
+
+def antecipar(
+    blocos: Iterable[SpeechChunk], *, limite: int = BLOCOS_ADIANTE
+) -> Generator[SpeechChunk, None, None]:
+    """Sintetiza numa thread propria enquanto o audio anterior toca.
+
+    A sintese e preguicosa: sem isto, o bloco seguinte so comecava a ser
+    sintetizado depois de o atual ser entregue a placa, e o buffer da placa
+    cobre uns poucos centesimos de segundo. Cada emenda entre frases virava um
+    silencio do tamanho da sintese da proxima — no Pi, meio segundo ou mais, e
+    bem mais com o modelo de linguagem disputando a CPU. E o que se ouvia como
+    voz "travada": a resposta parando no meio, em pausas irregulares.
+
+    Erros da sintese atravessam a fila e sobem aqui, na thread de quem consome,
+    como antes. Quem para de consumir (uma interrupcao) fecha o gerador, e a
+    thread de sintese desiste na proxima entrega em vez de ficar presa na fila.
+    """
+    fila: queue.Queue[SpeechChunk | Exception | None] = queue.Queue(maxsize=limite)
+    parar = threading.Event()
+
+    def entregar(item: SpeechChunk | Exception | None) -> bool:
+        while not parar.is_set():
+            try:
+                fila.put(item, timeout=0.1)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def produzir() -> None:
+        try:
+            for bloco in blocos:
+                if not entregar(bloco):
+                    return
+        except Exception as exc:
+            entregar(exc)
+            return
+        entregar(None)
+
+    threading.Thread(target=produzir, name="speaker-sintese", daemon=True).start()
+    try:
+        while True:
+            item = fila.get()
+            if item is None:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        parar.set()
 
 
 def synthesizePolished(
@@ -471,15 +529,26 @@ class Speaker:
             self.envelope.begin()
 
         if pronto is not None:
-            stream: Iterable[SpeechChunk] = pronto
-        else:
-            stream = synthesizePolished(
+            self.tocar(item, pronto, medir=False)
+            return
+
+        blocos = antecipar(
+            synthesizePolished(
                 self.engine,
                 item.text,
                 language=self.language,
                 polish=self.polish,
             )
+        )
+        try:
+            self.tocar(item, blocos, medir=True)
+        finally:
+            # Fechar e o que avisa a thread de sintese que ninguem mais vai
+            # ouvir — numa interrupcao, ela para em vez de sintetizar o resto.
+            blocos.close()
 
+    def tocar(self, item: Utterance, stream: Iterable[SpeechChunk], *, medir: bool) -> None:
+        """Entrega os blocos de uma fala a placa, ate acabar ou ser interrompida."""
         # Cronometro do TTS: a sintese e preguicosa, o custo real e o tempo ate
         # o primeiro bloco de audio ficar pronto. So vale medir quando a fala foi
         # sintetizada aqui; a adiantada ja veio pronta, com latencia zero.
@@ -493,7 +562,7 @@ class Speaker:
 
             if primeiro:
                 primeiro = False
-                if pronto is None:
+                if medir:
                     logger.info(
                         "TTS: primeiro audio em %.0f ms", (time.monotonic() - inicio) * 1000.0
                     )

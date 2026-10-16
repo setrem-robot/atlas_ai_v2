@@ -125,6 +125,7 @@ class Application:
             bus=bus,
             persona=personaStore,
             language=settings.llm.replyLanguage,
+            linguagemNeutra=settings.llm.linguagemNeutra,
         )
 
         return cls(

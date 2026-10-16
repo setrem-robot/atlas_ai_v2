@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import threading
+import time
+
+import pytest
+
 from roboteye.core.events import ErrorOccurred, SpeechFinished, SpeechStarted
-from roboteye.speech.base import SpeechError
-from roboteye.speech.speaker import MAX_BATCH_CHARS, Speaker, Utterance
+from roboteye.speech.base import AudioFormat, SpeechChunk, SpeechError
+from roboteye.speech.speaker import MAX_BATCH_CHARS, Speaker, Utterance, antecipar
+
+FORMATO = AudioFormat(sampleRate=22050, channels=1, sampleWidth=2)
 
 
 class BrokenEngine:
@@ -243,6 +250,79 @@ class TestOSilencioSoValeQuandoAcabou:
         assert speaker.waitUntilIdle(timeout=5), "o locutor nunca anunciou silencio"
         assert not speaker.isSpeaking
         assert engine.spoken == ["ja sintetizada"]
+
+
+def bloco(n: int) -> SpeechChunk:
+    return SpeechChunk(audio=bytes([n, 0]), format=FORMATO)
+
+
+class TestAntecipacao:
+    """A sintese da proxima frase corre enquanto a atual ainda toca.
+
+    Sem isso cada emenda entre frases virava um silencio do tamanho da sintese
+    seguinte — a voz "travada" que se ouvia no Pi.
+    """
+
+    def testEntregaTudoNaOrdem(self) -> None:
+        assert [b.audio[0] for b in antecipar(bloco(i) for i in range(6))] == list(range(6))
+
+    def testSintetizaAFrenteDeQuemConsome(self) -> None:
+        """Com o primeiro bloco na mao, os seguintes ja estao sendo produzidos."""
+        produzidos: list[int] = []
+        terceiro = threading.Event()
+
+        def fonte():
+            for i in range(3):
+                produzidos.append(i)
+                if i == 2:
+                    terceiro.set()
+                yield bloco(i)
+
+        blocos = antecipar(fonte())
+        next(blocos)
+        # Ninguem pediu o segundo nem o terceiro; mesmo assim eles saem.
+        assert terceiro.wait(timeout=2), "a sintese esperou o consumidor pedir"
+        assert produzidos == [0, 1, 2]
+        blocos.close()
+
+    def testErroDaSinteseSobeParaQuemConsome(self) -> None:
+        def fonte():
+            yield bloco(0)
+            raise SpeechError("modelo ausente")
+
+        blocos = antecipar(fonte())
+        assert next(blocos).audio[0] == 0
+        with pytest.raises(SpeechError, match="modelo ausente"):
+            next(blocos)
+
+    def testFecharParaASintese(self) -> None:
+        """Numa interrupcao, a thread de sintese desiste em vez de ir ate o fim."""
+        produzidos: list[int] = []
+
+        def infinita():
+            i = 0
+            while True:
+                produzidos.append(i)
+                yield bloco(i % 256)
+                i += 1
+
+        blocos = antecipar(infinita(), limite=2)
+        next(blocos)
+        blocos.close()
+        time.sleep(0.3)
+        parados = len(produzidos)
+        time.sleep(0.3)
+        assert len(produzidos) == parados, "a sintese continuou depois de fechada"
+        assert parados <= 5
+
+    def testInterrupcaoNoMeioDaFalaNaoTravaOLocutor(self, makeSpeaker, engine) -> None:
+        speaker = makeSpeaker()
+        speaker.say("uma fala qualquer que sera cortada")
+        speaker.interrupt()
+        speaker.say("a seguinte")
+
+        assert speaker.waitUntilIdle(timeout=5)
+        assert engine.spoken[-1] == "a seguinte"
 
 
 class TestSpeakerEncerramento:

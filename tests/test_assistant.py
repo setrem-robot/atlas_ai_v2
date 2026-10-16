@@ -141,6 +141,37 @@ class TestAssistant:
         assert sink.stops >= 1
 
 
+class TestLinguagemNeutra:
+    """O modelo pequeno espelha o gênero da pergunta; a resposta sai neutra mesmo assim."""
+
+    def testRespostaSaiNeutraNaTelaNaVozENoHistorico(
+        self, makeAssistant, makeLlm, recorder, engine
+    ) -> None:
+        llm = makeLlm("Sim, estou pronta para ajudar. Muito obrigada pela pergunta!")
+        assistant, memory = makeAssistant(llm, language="pt", linguagemNeutra=True)
+
+        assistant.submit("Você está pronta?")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        neutra = "Sim, estou à disposição para ajudar. Agradeço muito pela pergunta!"
+        assert recorder.ofType(AssistantReply)[-1].text == neutra
+        assert " ".join(engine.spoken) == neutra
+        assert memory.buildPrompt()[-1].content == neutra
+
+    def testDesligadaNaoMexe(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Sim, estou pronta para ajudar.")
+        assistant, _ = makeAssistant(llm, language="pt", linguagemNeutra=False)
+
+        assistant.submit("Você está pronta?")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        assert recorder.ofType(AssistantReply)[-1].text == "Sim, estou pronta para ajudar."
+
+    def testSoValeParaPortugues(self, makeAssistant, makeLlm) -> None:
+        assistant, _ = makeAssistant(makeLlm(), language="en", linguagemNeutra=True)
+        assert not assistant.linguagemNeutra
+
+
 class TestConversationMemory:
     def testPromptComecaComAMensagemDeSistema(self) -> None:
         memory = ConversationMemory("seja breve")

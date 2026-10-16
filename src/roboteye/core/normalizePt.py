@@ -38,6 +38,16 @@ ABBREVIATIONS = {
     "tel": "telefone",
 }
 
+#: Palavras que a voz pronuncia errado, reescritas como se falam.
+#:
+#: O Piper le pelas regras do espeak, e para elas "SETREM" e paroxitona: saia
+#: "SE-trem", com o primeiro "e" aberto. Quem e de la diz "se-TREM" — e o acento
+#: escrito e o unico jeito de dizer isso ao espeak. A troca vale so para a voz:
+#: a legenda na tela continua com a grafia de verdade.
+PRONUNCIATIONS = {
+    "setrem": "Setrém",
+}
+
 #: Unidades seguras de expandir: nao colidem com palavras comuns nem com siglas.
 UNITS = {
     "km/h": ("quilometro por hora", "quilometros por hora"),
@@ -147,6 +157,15 @@ def abbreviations(text: str) -> str:
     return _ABBREV.sub(replace, text)
 
 
+def pronunciations(text: str) -> str:
+    """`SETREM` -> "Setrém" (ver `PRONUNCIATIONS`)."""
+
+    def replace(match: re.Match[str]) -> str:
+        return PRONUNCIATIONS[match.group(1).lower()]
+
+    return _PRONUNCIATION.sub(replace, text)
+
+
 def numbers(text: str) -> str:
     """O que sobrou de numero solto, incluindo decimais e milhar com ponto."""
     return _NUMBER.sub(lambda m: spellNumber(m.group(0)), text)
@@ -204,6 +223,7 @@ _UNIT = re.compile(
 )
 _ORDINAL = re.compile(r"\b(?P<number>\d{1,2})\s*(?P<marker>[ºª°ao])(?![a-z])", re.IGNORECASE)
 _ABBREV = re.compile(rf"\b({longestFirst(ABBREVIATIONS)})\.", re.IGNORECASE)
+_PRONUNCIATION = re.compile(rf"\b({longestFirst(PRONUNCIATIONS)})\b", re.IGNORECASE)
 # Os dois-pontos ao redor sao um veto: um numero grudado num deles faz parte de
 # algo maior — uma hora, um placar, uma duracao. A regra da hora ja teve a sua
 # chance e, se recusou, foi porque nao reconheceu o formato. Ler as metades como
@@ -219,5 +239,6 @@ _RULES = (
     units,
     ordinals,
     abbreviations,
+    pronunciations,
     numbers,
 )

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from roboteye.loggingSetup import getLogger
 from roboteye.speech.base import AudioFormat, SpeechChunk, SpeechError
+from roboteye.speech.polish import silence
 
 if TYPE_CHECKING:
     from roboteye.config import VoiceSettings
@@ -74,15 +75,23 @@ class PiperEngine:
         assert self.voice is not None  # garantido por warm_up
 
         try:
+            primeira = True
             for chunk in self.voice.synthesize(text, syn_config=self.synConfig):
-                yield SpeechChunk(
-                    audio=chunk.audio_int16_bytes,
-                    format=AudioFormat(
-                        sampleRate=chunk.sample_rate,
-                        channels=chunk.sample_channels,
-                        sampleWidth=chunk.sample_width,
-                    ),
+                audioFormat = AudioFormat(
+                    sampleRate=chunk.sample_rate,
+                    channels=chunk.sample_channels,
+                    sampleWidth=chunk.sample_width,
                 )
+                # O Piper devolve um bloco por frase e nao poe nada entre eles.
+                # A pausa entra antes de cada frase, e nao depois: assim a ultima
+                # nao ganha um silencio que o acabamento ja acrescenta no fim.
+                if not primeira and self.settings.sentencePause > 0.0:
+                    yield SpeechChunk(
+                        audio=silence(audioFormat, self.settings.sentencePause),
+                        format=audioFormat,
+                    )
+                primeira = False
+                yield SpeechChunk(audio=chunk.audio_int16_bytes, format=audioFormat)
         except Exception as exc:
             raise SpeechError(f"falha na sintese: {exc}") from exc
 

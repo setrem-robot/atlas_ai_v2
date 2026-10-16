@@ -268,6 +268,12 @@ class LLMSettings:
     #: porque o `FallbackLLMClient` carrega o modelo no instante em que percebe
     #: a queda, e nao na hora da pergunta.
     fallbackKeepAlive: str = "0"
+    #: A Atlas fala de si sem marcar genero. A persona pede, mas o modelo
+    #: pequeno do Pi espelha o genero da pergunta ("esta pronta?" -> "estou
+    #: pronta"), entao a resposta passa por `core/neutroPt.py` antes da voz.
+    #: Desligar so faz sentido para uma persona que fale num genero de
+    #: proposito.
+    linguagemNeutra: bool = True
 
     @classmethod
     def fromEnv(cls, *, defaultLanguage: str = "en") -> LLMSettings:
@@ -295,6 +301,7 @@ class LLMSettings:
             numThread=getInt("LLM_NUM_THREAD", 0, minimum=0),
             keepAlive=getStr("LLM_KEEP_ALIVE", "5m"),
             fallbackKeepAlive=getStr("LLM_FALLBACK_KEEP_ALIVE", "0"),
+            linguagemNeutra=getBool("LINGUAGEM_NEUTRA", True),
         )
 
 
@@ -359,6 +366,13 @@ class VoiceSettings:
     #: reamostragem, as duas foram descartadas por medida. 6500 foi o valor
     #: escolhido de ouvido neste robo, entre quatro variantes.
     trebleHz: float = 0.0
+    #: Silencio (s) entre uma frase e a seguinte dentro de uma mesma fala Piper.
+    #:
+    #: O Piper sintetiza frase a frase e as emenda sem respiro nenhum: medido com
+    #: a `dii`, sobram ~170 ms entre um ponto final e a palavra seguinte, so o
+    #: que o proprio modelo deixa nas pontas. Fala de gente pausa 400 a 500 ms
+    #: ali, e sem isso a resposta sai num jorro. 0 desliga.
+    sentencePause: float = 0.25
 
     @classmethod
     def fromEnv(cls) -> VoiceSettings:
@@ -392,6 +406,7 @@ class VoiceSettings:
             fallback=getStr("VOICE_FALLBACK", "auto").lower(),
             gain=getFloat("VOICE_GAIN", 1.0, minimum=0.0),
             trebleHz=getFloat("VOICE_TREBLE_HZ", 0.0, minimum=0.0),
+            sentencePause=getFloat("VOICE_SENTENCE_PAUSE", 0.25, minimum=0.0),
         )
 
     def forVoice(self, key: str) -> VoiceSettings:
