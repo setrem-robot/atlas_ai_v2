@@ -108,6 +108,9 @@ class Assistant:
 
         Usado para saudacoes e falas ociosas.
         """
+        # A saudacao vem do `.env`, escrita a mao, e escapa da persona.
+        if self.linguagemNeutra:
+            text = neutralize(text)
         self.bus.publish(AssistantReply(text=text))
         self.speaker.say(text)
         self.speaker.endTurn()

@@ -92,6 +92,14 @@ class TestNomeERobo:
         )
         assert neutralize("Sou uma robô da SETREM.") == "Sou robô da SETREM."
 
+    def testSaudacaoDoRobo(self) -> None:
+        assert (
+            neutralize(
+                "Oi! Eu sou a Atlas, o robô da Engenharia de Computação da SETREM. Pode perguntar!"
+            )
+            == "Oi! Eu sou Atlas, robô da Engenharia de Computação da SETREM. Pode perguntar!"
+        )
+
     def testArtigoQueNaoEDoNomeFica(self) -> None:
         assert neutralize("O Atlas da escola é um livro.") == "O Atlas da escola é um livro."
 

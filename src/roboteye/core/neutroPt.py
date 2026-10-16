@@ -199,7 +199,7 @@ _PRONTO_SOLTO = re.compile(
     r"(?:^|(?<=[,.!?;] )|(?<=aqui )|(?<=aqui, ))pront[ao]s?(?=\s+(?:pra|para)\b)", _I
 )
 _NOME = re.compile(r"\b(?P<verbo>sou|me chamo|chamo-me)\s+[ao]\s+Atlas\b", _I)
-_ROBO = re.compile(r"\b(?P<verbo>sou)\s+(?:um|uma)\s+robô\b", _I)
+_ROBO = re.compile(r"\b(?P<verbo>sou|Atlas,)\s+(?:um|uma|o|a)\s+robô\b", _I)
 _AGRADECIMENTO = re.compile(
     r"\b(?P<muito>muit[ao]\s+)?obrigad[ao]s?\b(?:\s+(?P<prep>pelos|pelas|pelo|pela|por)\b)?", _I
 )
