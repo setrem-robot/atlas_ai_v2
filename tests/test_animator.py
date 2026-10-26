@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import random
 from itertools import pairwise
 
 import pytest
 
-from roboteye.face.animator import EyeAnimator, EyeFrame
+from roboteye.face.animator import BREATH_FREQUENCY, EyeAnimator, EyeFrame
 from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
 
@@ -419,6 +420,30 @@ class TestCorEBoca:
         animator.setSpeechLevel(1.0)
         aberturas = [f.mouth.openness for f in coletar(animator, 1.0)]
         assert max(aberturas) > 0.2
+
+    def testBocaNaoFicaEstaticaEmRepouso(self, animator: EyeAnimator) -> None:
+        """O defeito: a boca cravada enquanto os olhos vivem. Ela tem de respirar."""
+        quadros = coletar(animator, 4.0)
+        posicoes = {round(f.mouth.offsetY, 2) for f in quadros}
+        assert len(posicoes) > 20  # bobbing continuo, nunca o mesmo valor
+        ys = [f.mouth.offsetY for f in quadros]
+        assert max(ys) - min(ys) > 2.0  # amplitude visivel
+
+    def testBocaRespiraNoRitmoDosOlhos(self, animator: EyeAnimator) -> None:
+        """A boca segue o mesmo ciclo de respiracao que levanta os olhos."""
+        quadros = coletar(animator, 6.0)
+        ok = 0
+        for i, f in enumerate(quadros):
+            breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * (i + 1) * PASSO)
+            if abs(breath) < 0.1 or (f.mouth.offsetY >= 0) == (breath >= 0):
+                ok += 1
+        assert ok > len(quadros) * 0.9
+
+    def testBocaFicaQuietaDormindo(self, animator: EyeAnimator) -> None:
+        animator.sleep()
+        avancar(animator, 1.0)
+        posicoes = {round(f.mouth.offsetY, 3) for f in coletar(animator, 1.0)}
+        assert len(posicoes) == 1  # parada, como os olhos
 
 
 class TestMonstro:

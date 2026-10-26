@@ -381,8 +381,12 @@ class EyeRenderer:
         if (gridWidth, gridHeight) != (blitWidth, blitHeight):
             surface = pygame.transform.smoothscale(surface, (blitWidth, blitHeight))
 
-        left = layout.mouthCenterX - blitWidth // 2
-        top = layout.mouthCenterY - blitHeight // 2
+        # O offset (em unidades base) e o que faz a boca respirar e deslizar junto
+        # com os olhos, em vez de ficar cravada no mesmo pixel.
+        centerX = layout.mouthCenterX + mouth.offsetX * layout.scale
+        centerY = layout.mouthCenterY + mouth.offsetY * layout.scale
+        left = round(centerX - blitWidth / 2)
+        top = round(centerY - blitHeight / 2)
         self.surface.blit(surface, (left, top))
 
     def drawSpiral(
