@@ -174,6 +174,19 @@ SWIRL_RATE = 9.0
 # --- boca --------------------------------------------------------------------
 #: Quanto a voz abre a boca no pico, somado a abertura de repouso da fala.
 MOUTH_SPEECH_GAIN = 0.5
+#: Vida ociosa da boca, em sincronia com os olhos. Sem isto ela fica cravada no
+#: mesmo pixel enquanto os olhos respiram e piscam — e e isso que denuncia a
+#: face como "morta". Todos pequenos: a boca deve respirar junto, nao dancar.
+#:
+#: `BOB` usa o mesmo BREATH_DRIFT dos olhos para os dois subirem e descerem
+#: juntos; `SWAY` desliza a boca um tico para o lado que ela olha; `OPEN` faz os
+#: labios abrirem de leve ao respirar; `WOBBLE` e uma oscilacao lenta e
+#: incomensuravel na curvatura, para a boca nunca repetir dois instantes iguais.
+MOUTH_BREATH_BOB = 4.0
+MOUTH_GAZE_SWAY = 0.05
+MOUTH_BREATH_OPEN = 0.028
+MOUTH_WOBBLE_FREQUENCY = 0.23
+MOUTH_WOBBLE_CURVE = 0.05
 
 # --- dormir ------------------------------------------------------------------
 SLEEP_DURATION = 0.55
@@ -563,13 +576,41 @@ class EyeAnimator:
         return left, right
 
     def animateMouth(self, mouth: MouthShape, speechEnvelope: float) -> MouthShape:
-        """Da vida a boca de repouso: ao falar, ela abre e fecha com a voz."""
-        if self.activityAtual is not Expression.SPEAKING:
+        """Da vida a boca: ela respira e desliza junto com os olhos, fala com a voz.
+
+        Dormindo ela fica quieta (como os olhos). Acordada, mesmo parada, respira
+        no mesmo ritmo dos olhos e nunca congela — e o que separa uma face viva de
+        uma mascara com uma boca colada.
+        """
+        if self.sleeping:
             return mouth
-        # O envelope vem em -1..1; aqui vira 0..1 (silencio fecha, pico abre).
-        drive = (speechEnvelope + 1.0) * 0.5
-        openness = min(1.0, mouth.openness + drive * MOUTH_SPEECH_GAIN)
-        return replace(mouth, openness=openness)
+
+        breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * self.clock)
+        gazeX = self.gazeX.value + self.microX.value
+
+        offsetX = gazeX * MOUTH_GAZE_SWAY
+        offsetY = breath * MOUTH_BREATH_BOB
+        openness = mouth.openness + breath * MOUTH_BREATH_OPEN
+        wobble = math.sin(2.0 * math.pi * MOUTH_WOBBLE_FREQUENCY * self.clock + 0.7)
+        curve = mouth.curve + wobble * MOUTH_WOBBLE_CURVE
+
+        if self.activityAtual is Expression.SPEAKING:
+            # O envelope vem em -1..1; aqui vira 0..1 (silencio fecha, pico abre).
+            drive = (speechEnvelope + 1.0) * 0.5
+            openness += drive * MOUTH_SPEECH_GAIN
+        elif self.mood is Expression.RAGE:
+            # Treme junto com os olhos, para a furia tomar a cara inteira.
+            phase = 2.0 * math.pi * RAGE_SHAKE_FREQUENCY * self.clock
+            offsetX += math.sin(phase) * RAGE_SHAKE_AMPLITUDE * 0.5
+            offsetY += math.sin(phase * 1.3 + 1.0) * RAGE_SHAKE_AMPLITUDE * 0.4
+
+        return replace(
+            mouth,
+            openness=min(1.0, max(0.0, openness)),
+            curve=curve,
+            offsetX=mouth.offsetX + offsetX,
+            offsetY=mouth.offsetY + offsetY,
+        )
 
     def updateSwirl(self, dt: float) -> float:
         """O vortice do tonto: sobe quando ela fica tonta, gira, e some ao passar.
