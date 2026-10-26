@@ -329,9 +329,7 @@ class VoiceSettings:
     backend: str = "auto"
     #: Nome da voz no catalogo. Trocar isto e a forma normal de trocar de voz.
     voice: str = voiceCatalog.DEFAULT_VOICE
-    modelPath: Path = field(
-        default_factory=lambda: modelPathForVoice(voiceCatalog.DEFAULT_VOICE)
-    )
+    modelPath: Path = field(default_factory=lambda: modelPathForVoice(voiceCatalog.DEFAULT_VOICE))
     configPath: Path | None = None
     #: Nome da voz dentro do pacote — so o Kokoro usa.
     speaker: str | None = None
@@ -491,6 +489,10 @@ class FaceSettings:
     #: "auto" cai para "low" em ARM (Raspberry Pi) e "medium" no resto.
     quality: str = "auto"
 
+    #: Desenha a boca minimalista abaixo dos olhos. Desligar volta a face a ser
+    #: so dois olhos, para quem prefere o visual anterior.
+    mouthEnabled: bool = True
+
     @classmethod
     def fromEnv(cls) -> FaceSettings:
         return cls(
@@ -504,6 +506,7 @@ class FaceSettings:
             idleAnimations=getBool("IDLE_ANIMATIONS", True),
             cornerRadius=getFloat("EYE_CORNER_RADIUS", 0.30, minimum=0.0),
             quality=getChoice("FACE_QUALITY", "auto", FACE_QUALITIES),
+            mouthEnabled=getBool("FACE_MOUTH", True),
         )
 
 

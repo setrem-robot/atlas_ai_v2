@@ -108,9 +108,7 @@ class TestPiscadaComExpressao:
         assert min(f.left.openness for f in coletar(animator, 0.3)) < 0.1
 
     @pytest.mark.parametrize("expressao", [Expression.HAPPY, Expression.LAUGH])
-    def testAPalpebraDeBaixoNuncaRecua(
-        self, animator: EyeAnimator, expressao: Expression
-    ) -> None:
+    def testAPalpebraDeBaixoNuncaRecua(self, animator: EyeAnimator, expressao: Expression) -> None:
         """O sorriso mora na pálpebra de baixo; piscar não pode desmanchá-lo.
 
         Era o defeito: com alvo fixo, a pálpebra inferior *descia* de 0,44 para
@@ -139,9 +137,7 @@ class TestPiscadaComExpressao:
             assert fundo(expressao) == pytest.approx(neutro, abs=0.02)
 
     @pytest.mark.parametrize("expressao", [Expression.ANGRY, Expression.TIRED])
-    def testAInclinacaoAfrouxaAteFechar(
-        self, animator: EyeAnimator, expressao: Expression
-    ) -> None:
+    def testAInclinacaoAfrouxaAteFechar(self, animator: EyeAnimator, expressao: Expression) -> None:
         """Olho fechado não tem canto caído — senão a piscada vira um corte em diagonal."""
         animator.setMood(expressao)
         repouso = avancar(animator, 0.6).left
@@ -386,6 +382,67 @@ class TestVida:
     def testNaoTrocaDeHumorComAsAnimacoesDesligadas(self, animator: EyeAnimator) -> None:
         vistos = {animator.update(PASSO).expression for _ in range(60 * 60)}
         assert vistos == {Expression.NEUTRAL}
+
+
+class TestCorEBoca:
+    def testNeutroUsaAPaletaBase(self, animator: EyeAnimator) -> None:
+        frame = animator.update(PASSO)
+        assert frame.eyeColor == (4, 201, 253)
+        assert frame.backgroundColor == (0, 0, 0)
+
+    def testBravoFicaBrancoNoVermelho(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.ANGRY)
+        frame = avancar(animator, 0.6)  # deixa o morph de cor terminar
+        assert min(frame.eyeColor) > 200, "olho deveria ficar branco"
+        r, g, b = frame.backgroundColor
+        assert r > 100 and g < 60 and b < 60, "fundo deveria ficar vermelho"
+
+    def testACorTransitaGradualmente(self, animator: EyeAnimator) -> None:
+        """A cor acompanha o morph: nada de trocar de um quadro para o outro."""
+        avancar(animator, 0.3)
+        animator.setMood(Expression.ANGRY)
+        fundos = [f.backgroundColor[0] for f in coletar(animator, 0.6)]
+        saltos = [abs(b - a) for a, b in pairwise(fundos)]
+        assert max(saltos) < 60  # sobe aos poucos
+        assert fundos[-1] > 100  # e chega ao vermelho
+
+    def testBaseConfiguravel(self) -> None:
+        face = EyeAnimator(idleAnimations=False, baseEyeColor=(10, 20, 30))
+        assert face.update(PASSO).eyeColor == (10, 20, 30)
+
+    def testTodaExpressaoTemBoca(self, animator: EyeAnimator) -> None:
+        frame = animator.update(PASSO)
+        assert frame.mouth.alpha > 0.0  # a boca existe sempre, mesmo no repouso
+
+    def testFalarAbreABoca(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.SPEAKING)
+        animator.setSpeechLevel(1.0)
+        aberturas = [f.mouth.openness for f in coletar(animator, 1.0)]
+        assert max(aberturas) > 0.2
+
+
+class TestVortice:
+    def testTontoLigaOVortice(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.DIZZY)
+        swirls = [f.swirl for f in coletar(animator, 1.5)]
+        assert max(swirls) > 0.5
+
+    def testOVorticeGira(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.DIZZY)
+        fases = [f.swirlPhase for f in coletar(animator, 1.0)]
+        assert len(set(fases)) > 10
+
+    def testVortiveSomeAoVoltarAoNeutro(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.DIZZY)
+        avancar(animator, 3.4)  # alem da duracao da tontura
+        frame = avancar(animator, 0.5)
+        assert animator.currentExpression is Expression.NEUTRAL
+        assert frame.swirl < 0.05
+
+    def testAtividadeNaoGiraOVortice(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.THINKING)
+        frame = avancar(animator, 1.0)
+        assert frame.swirl == 0.0
 
 
 class TestEstabilidade:
