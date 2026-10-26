@@ -198,6 +198,11 @@ class MouthShape:
     #: efeito com a boca aberta (`openness` alto).
     teeth: float = 0.0
 
+    #: Deslocamento em unidades base (como no olho). E por aqui que o animador da
+    #: vida a boca: ela respira e desliza junto com os olhos em vez de ficar presa.
+    offsetX: float = 0.0
+    offsetY: float = 0.0
+
     def lerp(self, other: MouthShape, t: float) -> MouthShape:
         """Interpola ate `other`, campo a campo."""
         if t <= 0.0:
@@ -212,6 +217,8 @@ class MouthShape:
             thickness=self.thickness * inverse + other.thickness * t,
             alpha=self.alpha * inverse + other.alpha * t,
             teeth=self.teeth * inverse + other.teeth * t,
+            offsetX=self.offsetX * inverse + other.offsetX * t,
+            offsetY=self.offsetY * inverse + other.offsetY * t,
         )
 
     @property
