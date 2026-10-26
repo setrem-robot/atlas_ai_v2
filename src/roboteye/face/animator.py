@@ -174,19 +174,24 @@ SWIRL_RATE = 9.0
 # --- boca --------------------------------------------------------------------
 #: Quanto a voz abre a boca no pico, somado a abertura de repouso da fala.
 MOUTH_SPEECH_GAIN = 0.5
-#: Vida ociosa da boca, em sincronia com os olhos. Sem isto ela fica cravada no
-#: mesmo pixel enquanto os olhos respiram e piscam — e e isso que denuncia a
-#: face como "morta". Todos pequenos: a boca deve respirar junto, nao dancar.
+#: Vida ociosa da boca, em sincronia com os olhos. E tudo movimento de POSICAO,
+#: nao de forma: mover a boca na tela e so um blit, enquanto mudar a forma dela
+#: obriga a recalcular o campo. Assim a boca fica mais viva *e* mais barata —
+#: parada, a forma nao muda e o desenho sai do cache.
 #:
-#: `BOB` usa o mesmo BREATH_DRIFT dos olhos para os dois subirem e descerem
-#: juntos; `SWAY` desliza a boca um tico para o lado que ela olha; `OPEN` faz os
-#: labios abrirem de leve ao respirar; `WOBBLE` e uma oscilacao lenta e
-#: incomensuravel na curvatura, para a boca nunca repetir dois instantes iguais.
-MOUTH_BREATH_BOB = 4.0
-MOUTH_GAZE_SWAY = 0.05
-MOUTH_BREATH_OPEN = 0.028
-MOUTH_WOBBLE_FREQUENCY = 0.23
-MOUTH_WOBBLE_CURVE = 0.05
+#: `BOB` usa o mesmo ciclo de respiracao dos olhos para os dois subirem e
+#: descerem juntos; `SWAY` desliza a boca um tico para o lado que ela olha.
+MOUTH_BREATH_BOB = 6.0
+MOUTH_GAZE_SWAY = 0.06
+
+# --- deriva da face (a presenca viva) ----------------------------------------
+#: Uma deriva lenta aplicada aos olhos E a boca juntos, para a face inteira
+#: respirar como um corpo em vez de pecas soltas. Frequencias incomensuraveis,
+#: entao o movimento nunca se repete. Pequena e de graca: e so posicao.
+FACE_DRIFT_X = 7.0
+FACE_DRIFT_Y = 4.0
+FACE_DRIFT_FREQUENCY_X = 0.08
+FACE_DRIFT_FREQUENCY_Y = 0.053
 
 # --- dormir ------------------------------------------------------------------
 SLEEP_DURATION = 0.55
@@ -515,8 +520,11 @@ class EyeAnimator:
         self.followX = easing.approach(self.followX, gazeX, dt, FOLLOW_RATE)
         self.followY = easing.approach(self.followY, gazeY, dt, FOLLOW_RATE)
 
-        left = left.moved(gazeX, gazeY + lift)
-        right = right.moved(self.followX, self.followY + lift)
+        # A deriva lenta move os dois olhos (e a boca) juntos: a face respira como
+        # um corpo, nao como pecas soltas.
+        driftX, driftY = self.faceDrift()
+        left = left.moved(gazeX + driftX, gazeY + lift + driftY)
+        right = right.moved(self.followX + driftX, self.followY + lift + driftY)
 
         # -- curiosidade: o olho do lado para onde ela olha cresce -----------
         left, right = self.applyCuriosity(left, right, gazeX)
@@ -587,29 +595,38 @@ class EyeAnimator:
 
         breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * self.clock)
         gazeX = self.gazeX.value + self.microX.value
+        driftX, driftY = self.faceDrift()
 
-        offsetX = gazeX * MOUTH_GAZE_SWAY
-        offsetY = breath * MOUTH_BREATH_BOB
-        openness = mouth.openness + breath * MOUTH_BREATH_OPEN
-        wobble = math.sin(2.0 * math.pi * MOUTH_WOBBLE_FREQUENCY * self.clock + 0.7)
-        curve = mouth.curve + wobble * MOUTH_WOBBLE_CURVE
+        offsetX = gazeX * MOUTH_GAZE_SWAY + driftX
+        offsetY = breath * MOUTH_BREATH_BOB + driftY
+        openness = mouth.openness
 
         if self.activityAtual is Expression.SPEAKING:
             # O envelope vem em -1..1; aqui vira 0..1 (silencio fecha, pico abre).
             drive = (speechEnvelope + 1.0) * 0.5
-            openness += drive * MOUTH_SPEECH_GAIN
+            openness = min(1.0, openness + drive * MOUTH_SPEECH_GAIN)
         elif self.mood is Expression.RAGE:
-            # Treme junto com os olhos, para a furia tomar a cara inteira.
+            # Treme junto com os olhos, para a furia tomar a cara inteira. E so
+            # posicao: a forma da boca nao muda, entao segue saindo do cache.
             phase = 2.0 * math.pi * RAGE_SHAKE_FREQUENCY * self.clock
             offsetX += math.sin(phase) * RAGE_SHAKE_AMPLITUDE * 0.5
             offsetY += math.sin(phase * 1.3 + 1.0) * RAGE_SHAKE_AMPLITUDE * 0.4
 
         return replace(
             mouth,
-            openness=min(1.0, max(0.0, openness)),
-            curve=curve,
+            openness=openness,
             offsetX=mouth.offsetX + offsetX,
             offsetY=mouth.offsetY + offsetY,
+        )
+
+    def faceDrift(self) -> tuple[float, float]:
+        """Deriva lenta comum a olhos e boca: a face se move como um corpo so."""
+        if self.sleeping:
+            return 0.0, 0.0
+        t = self.clock
+        return (
+            math.sin(2.0 * math.pi * FACE_DRIFT_FREQUENCY_X * t) * FACE_DRIFT_X,
+            math.sin(2.0 * math.pi * FACE_DRIFT_FREQUENCY_Y * t + 1.3) * FACE_DRIFT_Y,
         )
 
     def updateSwirl(self, dt: float) -> float:

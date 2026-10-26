@@ -216,9 +216,7 @@ class TestONuncaFicarSurdo:
     def testSilencioLongoDemaisDerrubaACaptura(self, monkeypatch) -> None:
         ears = ouvido()
         relogio = iter([0.0, 0.0, 10.0])
-        monkeypatch.setattr(
-            "roboteye.hearing.voskEars.time.monotonic", lambda: next(relogio, 10.0)
-        )
+        monkeypatch.setattr("roboteye.hearing.voskEars.time.monotonic", lambda: next(relogio, 10.0))
 
         with pytest.raises(CapturaParou):
             list(ears.reconhecer(ReconhecedorFalso()))

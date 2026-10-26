@@ -116,9 +116,7 @@ class TestComandos:
 
         env = tmp_path / ".env"
         env.write_text("# meu comentario\nROBOTEYE_VOICE=francisca\n", encoding="utf-8")
-        monkeypatch.setattr(
-            "roboteye.voices.downloadVoice", lambda *_, **__: tmp_path / "voz.onnx"
-        )
+        monkeypatch.setattr("roboteye.voices.downloadVoice", lambda *_, **__: tmp_path / "voz.onnx")
 
         codigo = main(
             [
