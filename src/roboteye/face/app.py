@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-HINT_TEXT = "ESC sair · S dormir · ESPACO piscar · H ajuda"
+HINT_TEXT = "ESC sair · S dormir · ESPACO piscar · R furia · H ajuda"
 
 #: De quanto em quanto tempo o numero de FPS na ajuda e reescrito. O `Clock` ja
 #: entrega a media dos ultimos quadros; o que falta e nao mostra-la a cada um
@@ -186,6 +186,12 @@ class FaceApp:
             self.animator.toggleSleep()
         elif key == pygame.K_SPACE:
             self.animator.blinkNow()
+        elif key == pygame.K_r:
+            # Alterna o modo monstro ("maluco de brabo"), util para demonstrar.
+            atual = self.animator.mood
+            self.animator.setMood(
+                Expression.NEUTRAL if atual is Expression.RAGE else Expression.RAGE
+            )
         elif key == pygame.K_h:
             self.showHint = not self.showHint
 
