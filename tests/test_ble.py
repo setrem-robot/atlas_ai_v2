@@ -53,9 +53,7 @@ class TestLinhasQueChegam:
         escrever(ponte, b'"F"}\n')
         assert recebidos == [{"cmd": "F"}]
 
-    def testLinhaSemQuebraAindaNaoEComando(
-        self, ponte: PonteBLE, recebidos: list[dict]
-    ) -> None:
+    def testLinhaSemQuebraAindaNaoEComando(self, ponte: PonteBLE, recebidos: list[dict]) -> None:
         escrever(ponte, b'{"cmd":"F"}')
         assert recebidos == []
 
@@ -65,9 +63,7 @@ class TestLinhasQueChegam:
 
 
 class TestLixoNaLinha:
-    def testJsonInvalidoNaoDerrubaAPonte(
-        self, ponte: PonteBLE, recebidos: list[dict]
-    ) -> None:
+    def testJsonInvalidoNaoDerrubaAPonte(self, ponte: PonteBLE, recebidos: list[dict]) -> None:
         escrever(ponte, b"nao sou json\n")
         assert recebidos == []
         # E a proxima mensagem boa continua funcionando.
@@ -106,9 +102,7 @@ class TestQuandoOCelularSome:
         ponte.aoDesconectar()
         assert recebidos[-1] == {"tipo": "parada_emergencia"}
 
-    def testSobraDeLinhaNaoAtravessaConexoes(
-        self, ponte: PonteBLE, recebidos: list[dict]
-    ) -> None:
+    def testSobraDeLinhaNaoAtravessaConexoes(self, ponte: PonteBLE, recebidos: list[dict]) -> None:
         # Meia mensagem de uma conexao nao pode se juntar com a metade de
         # outra e virar um comando que ninguem mandou.
         escrever(ponte, b'{"cmd":')

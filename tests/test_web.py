@@ -192,17 +192,13 @@ class TestServidor:
         assert status == 500
         assert envfile.read(env)["ROBOTEYE_VOICE"] == "dora", "deixou o arquivo quebrado"
 
-    def testOTamanhoDoModeloDeEscutaEEditavelPelaPagina(
-        self, servidor: str, env: Path
-    ) -> None:
+    def testOTamanhoDoModeloDeEscutaEEditavelPelaPagina(self, servidor: str, env: Path) -> None:
         """Trocar entre rápido e preciso não pode exigir SSH.
 
         É a mesma ideia que já vale para a voz: o que se troca no dia a dia sai
         do `.env` e vai para a página do celular.
         """
-        status, dados = self.pedir(
-            servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "tiny"}
-        )
+        status, dados = self.pedir(servidor, "/api/config", {"ROBOTEYE_HEARING_MODEL_SIZE": "tiny"})
         assert status == 200, dados
         assert envfile.read(env)["ROBOTEYE_HEARING_MODEL_SIZE"] == "tiny"
 
@@ -344,9 +340,7 @@ class TestRotaDeConversa:
         _, corpo = self.pedir(servidorSozinho, "/api/state")
         assert corpo["conversa"]["disponivel"] is False
 
-    def testConversaTambemExigeOPIN(
-        self, servidorComRobo: str, entregues: list[str]
-    ) -> None:
+    def testConversaTambemExigeOPIN(self, servidorComRobo: str, entregues: list[str]) -> None:
         status, _ = self.pedir(servidorComRobo, "/api/conversar", {"texto": "ola"}, pin="000000")
         assert status == 401
         assert entregues == []

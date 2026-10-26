@@ -41,9 +41,7 @@ class TestAssistant:
         assert tipos.index("ThinkingStarted") < tipos.index("SpeechStarted")
         assert "AssistantReply" in tipos
 
-    def testRespostaEEntregueAVozFraseAFrase(
-        self, makeAssistant, makeLlm, recorder
-    ) -> None:
+    def testRespostaEEntregueAVozFraseAFrase(self, makeAssistant, makeLlm, recorder) -> None:
         """O assistente entrega cada frase assim que ela fecha.
 
         É o que permite começar a falar antes de o modelo terminar de escrever.

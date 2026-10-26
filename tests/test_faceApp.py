@@ -75,9 +75,7 @@ class TestFaceApp:
 
         assert face.animator.currentExpression is Expression.ANGRY
 
-    def testEventoDeEncerramentoParaOLoop(
-        self, settings: FaceSettings, bus: EventBus
-    ) -> None:
+    def testEventoDeEncerramentoParaOLoop(self, settings: FaceSettings, bus: EventBus) -> None:
         face = FaceApp(settings, bus)
 
         inicio = time.perf_counter()

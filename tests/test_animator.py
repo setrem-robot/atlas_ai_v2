@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import math
 import random
 from itertools import pairwise
 
 import pytest
 
-from roboteye.face.animator import BREATH_FREQUENCY, EyeAnimator, EyeFrame
+from roboteye.face.animator import EyeAnimator, EyeFrame
 from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
 
@@ -429,21 +428,24 @@ class TestCorEBoca:
         ys = [f.mouth.offsetY for f in quadros]
         assert max(ys) - min(ys) > 2.0  # amplitude visivel
 
-    def testBocaRespiraNoRitmoDosOlhos(self, animator: EyeAnimator) -> None:
-        """A boca segue o mesmo ciclo de respiracao que levanta os olhos."""
-        quadros = coletar(animator, 6.0)
-        ok = 0
-        for i, f in enumerate(quadros):
-            breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * (i + 1) * PASSO)
-            if abs(breath) < 0.1 or (f.mouth.offsetY >= 0) == (breath >= 0):
-                ok += 1
-        assert ok > len(quadros) * 0.9
+    def testBocaDeslizaNaHorizontalTambem(self, animator: EyeAnimator) -> None:
+        xs = [f.mouth.offsetX for f in coletar(animator, 4.0)]
+        assert max(xs) - min(xs) > 2.0  # desliza (sway + deriva), nao so no Y
+
+    def testOlhosEBocaDerivamJuntos(self, animator: EyeAnimator) -> None:
+        """A deriva lenta move a face como um corpo so; ela evolui e tem amplitude."""
+        inicio = animator.faceDrift()
+        avancar(animator, 2.5)
+        depois = animator.faceDrift()
+        assert inicio != depois
+        assert any(abs(c) > 1.0 for c in depois)
 
     def testBocaFicaQuietaDormindo(self, animator: EyeAnimator) -> None:
         animator.sleep()
         avancar(animator, 1.0)
         posicoes = {round(f.mouth.offsetY, 3) for f in coletar(animator, 1.0)}
         assert len(posicoes) == 1  # parada, como os olhos
+        assert animator.faceDrift() == (0.0, 0.0)
 
 
 class TestMonstro:

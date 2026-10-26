@@ -92,9 +92,7 @@ class TestAprender:
         assert "o laboratorio fecha as dez" in PersonaStore(tmp_path, "atlas").loadFacts()
 
     def testArquivoEEditavelAMao(self, store: PersonaStore) -> None:
-        store.memoryPath.write_text(
-            "# um comentário\n\n- fato um\n- fato dois\n", encoding="utf-8"
-        )
+        store.memoryPath.write_text("# um comentário\n\n- fato um\n- fato dois\n", encoding="utf-8")
         assert store.loadFacts() == ("fato um", "fato dois")
 
     def testAceitaLinhasSemTracinho(self, store: PersonaStore) -> None:

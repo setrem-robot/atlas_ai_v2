@@ -251,9 +251,7 @@ class TestEsperaDeArranque:
         assert local.falas == [], "a reserva não devia ter falado"
         assert dormidas, "esperou sem dormir — isso viraria laço quente"
 
-    def testDesisteEFalaPelaReservaSeARedeNaoVier(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def testDesisteEFalaPelaReservaSeARedeNaoVier(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Sem internet nenhuma, o robô ainda tem que dar bom dia."""
         agora = [0.0]
         monkeypatch.setattr("roboteye.speech.fallback.time.monotonic", lambda: agora[0])

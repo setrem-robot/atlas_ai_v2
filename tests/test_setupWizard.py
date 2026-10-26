@@ -166,9 +166,7 @@ class TestGravacao:
         assert len(pedidas) == 2
         assert plano.downloads == tuple(pedidas)
 
-    def testSkipDownloadNaoBaixaNada(
-        self, projeto: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def testSkipDownloadNaoBaixaNada(self, projeto: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "roboteye.voices.downloadVoice",
             lambda *_, **__: pytest.fail("não deveria baixar"),
