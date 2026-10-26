@@ -63,9 +63,7 @@ class TestVoiceSettings:
         monkeypatch.setenv("ROBOTEYE_VOICE_CONFIG", "/tmp/outro.json")
         assert VoiceSettings.fromEnv().resolvedConfigPath().name == "outro.json"
 
-    def testCaminhoRelativoResolveAPartirDaRaiz(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def testCaminhoRelativoResolveAPartirDaRaiz(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ROBOTEYE_VOICE_MODEL", "models/x/y.onnx")
         assert VoiceSettings.fromEnv().modelPath.is_absolute()
 

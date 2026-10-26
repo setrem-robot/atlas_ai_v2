@@ -43,9 +43,7 @@ class TestTraducao:
             {},
         ],
     )
-    def testOQueNaoEMovimentoNaoEntra(
-        self, comandos: ComandosRecebidos, bruto: dict
-    ) -> None:
+    def testOQueNaoEMovimentoNaoEntra(self, comandos: ComandosRecebidos, bruto: dict) -> None:
         comandos.anotar(bruto, agora=100.0)
         assert comandos.instantaneo(agora=100.1)["total"] == 0
 

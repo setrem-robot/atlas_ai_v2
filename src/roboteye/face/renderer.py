@@ -71,6 +71,11 @@ GLOW_RESOLUTION = 72
 #: Quanto o degrade escurece a base do olho.
 GRADIENT_DEPTH = 0.16
 
+#: Acima desta fracao de escala, desenha no tamanho final e nao reescala. Pula o
+#: smoothscale inutil de um reajuste de poucos por cento (o olho a 800x480 cai
+#: exatamente nesse caso), sem diferenca visivel.
+NO_RESCALE_ABOVE = 0.9
+
 
 def qualityFor(name: str) -> RenderQuality:
     """Resolve o nome de um nivel de qualidade.
@@ -106,6 +111,10 @@ class EyeRenderer:
         # todos eles de uma vez, preservando as proporcoes entre expressoes.
         self.radiusScale = cornerRadius / DEFAULT_RADIUS
         self.buffers: dict[tuple[int, int], pygame.Surface] = {}
+        #: Superficies de boca ja prontas, por forma+cor. A vida da boca e toda de
+        #: posicao (ela desliza na tela), entao parada a forma nao muda e o desenho
+        #: sai daqui — um blit, sem recalcular campo nem recolorir.
+        self.mouthCache: dict[tuple, pygame.Surface] = {}
         self.buildFonts()
 
     def resize(self, surface: pygame.Surface, layout: EyeLayout) -> None:
@@ -113,6 +122,7 @@ class EyeRenderer:
         self.surface = surface
         self.layout = layout
         self.buffers.clear()
+        self.mouthCache.clear()
         self.buildFonts()
 
     def buildFonts(self) -> None:
@@ -268,6 +278,13 @@ class EyeRenderer:
         largest = max(targetWidth, targetHeight)
         factor = min(1.0, cap / largest) if cap else 1.0
 
+        # Reescalonar por uma fracao minuscula (ex.: 200 -> 203 px) custa um
+        # smoothscale por quadro e nao muda nada que o olho veja. Quando a grade
+        # ja esta quase do tamanho final, desenha direto no tamanho final e pula
+        # o smoothscale — era o maior desperdicio do quadro no perfil do Pi.
+        if factor >= NO_RESCALE_ABOVE:
+            factor = 1.0
+
         gridWidth = max(1, round(targetWidth * factor))
         gridHeight = max(1, round(targetHeight * factor))
 
@@ -349,10 +366,46 @@ class EyeRenderer:
         de distancia dos olhos, entao herda o antialiasing de graca.
         """
         layout = self.layout
+        surface = self.mouthSurface(mouth, color)
+        if surface is None:
+            return
+
+        # O offset (em unidades base) e o que faz a boca respirar e deslizar junto
+        # com os olhos. So a posicao muda com a vida ociosa, nao a forma — por isso
+        # o desenho acima sai do cache.
+        width, height = surface.get_size()
+        centerX = layout.mouthCenterX + mouth.offsetX * layout.scale
+        centerY = layout.mouthCenterY + mouth.offsetY * layout.scale
+        self.surface.blit(surface, (round(centerX - width / 2), round(centerY - height / 2)))
+
+    def mouthSurface(self, mouth: MouthShape, color: tuple[int, int, int]) -> pygame.Surface | None:
+        """A boca ja desenhada e colorida, do cache quando a forma nao mudou.
+
+        A chave ignora o offset de proposito — ele so decide ONDE colar, nao o
+        desenho. A forma e quantizada para a boca falando (que muda de abertura a
+        cada quadro) reaproveitar um punhado de superficies em vez de criar uma por
+        quadro.
+        """
+
+        def q(value: float, step: float) -> float:
+            return round(value / step) * step
+
+        key = (
+            q(mouth.width, 0.02),
+            q(mouth.openness, 0.03),
+            q(mouth.curve, 0.03),
+            round(mouth.thickness, 3),
+            q(mouth.teeth, 0.1),
+            round(mouth.alpha, 2),
+            color,
+        )
+        cached = self.mouthCache.get(key)
+        if cached is not None:
+            return cached if cached.get_width() else None
+
+        layout = self.layout
         drawWidth = max(1.0, layout.mouthWidth * mouth.width)
         reserve = float(layout.mouthHeight)
-
-        # Margem para as pontas arredondadas e para a curva nao encostar na borda.
         padding = reserve * 0.18
         targetWidth = drawWidth + 2.0 * padding
         targetHeight = reserve
@@ -360,34 +413,38 @@ class EyeRenderer:
         cap = self.quality.resolutionCap
         largest = max(targetWidth, targetHeight)
         factor = min(1.0, cap / largest) if cap else 1.0
+        if factor >= NO_RESCALE_ABOVE:
+            factor = 1.0
 
         gridWidth = max(1, round(targetWidth * factor))
         gridHeight = max(1, round(targetHeight * factor))
-
         geometry = mask.MouthGeometry(
             gridWidth=gridWidth,
             gridHeight=gridHeight,
             mouthWidth=drawWidth * factor,
             mouthHeight=reserve * factor,
         )
-        field = mask.mouthField(mouth, geometry)
-        alpha = mask.fieldToAlpha(field, geometry.pixel) * mouth.alpha
-        if not alpha.any():
-            return
+        alpha = mask.fieldToAlpha(mask.mouthField(mouth, geometry), geometry.pixel) * mouth.alpha
 
-        surface = self.paint(alpha, gradient=False, color=color)
         blitWidth = max(1, round(targetWidth))
         blitHeight = max(1, round(targetHeight))
-        if (gridWidth, gridHeight) != (blitWidth, blitHeight):
-            surface = pygame.transform.smoothscale(surface, (blitWidth, blitHeight))
+        surface: pygame.Surface
+        if not alpha.any():
+            # Marca "vazio" no cache (superficie 0x0) para nao recalcular toda vez.
+            surface = pygame.Surface((0, 0))
+        else:
+            painted = self.paint(alpha, gradient=False, color=color)
+            if (gridWidth, gridHeight) != (blitWidth, blitHeight):
+                surface = pygame.transform.smoothscale(painted, (blitWidth, blitHeight))
+            else:
+                # `paint` devolve um buffer reaproveitado; copia para guardar no cache.
+                surface = painted.copy()
 
-        # O offset (em unidades base) e o que faz a boca respirar e deslizar junto
-        # com os olhos, em vez de ficar cravada no mesmo pixel.
-        centerX = layout.mouthCenterX + mouth.offsetX * layout.scale
-        centerY = layout.mouthCenterY + mouth.offsetY * layout.scale
-        left = round(centerX - blitWidth / 2)
-        top = round(centerY - blitHeight / 2)
-        self.surface.blit(surface, (left, top))
+        # Um teto simples: a vida ociosa visita um punhado de formas e as repete.
+        if len(self.mouthCache) > 80:
+            self.mouthCache.clear()
+        self.mouthCache[key] = surface
+        return surface if surface.get_width() else None
 
     def drawSpiral(
         self,
