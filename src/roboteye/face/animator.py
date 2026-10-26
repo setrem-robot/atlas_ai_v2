@@ -31,7 +31,19 @@ from roboteye.face import easing
 from roboteye.face.easing import Tween
 from roboteye.face.expressions import IDLE_WEIGHTS, Expression
 from roboteye.face.layout import LOOK_RANGE
-from roboteye.face.shapes import EyeShape, presetFor
+from roboteye.face.shapes import (
+    HIDDEN_MOUTH,
+    Color,
+    EyeShape,
+    MouthShape,
+    accentFor,
+    mouthFor,
+    presetFor,
+)
+
+#: Paleta base, quando o ambiente nao diz outra.
+DEFAULT_EYE_COLOR: Color = (4, 201, 253)
+DEFAULT_BACKGROUND: Color = (0, 0, 0)
 
 # --- transicao de expressao --------------------------------------------------
 MORPH_DURATION = 0.38
@@ -144,6 +156,19 @@ DIZZY_FREQUENCY = 2.1
 DIZZY_AMPLITUDE = 26.0
 DIZZY_DURATION = 2.6
 
+# --- vortice do tonto --------------------------------------------------------
+#: Velocidade de giro da espiral, em radianos por segundo.
+SWIRL_SPEED = 7.0
+#: Tempos de entrada e saida do vortice (ele nasce e some suave, nao seco).
+SWIRL_RAMP_IN = 0.4
+SWIRL_RAMP_OUT = 0.6
+#: Com que rapidez o valor do vortice persegue o alvo.
+SWIRL_RATE = 9.0
+
+# --- boca --------------------------------------------------------------------
+#: Quanto a voz abre a boca no pico, somado a abertura de repouso da fala.
+MOUTH_SPEECH_GAIN = 0.5
+
 # --- dormir ------------------------------------------------------------------
 SLEEP_DURATION = 0.55
 WAKE_BLINKS = 2
@@ -151,11 +176,39 @@ WAKE_BLINKS = 2
 
 @dataclass(frozen=True, slots=True)
 class EyeFrame:
-    """O par de olhos num instante, pronto para desenhar."""
+    """O par de olhos num instante, pronto para desenhar.
+
+    Alem das formas, o quadro carrega a paleta e a boca ja resolvidas: a logica
+    temporal (incluindo a transicao de cor e de boca) vive aqui no animador, e o
+    renderizador so recebe numeros prontos. Os campos novos tem padrao, entao
+    quem monta um quadro a mao (a folha de contato, os testes) continua podendo
+    passar so os olhos.
+    """
 
     expression: Expression
     left: EyeShape
     right: EyeShape
+    eyeColor: Color = DEFAULT_EYE_COLOR
+    backgroundColor: Color = DEFAULT_BACKGROUND
+    mouth: MouthShape = HIDDEN_MOUTH
+    #: Quanto o olho virou vortice, de 0 (olho normal) a 1 (so a espiral).
+    swirl: float = 0.0
+    #: Rotacao da espiral, em radianos.
+    swirlPhase: float = 0.0
+
+
+def lerpColor(a: Color, b: Color, t: float) -> Color:
+    """Interpola duas cores componente a componente."""
+    if t <= 0.0:
+        return a
+    if t >= 1.0:
+        return b
+    inverse = 1.0 - t
+    return (
+        round(a[0] * inverse + b[0] * t),
+        round(a[1] * inverse + b[1] * t),
+        round(a[2] * inverse + b[2] * t),
+    )
 
 
 def closeLids(shape: EyeShape, blink: float) -> EyeShape:
@@ -190,9 +243,18 @@ def closeLids(shape: EyeShape, blink: float) -> EyeShape:
 class EyeAnimator:
     """Produz o movimento dos olhos, quadro a quadro."""
 
-    def __init__(self, *, idleAnimations: bool = True, rng: random.Random | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        idleAnimations: bool = True,
+        rng: random.Random | None = None,
+        baseEyeColor: Color = DEFAULT_EYE_COLOR,
+        baseBackground: Color = DEFAULT_BACKGROUND,
+    ) -> None:
         self.rng = rng or random.Random()
         self.idleAnimations = idleAnimations
+        self.baseEye = baseEyeColor
+        self.baseBackground = baseBackground
 
         # -- o que ela sente e o que ela faz --------------------------------
         self.mood = Expression.NEUTRAL
@@ -205,6 +267,18 @@ class EyeAnimator:
         self.leftTo = self.leftFrom
         self.rightTo = self.leftFrom
         self.morph = Tween(1.0, easing.easeInOutCubic)
+
+        # -- transicao de boca e de cor (acompanham o mesmo morph) ----------
+        self.mouthFrom = mouthFor(Expression.NEUTRAL)
+        self.mouthTo = self.mouthFrom
+        self.eyeFrom = baseEyeColor
+        self.eyeTo = baseEyeColor
+        self.bgFrom = baseBackground
+        self.bgTo = baseBackground
+
+        # -- vortice do tonto ------------------------------------------------
+        self.swirl = 0.0
+        self.swirlPhase = 0.0
 
         # -- olhar -----------------------------------------------------------
         self.gazeX = Tween(0.0, easing.easeOutCubic)
@@ -351,17 +425,39 @@ class EyeAnimator:
         self.morph.update(dt)
         self.speechPop.update(dt)
 
+        # A amplitude da voz e medida uma vez por quadro: o olho e a boca pulsam
+        # com ela juntos. Medir duas vezes adiantaria o suavizador em dobro.
+        envelope = self.speechDrive(dt) if self.activityAtual is Expression.SPEAKING else 0.0
+
         left = self.leftFrom.lerp(self.leftTo, self.morph.value)
         right = self.rightFrom.lerp(self.rightTo, self.morph.value)
+        left, right = self.applyLife(left, right, dt, envelope)
 
-        left, right = self.applyLife(left, right, dt)
+        mouth = self.mouthFrom.lerp(self.mouthTo, self.morph.value)
+        mouth = self.animateMouth(mouth, envelope)
 
-        return EyeFrame(expression=self.currentExpression, left=left, right=right)
+        eyeColor = lerpColor(self.eyeFrom, self.eyeTo, self.morph.value)
+        bgColor = lerpColor(self.bgFrom, self.bgTo, self.morph.value)
+
+        swirl = self.updateSwirl(dt)
+
+        return EyeFrame(
+            expression=self.currentExpression,
+            left=left,
+            right=right,
+            eyeColor=eyeColor,
+            backgroundColor=bgColor,
+            mouth=mouth,
+            swirl=swirl,
+            swirlPhase=self.swirlPhase,
+        )
 
     # -----------------------------------------------------------------------
     # Camadas de movimento
     # -----------------------------------------------------------------------
-    def applyLife(self, left: EyeShape, right: EyeShape, dt: float) -> tuple[EyeShape, EyeShape]:
+    def applyLife(
+        self, left: EyeShape, right: EyeShape, dt: float, speechEnvelope: float
+    ) -> tuple[EyeShape, EyeShape]:
         """Sobrepoe a forma de repouso tudo aquilo que se mexe."""
         blink = self.blink.value
         breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * self.clock)
@@ -382,7 +478,7 @@ class EyeAnimator:
 
         # -- falar: o olho pulsa junto com a voz ------------------------------
         if self.activityAtual is Expression.SPEAKING:
-            envelope = self.speechDrive(dt)
+            envelope = speechEnvelope
             height *= 1.0 + envelope * SPEECH_HEIGHT
             width *= 1.0 - envelope * SPEECH_WIDTH
             lift -= envelope * SPEECH_LIFT
@@ -452,6 +548,45 @@ class EyeAnimator:
 
         return left, right
 
+    def animateMouth(self, mouth: MouthShape, speechEnvelope: float) -> MouthShape:
+        """Da vida a boca de repouso: ao falar, ela abre e fecha com a voz."""
+        if self.activityAtual is not Expression.SPEAKING:
+            return mouth
+        # O envelope vem em -1..1; aqui vira 0..1 (silencio fecha, pico abre).
+        drive = (speechEnvelope + 1.0) * 0.5
+        openness = min(1.0, mouth.openness + drive * MOUTH_SPEECH_GAIN)
+        return replace(mouth, openness=openness)
+
+    def updateSwirl(self, dt: float) -> float:
+        """O vortice do tonto: sobe quando ela fica tonta, gira, e some ao passar.
+
+        So existe durante o humor DIZZY e some junto com ele. Uma atividade
+        (pensar, falar) tem prioridade e zera o alvo, como todo o resto.
+        """
+        target = 0.0
+        if (
+            self.mood is Expression.DIZZY
+            and self.activityAtual is None
+            and not self.sleeping
+            and self.moodClock < DIZZY_DURATION
+        ):
+            rampIn = self.moodClock / SWIRL_RAMP_IN
+            rampOut = (DIZZY_DURATION - self.moodClock) / SWIRL_RAMP_OUT
+            target = max(0.0, min(1.0, rampIn, rampOut))
+
+        self.swirl = easing.approach(self.swirl, target, dt, SWIRL_RATE)
+        if self.swirl > 0.001:
+            self.swirlPhase = (self.swirlPhase + dt * SWIRL_SPEED) % (2.0 * math.pi)
+        return self.swirl
+
+    def resolveColors(self, expression: Expression) -> tuple[Color, Color]:
+        """Paleta de uma expressao: o acento quando ha, a base quando nao."""
+        accent = accentFor(expression)
+        return (
+            accent.eye if accent.eye is not None else self.baseEye,
+            accent.background if accent.background is not None else self.baseBackground,
+        )
+
     def speechDrive(self, dt: float) -> float:
         """O que move o olho enquanto ela fala, de -1 a 1.
 
@@ -487,9 +622,7 @@ class EyeAnimator:
         if self.mood.isTransient:
             limit = LAUGH_DURATION if self.mood is Expression.LAUGH else DIZZY_DURATION
             if self.moodClock >= limit:
-                seguinte = (
-                    Expression.HAPPY if self.mood is Expression.LAUGH else Expression.NEUTRAL
-                )
+                seguinte = Expression.HAPPY if self.mood is Expression.LAUGH else Expression.NEUTRAL
                 self.setMood(seguinte)
 
         if not self.idleAnimations or self.activityAtual is not None or self.sleeping:
@@ -621,7 +754,16 @@ class EyeAnimator:
         progress = self.morph.value
         self.leftFrom = self.leftFrom.lerp(self.leftTo, progress)
         self.rightFrom = self.rightFrom.lerp(self.rightTo, progress)
+        # A boca e a cor atravessam o mesmo morph dos olhos: tudo chega junto, sem
+        # a boca mudar antes ou a cor depois.
+        self.mouthFrom = self.mouthFrom.lerp(self.mouthTo, progress)
+        self.eyeFrom = lerpColor(self.eyeFrom, self.eyeTo, progress)
+        self.bgFrom = lerpColor(self.bgFrom, self.bgTo, progress)
+
         self.leftTo, self.rightTo = self.targetShapes()
+        self.mouthTo = mouthFor(self.currentExpression)
+        self.eyeTo, self.bgTo = self.resolveColors(self.currentExpression)
+
         self.morph.snap(0.0)
         self.morph.to(1.0, duration, easing.easeInOutCubic)
 

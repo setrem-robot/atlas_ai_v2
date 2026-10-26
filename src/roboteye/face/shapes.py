@@ -20,6 +20,8 @@ from dataclasses import dataclass, replace
 
 from roboteye.face.expressions import Expression
 
+Color = tuple[int, int, int]
+
 #: Raio padrao dos cantos, como fracao do menor lado do olho.
 #: 0.5 seria um circulo perfeito; 0.30 da o quadrado de cantos macios.
 DEFAULT_RADIUS = 0.30
@@ -160,3 +162,119 @@ _PRESETS: dict[Expression, EyeShape] = {
 def presetFor(expression: Expression) -> EyeShape:
     """Forma de repouso de uma expressao."""
     return _PRESETS.get(expression, NEUTRAL)
+
+
+# ---------------------------------------------------------------------------
+# A boca: uma linha que se curva
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class MouthShape:
+    """Estado da boca num instante.
+
+    A boca segue a mesma ideia do olho: nao e um desenho escolhido de um
+    catalogo, e um punhado de parametros continuos que se interpolam. No repouso
+    ela e so um traco discreto; ao sentir algo, ela se curva, abre e ganha
+    presenca. Mantendo-a minima no neutro, a face continua sendo "dois olhos" na
+    maior parte do tempo, como pediram.
+    """
+
+    #: Comprimento, como fracao da largura base da boca.
+    width: float = 0.55
+    #: Abertura vertical (0 = um traco, 1 = bem aberta).
+    openness: float = 0.0
+    #: Curvatura: +1 sorri (barriga para baixo), -1 e a boca do mal (para cima).
+    curve: float = 0.0
+    #: Meia-espessura do traco, em unidades de meia-altura da boca.
+    thickness: float = 0.11
+    #: Visibilidade: 0 some, 1 cheia. E o que deixa a boca discreta no repouso.
+    alpha: float = 0.5
+
+    def lerp(self, other: MouthShape, t: float) -> MouthShape:
+        """Interpola ate `other`, campo a campo."""
+        if t <= 0.0:
+            return self
+        if t >= 1.0:
+            return other
+        inverse = 1.0 - t
+        return MouthShape(
+            width=self.width * inverse + other.width * t,
+            openness=self.openness * inverse + other.openness * t,
+            curve=self.curve * inverse + other.curve * t,
+            thickness=self.thickness * inverse + other.thickness * t,
+            alpha=self.alpha * inverse + other.alpha * t,
+        )
+
+    @property
+    def isHidden(self) -> bool:
+        """Se esta discreta demais para valer o desenho."""
+        return self.alpha <= 0.02 or self.width <= 0.02
+
+
+#: Boca invisivel: o padrao do `EyeFrame`, para quem monta um quadro a mao (os
+#: testes e a folha de contato) nao herdar uma boca sem pedir.
+HIDDEN_MOUTH = MouthShape(alpha=0.0)
+
+# Presets: um ponto no espaco de parametros para cada expressao.
+MOUTH_NEUTRAL = MouthShape(width=0.52, curve=0.0, thickness=0.11, alpha=0.5)
+MOUTH_HAPPY = MouthShape(width=0.80, openness=0.06, curve=0.85, thickness=0.13, alpha=0.95)
+#: A boca do mal: larga, aberta e virada para cima nas pontas (rosnado).
+MOUTH_ANGRY = MouthShape(width=0.96, openness=0.24, curve=-0.95, thickness=0.15, alpha=1.0)
+MOUTH_TIRED = MouthShape(width=0.48, curve=-0.22, thickness=0.10, alpha=0.5)
+MOUTH_LAUGH = MouthShape(width=0.84, openness=0.46, curve=0.7, thickness=0.14, alpha=1.0)
+MOUTH_DIZZY = MouthShape(width=0.42, openness=0.34, curve=0.05, thickness=0.13, alpha=0.75)
+MOUTH_SLEEP = MouthShape(width=0.40, curve=0.0, thickness=0.09, alpha=0.3)
+MOUTH_THINKING = MouthShape(width=0.46, curve=-0.12, thickness=0.10, alpha=0.5)
+#: Falar parte daqui; a abertura e modulada pela voz no animador.
+MOUTH_SPEAKING = MouthShape(width=0.60, openness=0.08, curve=0.15, thickness=0.12, alpha=0.85)
+MOUTH_LISTENING = MouthShape(width=0.54, openness=0.05, curve=0.12, thickness=0.11, alpha=0.6)
+
+_MOUTHS: dict[Expression, MouthShape] = {
+    Expression.NEUTRAL: MOUTH_NEUTRAL,
+    Expression.HAPPY: MOUTH_HAPPY,
+    Expression.ANGRY: MOUTH_ANGRY,
+    Expression.TIRED: MOUTH_TIRED,
+    Expression.LAUGH: MOUTH_LAUGH,
+    Expression.DIZZY: MOUTH_DIZZY,
+    Expression.SLEEP: MOUTH_SLEEP,
+    Expression.THINKING: MOUTH_THINKING,
+    Expression.SPEAKING: MOUTH_SPEAKING,
+    Expression.LISTENING: MOUTH_LISTENING,
+}
+
+
+def mouthFor(expression: Expression) -> MouthShape:
+    """Boca de repouso de uma expressao."""
+    return _MOUTHS.get(expression, MOUTH_NEUTRAL)
+
+
+# ---------------------------------------------------------------------------
+# Cores de acento: a emocao tambem muda a paleta
+# ---------------------------------------------------------------------------
+#: Olhos brancos quando brava: o ciano some e da lugar ao branco, que sobre o
+#: fundo vermelho le como fuzileiro irritado em vez de robozinho simpatico.
+ANGRY_EYE: Color = (238, 240, 248)
+#: Fundo todo vermelho. Escuro o bastante para o branco dos olhos estourar por
+#: cima, vivo o bastante para a tela inteira "ficar vermelha".
+ANGRY_BACKGROUND: Color = (142, 12, 12)
+
+
+@dataclass(frozen=True, slots=True)
+class Accent:
+    """Desvio de cor de uma expressao em relacao a paleta base.
+
+    `None` quer dizer "usa a cor base" — e o caso da maioria das expressoes, que
+    mantem o ciano no preto. So quem precisa gritar troca de cor.
+    """
+
+    eye: Color | None = None
+    background: Color | None = None
+
+
+_ACCENTS: dict[Expression, Accent] = {
+    Expression.ANGRY: Accent(eye=ANGRY_EYE, background=ANGRY_BACKGROUND),
+}
+
+
+def accentFor(expression: Expression) -> Accent:
+    """Desvio de cor de uma expressao (vazio = mantem a paleta base)."""
+    return _ACCENTS.get(expression, Accent())

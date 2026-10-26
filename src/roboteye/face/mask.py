@@ -29,11 +29,12 @@ mesmo quando o olho esta achatado por uma piscada.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
-from roboteye.face.shapes import EyeShape
+from roboteye.face.shapes import EyeShape, MouthShape
 
 #: Raio do arredondamento aplicado a cada quina onde dois campos se encontram,
 #: em unidades de altura do olho. E o parametro que separa "palpebra" de
@@ -208,6 +209,114 @@ def eyeField(
         field = smoothIntersect(field, -occluder, fillet)
 
     return field
+
+
+# ---------------------------------------------------------------------------
+# A boca
+# ---------------------------------------------------------------------------
+#: Quanto a curvatura levanta ou baixa a boca no maximo, em meia-alturas de boca.
+MOUTH_CURVE_DEPTH = 0.5
+
+#: Quanto `openness` engrossa a boca, por unidade. E o que transforma um traco
+#: numa boca aberta sem precisar de um parametro separado de altura.
+MOUTH_OPEN_GAIN = 0.55
+
+
+@dataclass(frozen=True, slots=True)
+class MouthGeometry:
+    """Como amostrar o campo da boca. A unidade do campo e a meia-altura da boca."""
+
+    gridWidth: int
+    gridHeight: int
+    mouthWidth: float
+    mouthHeight: float
+    subpixelX: float = 0.0
+    subpixelY: float = 0.0
+
+    @property
+    def unit(self) -> float:
+        """Meia-altura da boca em pixels da grade — a unidade do campo."""
+        return max(self.mouthHeight / 2.0, 1e-6)
+
+    @property
+    def pixel(self) -> float:
+        """Tamanho de um pixel da grade, na unidade do campo."""
+        return 1.0 / self.unit
+
+
+def mouthField(mouth: MouthShape, geometry: MouthGeometry) -> np.ndarray:
+    """Campo de distancia da boca: uma capsula que segue uma curva.
+
+    A boca e o conjunto de pontos a menos de `meia-espessura` da linha central
+    `y = curve*(1 - u^2)`, com `u` indo de -1 a 1 ao longo do comprimento. Clampar
+    `u` nas pontas arredonda as extremidades de graca (a distancia passa a ser
+    ate o ponto final da linha), do mesmo jeito que o olho arredonda as quinas.
+    """
+    gridWidth = max(1, geometry.gridWidth)
+    gridHeight = max(1, geometry.gridHeight)
+    unit = geometry.unit
+
+    xs = np.arange(gridWidth, dtype=np.float32) + 0.5 - gridWidth / 2.0
+    ys = np.arange(gridHeight, dtype=np.float32) + 0.5 - gridHeight / 2.0
+    xs = (xs - geometry.subpixelX) / unit
+    ys = (ys - geometry.subpixelY) / unit
+
+    x = xs[None, :]
+    y = ys[:, None]
+
+    halfLength = max((geometry.mouthWidth / 2.0) / unit, 1e-6)
+    u = np.clip(x / halfLength, -1.0, 1.0)
+    centerX = u * halfLength
+    # curve positivo baixa o meio (barriga para baixo) = sorriso; negativo sobe o
+    # meio e deixa as pontas caidas = a boca do mal.
+    centerY = mouth.curve * MOUTH_CURVE_DEPTH * (1.0 - u * u)
+
+    halfThickness = mouth.thickness + mouth.openness * MOUTH_OPEN_GAIN
+    distance = np.hypot(x - centerX, y - centerY)
+    return distance - halfThickness
+
+
+# ---------------------------------------------------------------------------
+# O vortice do tonto
+# ---------------------------------------------------------------------------
+#: Quantas voltas a espiral da do centro ate a borda do olho.
+SPIRAL_TURNS = 2.6
+
+
+def spiralField(gridWidth: int, gridHeight: int, phase: float) -> np.ndarray:
+    """Opacidade de um vortice hipnotico, de 0 a 1, dentro do circulo do olho.
+
+    Classico "@_@": no lugar do olho, uma espiral que gira. Nasce de uma funcao
+    continua (nada de desenhar linha a linha), entao sai com antialiasing de
+    graca e e barata — e so e calculada quando o robo esta tonto, que e raro e
+    passageiro.
+    """
+    gridWidth = max(1, gridWidth)
+    gridHeight = max(1, gridHeight)
+    xs = (np.arange(gridWidth, dtype=np.float32) + 0.5) / gridWidth * 2.0 - 1.0
+    ys = (np.arange(gridHeight, dtype=np.float32) + 0.5) / gridHeight * 2.0 - 1.0
+
+    x = xs[None, :]
+    y = ys[:, None]
+    r = np.hypot(x, y)
+    theta = np.arctan2(y, x)
+
+    # Uma volta do braco a cada `1/SPIRAL_TURNS` do raio; o `theta` inclina a
+    # banda, o que a torna espiral em vez de aneis concentricos. A fase gira tudo.
+    wave = SPIRAL_TURNS * 2.0 * math.pi * r - theta + phase
+    band = 0.5 + 0.5 * np.cos(wave)
+    arms = smoothstep(0.55, 0.85, band)
+
+    # Recorta no circulo do olho, com a borda suave; e um disco preenchido por
+    # dentro para o centro nao virar um furo.
+    disk = smoothstep(1.0, 0.86, r)
+    return (arms * disk).astype(np.float32)
+
+
+def smoothstep(edge0: float, edge1: float, value: np.ndarray) -> np.ndarray:
+    """Transicao suave de 0 a 1 entre `edge0` e `edge1` (aceita edge0 > edge1)."""
+    t = np.clip((value - edge0) / (edge1 - edge0), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
 
 
 def fieldToAlpha(field: np.ndarray, edge: float) -> np.ndarray:

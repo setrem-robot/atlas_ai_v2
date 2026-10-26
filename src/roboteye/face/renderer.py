@@ -36,7 +36,7 @@ from roboteye.face import mask
 from roboteye.face.animator import EyeFrame
 from roboteye.face.layout import EyeLayout
 from roboteye.face.mask import MaskGeometry
-from roboteye.face.shapes import DEFAULT_RADIUS, EyeShape
+from roboteye.face.shapes import DEFAULT_RADIUS, EyeShape, MouthShape
 from roboteye.face.theme import Theme
 
 
@@ -95,11 +95,13 @@ class EyeRenderer:
         *,
         quality: RenderQuality = MEDIUM,
         cornerRadius: float = DEFAULT_RADIUS,
+        mouthEnabled: bool = True,
     ) -> None:
         self.surface = surface
         self.layout = layout
         self.theme = theme
         self.quality = quality
+        self.mouthEnabled = mouthEnabled
         # Cada forma traz o proprio raio; a configuracao do usuario reescala
         # todos eles de uma vez, preservando as proporcoes entre expressoes.
         self.radiusScale = cornerRadius / DEFAULT_RADIUS
@@ -129,18 +131,47 @@ class EyeRenderer:
         hint: str = "",
         captionOpacity: float = 1.0,
     ) -> None:
-        self.surface.fill(self.theme.background)
+        # A cor e o fundo vem do quadro, nao do tema: a transicao de emocao (o
+        # ciano virando branco, o preto virando vermelho) e logica temporal, e
+        # mora no animador. O tema segue dono so das cores da legenda.
+        self.surface.fill(frame.backgroundColor)
 
         layout = self.layout
-        self.drawEye(frame.left, layout.leftEyeX, innerIsRight=True)
-        self.drawEye(frame.right, layout.rightEyeX, innerIsRight=False)
+        self.drawEye(
+            frame.left,
+            layout.leftEyeX,
+            innerIsRight=True,
+            color=frame.eyeColor,
+            swirl=frame.swirl,
+            swirlPhase=frame.swirlPhase,
+        )
+        self.drawEye(
+            frame.right,
+            layout.rightEyeX,
+            innerIsRight=False,
+            color=frame.eyeColor,
+            swirl=frame.swirl,
+            swirlPhase=frame.swirlPhase,
+        )
+
+        if self.mouthEnabled and not frame.mouth.isHidden:
+            self.drawMouth(frame.mouth, frame.eyeColor)
 
         if caption and captionOpacity > 0.01:
             self.drawCaption(caption, captionOpacity)
         if hint:
             self.drawHint(hint)
 
-    def drawEye(self, shape: EyeShape, baseX: int, *, innerIsRight: bool) -> None:
+    def drawEye(
+        self,
+        shape: EyeShape,
+        baseX: int,
+        *,
+        innerIsRight: bool,
+        color: tuple[int, int, int] = (4, 201, 253),
+        swirl: float = 0.0,
+        swirlPhase: float = 0.0,
+    ) -> None:
         if shape.isClosed:
             return
 
@@ -157,20 +188,28 @@ class EyeRenderer:
 
         shape = shape.withRadius(shape.radius * self.radiusScale)
 
-        if self.quality.glow > 0.0:
-            self.drawGlow(shape, eyeWidth, eyeHeight, centerX, centerY, innerIsRight)
+        # Tonto: o olho some aos poucos e a espiral toma o lugar, no mesmo ponto.
+        # Um crossfade, nao uma troca seca.
+        eyeOpacity = 1.0 - swirl
+        if eyeOpacity > 0.003:
+            if self.quality.glow > 0.0:
+                self.drawGlow(shape, eyeWidth, eyeHeight, centerX, centerY, innerIsRight, color)
+            self.blitField(
+                shape,
+                eyeWidth,
+                eyeHeight,
+                centerX,
+                centerY,
+                innerIsRight=innerIsRight,
+                padding=1.5,
+                cap=self.quality.resolutionCap,
+                glow=0.0,
+                color=color,
+                opacity=eyeOpacity,
+            )
 
-        self.blitField(
-            shape,
-            eyeWidth,
-            eyeHeight,
-            centerX,
-            centerY,
-            innerIsRight=innerIsRight,
-            padding=1.5,
-            cap=self.quality.resolutionCap,
-            glow=0.0,
-        )
+        if swirl > 0.003:
+            self.drawSpiral(centerX, centerY, eyeWidth, eyeHeight, color, swirl, swirlPhase)
 
     def drawGlow(
         self,
@@ -180,6 +219,7 @@ class EyeRenderer:
         centerX: float,
         centerY: float,
         innerIsRight: bool,
+        color: tuple[int, int, int],
     ) -> None:
         self.blitField(
             shape,
@@ -191,6 +231,7 @@ class EyeRenderer:
             padding=GLOW_PADDING * eyeHeight,
             cap=GLOW_RESOLUTION,
             glow=self.quality.glow,
+            color=color,
         )
 
     def blitField(
@@ -205,6 +246,8 @@ class EyeRenderer:
         padding: float,
         cap: int,
         glow: float,
+        color: tuple[int, int, int] = (4, 201, 253),
+        opacity: float = 1.0,
     ) -> None:
         """Amostra o campo, colore e cola na tela. Serve ao olho e ao halo."""
         targetWidth = eyeWidth + 2.0 * padding
@@ -252,17 +295,22 @@ class EyeRenderer:
             sigma = padding * factor / mask.GLOW_SIGMAS
             alpha = mask.softGlow(alpha, sigma) * glow
 
+        if opacity < 1.0:
+            alpha = alpha * opacity
+
         if not alpha.any():
             return
 
-        surface = self.paint(alpha, gradient=self.quality.gradient and glow == 0.0)
+        surface = self.paint(alpha, gradient=self.quality.gradient and glow == 0.0, color=color)
         if (gridWidth, gridHeight) != (blitWidth, blitHeight):
             surface = pygame.transform.smoothscale(surface, (blitWidth, blitHeight))
 
         self.surface.blit(surface, (intLeft, intTop))
 
-    def paint(self, alpha: np.ndarray, *, gradient: bool) -> pygame.Surface:
-        """Transforma a opacidade num retalho RGBA da cor dos olhos."""
+    def paint(
+        self, alpha: np.ndarray, *, gradient: bool, color: tuple[int, int, int] = (4, 201, 253)
+    ) -> pygame.Surface:
+        """Transforma a opacidade num retalho RGBA da cor pedida."""
         height, width = alpha.shape
         surface = self.buffer(width, height)
 
@@ -272,7 +320,7 @@ class EyeRenderer:
 
         opacity[:] = (alpha.T * 255.0).astype(np.uint8)
 
-        color: np.ndarray = np.asarray(self.theme.eye, dtype=np.float32)
+        tint: np.ndarray = np.asarray(color, dtype=np.float32)
         if gradient:
             # Um degrade de cima para baixo sugere uma superficie iluminada de
             # cima. E sutil de proposito: forte demais e o olho vira um botao.
@@ -282,13 +330,86 @@ class EyeRenderer:
             # vez de sempre um pouco mais escuro que ela.
             half = GRADIENT_DEPTH / 2.0
             ramp: np.ndarray = np.linspace(1.0 + half, 1.0 - half, height, dtype=np.float32)
-            tinted = ramp[None, :, None] * color[None, None, :]
+            tinted = ramp[None, :, None] * tint[None, None, :]
             rgb[:] = np.clip(tinted, 0.0, 255.0).astype(np.uint8)
         else:
-            rgb[:] = color.astype(np.uint8)
+            rgb[:] = tint.astype(np.uint8)
 
         del rgb, opacity
         return surface
+
+    # -----------------------------------------------------------------------
+    # Boca e vortice
+    # -----------------------------------------------------------------------
+    def drawMouth(self, mouth: MouthShape, color: tuple[int, int, int]) -> None:
+        """Desenha a boca centrada, abaixo dos olhos.
+
+        A boca nao tem halo nem degrade — e um traco limpo, e e tambem o que a
+        mantem barata num quadro que ja desenha dois olhos. Segue o mesmo campo
+        de distancia dos olhos, entao herda o antialiasing de graca.
+        """
+        layout = self.layout
+        drawWidth = max(1.0, layout.mouthWidth * mouth.width)
+        reserve = float(layout.mouthHeight)
+
+        # Margem para as pontas arredondadas e para a curva nao encostar na borda.
+        padding = reserve * 0.18
+        targetWidth = drawWidth + 2.0 * padding
+        targetHeight = reserve
+
+        cap = self.quality.resolutionCap
+        largest = max(targetWidth, targetHeight)
+        factor = min(1.0, cap / largest) if cap else 1.0
+
+        gridWidth = max(1, round(targetWidth * factor))
+        gridHeight = max(1, round(targetHeight * factor))
+
+        geometry = mask.MouthGeometry(
+            gridWidth=gridWidth,
+            gridHeight=gridHeight,
+            mouthWidth=drawWidth * factor,
+            mouthHeight=reserve * factor,
+        )
+        field = mask.mouthField(mouth, geometry)
+        alpha = mask.fieldToAlpha(field, geometry.pixel) * mouth.alpha
+        if not alpha.any():
+            return
+
+        surface = self.paint(alpha, gradient=False, color=color)
+        blitWidth = max(1, round(targetWidth))
+        blitHeight = max(1, round(targetHeight))
+        if (gridWidth, gridHeight) != (blitWidth, blitHeight):
+            surface = pygame.transform.smoothscale(surface, (blitWidth, blitHeight))
+
+        left = layout.mouthCenterX - blitWidth // 2
+        top = layout.mouthCenterY - blitHeight // 2
+        self.surface.blit(surface, (left, top))
+
+    def drawSpiral(
+        self,
+        centerX: float,
+        centerY: float,
+        eyeWidth: float,
+        eyeHeight: float,
+        color: tuple[int, int, int],
+        opacity: float,
+        phase: float,
+    ) -> None:
+        """Desenha o vortice do tonto no lugar do olho (so quando ela esta tonta)."""
+        cap = self.quality.resolutionCap or 220
+        size = min(max(eyeWidth, eyeHeight), float(cap))
+        grid = max(1, round(size))
+
+        alpha = mask.spiralField(grid, grid, phase) * opacity
+        if not alpha.any():
+            return
+
+        surface = self.paint(alpha, gradient=False, color=color)
+        blit = max(1, round(max(eyeWidth, eyeHeight)))
+        if grid != blit:
+            surface = pygame.transform.smoothscale(surface, (blit, blit))
+
+        self.surface.blit(surface, (round(centerX - blit / 2), round(centerY - blit / 2)))
 
     def buffer(self, width: int, height: int) -> pygame.Surface:
         """Superficie reaproveitada para um tamanho, para nao alocar por quadro."""
