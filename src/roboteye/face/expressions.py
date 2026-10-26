@@ -16,6 +16,9 @@ class Expression(Enum):
     NEUTRAL = "neutral"
     HAPPY = "happy"
     ANGRY = "angry"
+    #: "Maluco de brabo": a versao monstro do bravo — olhos de fera, boca com
+    #: dentes e o fundo num vermelho mais escuro e tenebroso.
+    RAGE = "rage"
     TIRED = "tired"
     LAUGH = "laugh"
     DIZZY = "dizzy"
@@ -47,6 +50,7 @@ _MOODS = frozenset(
         Expression.NEUTRAL,
         Expression.HAPPY,
         Expression.ANGRY,
+        Expression.RAGE,
         Expression.TIRED,
         Expression.LAUGH,
         Expression.DIZZY,
@@ -58,7 +62,9 @@ _ACTIVITIES = frozenset({Expression.THINKING, Expression.SPEAKING, Expression.LI
 _TRANSIENT = frozenset({Expression.LAUGH, Expression.DIZZY})
 
 #: Peso de cada humor no sorteio ocioso. O neutro domina de proposito: uma face
-#: que troca de expressao o tempo todo parece nervosa, nao viva.
+#: que troca de expressao o tempo todo parece nervosa, nao viva. RAGE fica de
+#: fora: um rosto de monstro surgindo sozinho assustaria sem motivo — ele so
+#: aparece quando alguem o pede.
 IDLE_WEIGHTS: dict[Expression, int] = {
     Expression.NEUTRAL: 8,
     Expression.HAPPY: 3,

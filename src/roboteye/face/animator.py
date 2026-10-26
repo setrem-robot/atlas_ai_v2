@@ -156,6 +156,12 @@ DIZZY_FREQUENCY = 2.1
 DIZZY_AMPLITUDE = 26.0
 DIZZY_DURATION = 2.6
 
+# --- furia (o tremor de quem esta "maluco de brabo") -------------------------
+#: Vibracao rapida e curta dos olhos no modo RAGE. Rapida o bastante para ler
+#: como um rosnado contido, pequena o bastante para nao virar a cara inteira.
+RAGE_SHAKE_FREQUENCY = 13.0
+RAGE_SHAKE_AMPLITUDE = 5.0
+
 # --- vortice do tonto --------------------------------------------------------
 #: Velocidade de giro da espiral, em radianos por segundo.
 SWIRL_SPEED = 7.0
@@ -531,6 +537,14 @@ class EyeAnimator:
         if self.activityAtual is not None:
             return left, right
 
+        if self.mood is Expression.RAGE:
+            # Treme sem descanso enquanto esta em furia; os olhos vao em sentidos
+            # opostos no eixo x, o que da o ar seething em vez de so sacudido.
+            phase = 2.0 * math.pi * RAGE_SHAKE_FREQUENCY * self.clock
+            jitterX = math.sin(phase) * RAGE_SHAKE_AMPLITUDE
+            jitterY = math.sin(phase * 1.3 + 1.0) * RAGE_SHAKE_AMPLITUDE * 0.6
+            return left.moved(dx=jitterX, dy=jitterY), right.moved(dx=-jitterX, dy=jitterY)
+
         if self.mood is Expression.LAUGH and self.moodClock < LAUGH_DURATION:
             decay = 1.0 - self.moodClock / LAUGH_DURATION
             offset = math.sin(2.0 * math.pi * LAUGH_FREQUENCY * self.moodClock)
@@ -783,6 +797,10 @@ class EyeAnimator:
 
         if expression is Expression.DIZZY:
             return replace(base, topLid=0.28), replace(base, topLid=0.14, topLidSlant=0.2)
+
+        if expression is Expression.RAGE:
+            # Um olho mais cerrado que o outro: a cara de quem perdeu a linha.
+            return replace(base, topLid=0.40), replace(base, topLid=0.50)
 
         return base, base
 

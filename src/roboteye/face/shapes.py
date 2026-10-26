@@ -121,6 +121,10 @@ HAPPY = EyeShape(bottomLid=0.44, height=0.98)
 #: Palpebra superior baixa pelo canto interno.
 ANGRY = EyeShape(topLid=0.30, topLidSlant=1.0)
 
+#: Fera: a raiva levada ao extremo. Olho mais estreito e mais inclinado que o
+#: bravo, quase uma fresta cortante — le como monstro prestes a atacar.
+RAGE = EyeShape(topLid=0.44, topLidSlant=1.0, height=0.82, width=1.06, radius=0.16)
+
 #: Palpebra superior baixa pelo canto externo — o oposto exato de bravo.
 TIRED = EyeShape(topLid=0.32, topLidSlant=-1.0)
 
@@ -149,6 +153,7 @@ _PRESETS: dict[Expression, EyeShape] = {
     Expression.NEUTRAL: NEUTRAL,
     Expression.HAPPY: HAPPY,
     Expression.ANGRY: ANGRY,
+    Expression.RAGE: RAGE,
     Expression.TIRED: TIRED,
     Expression.SLEEP: SLEEP,
     Expression.THINKING: THINKING,
@@ -188,6 +193,10 @@ class MouthShape:
     thickness: float = 0.11
     #: Visibilidade: 0 some, 1 cheia. E o que deixa a boca discreta no repouso.
     alpha: float = 0.5
+    #: Dentes: 0 e uma boca lisa; 1 crava no maw aberto fileiras de dentes
+    #: triangulares que se encaixam — a boca de monstro do modo RAGE. So tem
+    #: efeito com a boca aberta (`openness` alto).
+    teeth: float = 0.0
 
     def lerp(self, other: MouthShape, t: float) -> MouthShape:
         """Interpola ate `other`, campo a campo."""
@@ -202,6 +211,7 @@ class MouthShape:
             curve=self.curve * inverse + other.curve * t,
             thickness=self.thickness * inverse + other.thickness * t,
             alpha=self.alpha * inverse + other.alpha * t,
+            teeth=self.teeth * inverse + other.teeth * t,
         )
 
     @property
@@ -219,6 +229,8 @@ MOUTH_NEUTRAL = MouthShape(width=0.52, curve=0.0, thickness=0.11, alpha=0.5)
 MOUTH_HAPPY = MouthShape(width=0.80, openness=0.06, curve=0.85, thickness=0.13, alpha=0.95)
 #: A boca do mal: larga, aberta e virada para cima nas pontas (rosnado).
 MOUTH_ANGRY = MouthShape(width=0.96, openness=0.24, curve=-0.95, thickness=0.15, alpha=1.0)
+#: A boca de monstro: um maw escancarado com dentes que se encaixam.
+MOUTH_RAGE = MouthShape(width=1.05, openness=0.72, curve=-0.2, thickness=0.1, alpha=1.0, teeth=1.0)
 MOUTH_TIRED = MouthShape(width=0.48, curve=-0.22, thickness=0.10, alpha=0.5)
 MOUTH_LAUGH = MouthShape(width=0.84, openness=0.46, curve=0.7, thickness=0.14, alpha=1.0)
 MOUTH_DIZZY = MouthShape(width=0.42, openness=0.34, curve=0.05, thickness=0.13, alpha=0.75)
@@ -232,6 +244,7 @@ _MOUTHS: dict[Expression, MouthShape] = {
     Expression.NEUTRAL: MOUTH_NEUTRAL,
     Expression.HAPPY: MOUTH_HAPPY,
     Expression.ANGRY: MOUTH_ANGRY,
+    Expression.RAGE: MOUTH_RAGE,
     Expression.TIRED: MOUTH_TIRED,
     Expression.LAUGH: MOUTH_LAUGH,
     Expression.DIZZY: MOUTH_DIZZY,
@@ -257,6 +270,11 @@ ANGRY_EYE: Color = (238, 240, 248)
 #: cima, vivo o bastante para a tela inteira "ficar vermelha".
 ANGRY_BACKGROUND: Color = (142, 12, 12)
 
+#: RAGE e mais tenebroso: o fundo quase sangue-no-escuro, e os olhos num branco
+#: levemente frio e doentio para o monstro nao parecer simpatico.
+RAGE_EYE: Color = (245, 250, 255)
+RAGE_BACKGROUND: Color = (74, 0, 0)
+
 
 @dataclass(frozen=True, slots=True)
 class Accent:
@@ -272,6 +290,7 @@ class Accent:
 
 _ACCENTS: dict[Expression, Accent] = {
     Expression.ANGRY: Accent(eye=ANGRY_EYE, background=ANGRY_BACKGROUND),
+    Expression.RAGE: Accent(eye=RAGE_EYE, background=RAGE_BACKGROUND),
 }
 
 

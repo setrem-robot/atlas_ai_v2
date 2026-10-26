@@ -318,6 +318,33 @@ class TestBoca:
         assert surface.get_at((layout.mouthCenterX, layout.mouthCenterY))[:3] == (0, 0, 0)
 
 
+class TestMonstro:
+    def testRageDesenhaFundoEscuroEDentes(self) -> None:
+        surface = pygame.Surface((1280, 720))
+        layout = EyeLayout.forScreen(1280, 720)
+        frame = EyeFrame(
+            expression=Expression.RAGE,
+            left=presetFor(Expression.RAGE),
+            right=presetFor(Expression.RAGE),
+            eyeColor=(245, 250, 255),
+            backgroundColor=(74, 0, 0),
+            mouth=mouthFor(Expression.RAGE),
+        )
+        EyeRenderer(surface, layout, Theme(), quality=LOW).draw(frame)
+
+        assert surface.get_at((0, 0))[:3] == (74, 0, 0)
+
+        # Perto do topo do maw as pontas dos dentes sobem e os vaos descem: numa
+        # linha ali ha dente (pixel claro) e fundo (vao) se alternando.
+        y = layout.mouthCenterY - layout.mouthHeight // 6
+        faixa = [
+            surface.get_at((x, y))[:3]
+            for x in range(layout.mouthCenterX - 150, layout.mouthCenterX + 150, 2)
+        ]
+        assert any(c != (74, 0, 0) for c in faixa), "faltam dentes"
+        assert any(c == (74, 0, 0) for c in faixa), "faltam vaos entre os dentes"
+
+
 class TestVortice:
     def testOVortiveMudaODesenhoDoOlho(self) -> None:
         layout = EyeLayout.forScreen(1280, 720)

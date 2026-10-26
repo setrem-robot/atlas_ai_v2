@@ -48,6 +48,32 @@ class TestBocaCampo:
         assert (aberta < 0).sum() > (fechada < 0).sum()
 
 
+class TestDentesDeMonstro:
+    def testOsDentesMudamABoca(self) -> None:
+        geo = mouthGeometry()
+        lisa = mask.mouthField(MouthShape(openness=0.6, teeth=0.0), geo)
+        comDentes = mask.mouthField(MouthShape(openness=0.6, teeth=1.0), geo)
+        assert not np.allclose(lisa, comDentes)
+
+    def testOMawTemAberturaNoCentro(self) -> None:
+        geo = mouthGeometry()
+        field = mask.mouthField(MouthShape(openness=0.6, teeth=1.0), geo)
+        assert field[geo.gridHeight // 2, geo.gridWidth // 2] < 0.0
+
+    def testOsDentesCriamZigueZagueNaBorda(self) -> None:
+        """A borda de cima do maw sobe e desce: e o que forma os dentes."""
+        geo = mouthGeometry()
+        field = mask.mouthField(MouthShape(openness=0.6, teeth=1.0, thickness=0.1), geo)
+        # Para cada coluna do meio, a primeira linha "dentro" (campo < 0) e a borda.
+        meio = geo.gridWidth // 2
+        bordas = []
+        for col in range(meio - 60, meio + 60, 4):
+            dentro = np.where(field[:, col] < 0.0)[0]
+            if dentro.size:
+                bordas.append(int(dentro[0]))
+        assert bordas and (max(bordas) - min(bordas)) > 4  # a borda sobe e desce
+
+
 class TestVortice:
     def testFicaEntreZeroEUm(self) -> None:
         alpha = mask.spiralField(80, 80, phase=0.0)
