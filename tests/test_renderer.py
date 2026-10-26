@@ -21,7 +21,7 @@ from roboteye.face.animator import EyeFrame
 from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
 from roboteye.face.renderer import HIGH, LOW, MEDIUM, EyeRenderer, qualityFor
-from roboteye.face.shapes import EyeShape, presetFor
+from roboteye.face.shapes import EyeShape, MouthShape, mouthFor, presetFor
 from roboteye.face.theme import Theme
 
 
@@ -49,9 +49,7 @@ def renderer(surface: pygame.Surface) -> EyeRenderer:
 
 class TestDesenho:
     @pytest.mark.parametrize("expressao", list(Expression))
-    def testDesenhaTodasAsExpressoes(
-        self, renderer: EyeRenderer, expressao: Expression
-    ) -> None:
+    def testDesenhaTodasAsExpressoes(self, renderer: EyeRenderer, expressao: Expression) -> None:
         renderer.draw(quadro(presetFor(expressao), expressao))
 
     @pytest.mark.parametrize("altura", [0.03, 0.1, 0.5, 1.0, 1.2])
@@ -83,9 +81,7 @@ class TestDesenho:
         )
 
     @pytest.mark.parametrize("qualidade", [LOW, MEDIUM, HIGH])
-    def testDesenhaEmTodosOsNiveisDeQualidade(
-        self, surface: pygame.Surface, qualidade
-    ) -> None:
+    def testDesenhaEmTodosOsNiveisDeQualidade(self, surface: pygame.Surface, qualidade) -> None:
         renderer = EyeRenderer(surface, EyeLayout.forScreen(1280, 720), Theme(), quality=qualidade)
         renderer.draw(quadro(presetFor(Expression.HAPPY), Expression.HAPPY))
 
@@ -260,6 +256,84 @@ class TestHalo:
         base = layout.eyeCenterY + layout.eyeHeight // 2 + 30
         for x in range(layout.leftEyeX - 200, layout.leftEyeX + 200, 7):
             assert surface.get_at((x, base))[:3] == (0, 0, 0), f"halo vazou em x={x}"
+
+
+class TestCorPorQuadro:
+    """A cor vem do quadro, nao do tema: e o que permite o bravo ficar vermelho."""
+
+    def render(self, frame: EyeFrame, **kwargs) -> tuple[pygame.Surface, EyeLayout]:
+        surface = pygame.Surface((1280, 720))
+        layout = EyeLayout.forScreen(1280, 720)
+        kwargs.setdefault("quality", LOW)
+        EyeRenderer(surface, layout, Theme(), **kwargs).draw(frame)
+        return surface, layout
+
+    def testFundoVermelhoEOlhoBranco(self) -> None:
+        frame = EyeFrame(
+            expression=Expression.ANGRY,
+            left=presetFor(Expression.ANGRY),
+            right=presetFor(Expression.ANGRY),
+            eyeColor=(240, 240, 248),
+            backgroundColor=(142, 12, 12),
+        )
+        surface, layout = self.render(frame)
+        assert surface.get_at((0, 0))[:3] == (142, 12, 12)
+        assert surface.get_at((layout.leftEyeX, layout.eyeCenterY))[:3] == (240, 240, 248)
+
+
+class TestBoca:
+    def frame(self, mouth: MouthShape) -> EyeFrame:
+        shape = presetFor(Expression.NEUTRAL)
+        return EyeFrame(expression=Expression.NEUTRAL, left=shape, right=shape, mouth=mouth)
+
+    def render(self, frame: EyeFrame, **kwargs) -> tuple[pygame.Surface, EyeLayout]:
+        surface = pygame.Surface((1280, 720))
+        layout = EyeLayout.forScreen(1280, 720)
+        kwargs.setdefault("quality", LOW)
+        EyeRenderer(surface, layout, Theme(), **kwargs).draw(frame)
+        return surface, layout
+
+    #: Boca reta e visivel: a linha passa pelo centro, entao o pixel central cai
+    #: sobre ela (uma boca curva desvia a linha do centro de proposito).
+    RETA = MouthShape(width=0.6, openness=0.12, curve=0.0, thickness=0.14, alpha=1.0)
+
+    def testBocaVisivelApareceNaTela(self) -> None:
+        surface, layout = self.render(self.frame(self.RETA))
+        assert surface.get_at((layout.mouthCenterX, layout.mouthCenterY))[:3] != (0, 0, 0)
+
+    def testSorrisoCurvaParaBaixoNoCentro(self) -> None:
+        """O centro do sorriso fica abaixo da linha dos cantos (barriga para baixo)."""
+        surface, layout = self.render(self.frame(mouthFor(Expression.HAPPY)))
+        faixa = range(layout.mouthCenterY - layout.mouthHeight // 2, layout.mouthCenterY)
+        assert all(surface.get_at((layout.mouthCenterX, y))[:3] == (0, 0, 0) for y in faixa)
+        abaixo = layout.mouthCenterY + layout.mouthHeight // 6
+        assert surface.get_at((layout.mouthCenterX, abaixo))[:3] != (0, 0, 0)
+
+    def testBocaEscondidaNaoDesenha(self) -> None:
+        surface, layout = self.render(self.frame(MouthShape(alpha=0.0)))
+        assert surface.get_at((layout.mouthCenterX, layout.mouthCenterY))[:3] == (0, 0, 0)
+
+    def testDesligarABocaRemoveEla(self) -> None:
+        surface, layout = self.render(self.frame(self.RETA), mouthEnabled=False)
+        assert surface.get_at((layout.mouthCenterX, layout.mouthCenterY))[:3] == (0, 0, 0)
+
+
+class TestVortice:
+    def testOVortiveMudaODesenhoDoOlho(self) -> None:
+        layout = EyeLayout.forScreen(1280, 720)
+        shape = presetFor(Expression.DIZZY)
+
+        semVortice = pygame.Surface((1280, 720))
+        EyeRenderer(semVortice, layout, Theme(), quality=LOW).draw(
+            EyeFrame(expression=Expression.DIZZY, left=shape, right=shape)
+        )
+        comVortice = pygame.Surface((1280, 720))
+        EyeRenderer(comVortice, layout, Theme(), quality=LOW).draw(
+            EyeFrame(
+                expression=Expression.DIZZY, left=shape, right=shape, swirl=1.0, swirlPhase=1.0
+            )
+        )
+        assert pygame.image.tostring(semVortice, "RGB") != pygame.image.tostring(comVortice, "RGB")
 
 
 class TestSubPixel:

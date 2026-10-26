@@ -7,26 +7,62 @@ de cada expressao aparecer: mexeu num parametro, roda `roboteye preview` e olha.
 from __future__ import annotations
 
 import os
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from roboteye.config import FaceSettings
-from roboteye.face.animator import EyeFrame, closeLids
+from roboteye.face.animator import DEFAULT_BACKGROUND, DEFAULT_EYE_COLOR, EyeFrame, closeLids
 from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
-from roboteye.face.shapes import EyeShape, presetFor
+from roboteye.face.shapes import (
+    HIDDEN_MOUTH,
+    Color,
+    EyeShape,
+    MouthShape,
+    accentFor,
+    mouthFor,
+    presetFor,
+)
 from roboteye.face.theme import Theme
 
 COLUMNS = 3
 LABEL_MARGIN = 14
 
 
-def montarPaineis() -> list[tuple[str, EyeShape, EyeShape]]:
+@dataclass(frozen=True, slots=True)
+class Panel:
+    """Um quadro da folha de contato, com tudo o que o renderizador precisa."""
+
+    label: str
+    left: EyeShape
+    right: EyeShape
+    mouth: MouthShape = HIDDEN_MOUTH
+    eye: Color = DEFAULT_EYE_COLOR
+    background: Color = DEFAULT_BACKGROUND
+    swirl: float = 0.0
+    swirlPhase: float = 0.0
+
+
+def panelFor(label: str, expression: Expression, left: EyeShape, right: EyeShape, **extra) -> Panel:
+    """Monta um painel ja com a boca e as cores de acento da expressao."""
+    accent = accentFor(expression)
+    return Panel(
+        label=label,
+        left=left,
+        right=right,
+        mouth=mouthFor(expression),
+        eye=accent.eye if accent.eye is not None else DEFAULT_EYE_COLOR,
+        background=accent.background if accent.background is not None else DEFAULT_BACKGROUND,
+        **extra,
+    )
+
+
+def montarPaineis() -> list[Panel]:
     """Os quadros da folha: expressoes de repouso e instantes de movimento."""
     neutral = presetFor(Expression.NEUTRAL)
     thinking = presetFor(Expression.THINKING)
 
-    panels: list[tuple[str, EyeShape, EyeShape]] = []
+    panels: list[Panel] = []
     for expression in (
         Expression.NEUTRAL,
         Expression.HAPPY,
@@ -36,39 +72,36 @@ def montarPaineis() -> list[tuple[str, EyeShape, EyeShape]]:
         Expression.SLEEP,
     ):
         shape = presetFor(expression)
-        panels.append((expression.value.upper(), shape, shape))
+        panels.append(panelFor(expression.value.upper(), expression, shape, shape))
 
+    dizzy = presetFor(Expression.DIZZY)
     panels += [
-        (
+        panelFor(
             "PENSANDO",
+            Expression.THINKING,
             replace(thinking, topLid=0.09, offsetX=-115, offsetY=-78),
             replace(thinking, topLid=0.21, offsetX=-115, offsetY=-78),
         ),
-        (
+        panelFor(
             "FALANDO (pico)",
+            Expression.SPEAKING,
             replace(neutral, height=1.055, width=0.972, offsetY=-6),
             replace(neutral, height=1.055, width=0.972, offsetY=-6),
         ),
-        (
-            "PISCANDO (meio)",
-            closeLids(neutral, 0.55),
-            closeLids(neutral, 0.55),
-        ),
-        (
+        panelFor("TONTO (vortice)", Expression.DIZZY, dizzy, dizzy, swirl=1.0, swirlPhase=1.2),
+        panelFor(
             "CURIOSO",
+            Expression.NEUTRAL,
             replace(neutral, height=0.94, offsetX=380),
             replace(neutral, height=1.16, offsetX=380),
         ),
-        (
+        Panel(
             "BRAVO -> FELIZ (meio)",
             presetFor(Expression.ANGRY).lerp(presetFor(Expression.HAPPY), 0.5),
             presetFor(Expression.ANGRY).lerp(presetFor(Expression.HAPPY), 0.5),
+            mouth=mouthFor(Expression.ANGRY).lerp(mouthFor(Expression.HAPPY), 0.5),
         ),
-        (
-            "PISCANDO (fundo)",
-            closeLids(neutral, 1.0),
-            closeLids(neutral, 1.0),
-        ),
+        Panel("PISCANDO (fundo)", closeLids(neutral, 1.0), closeLids(neutral, 1.0)),
     ]
     return panels
 
@@ -104,7 +137,7 @@ def renderSheet(
     font = pygame.font.Font(None, max(16, panelHeight // 16))
 
     layout = EyeLayout.forScreen(panelWidth, panelHeight)
-    for index, (label, left, right) in enumerate(panels):
+    for index, p in enumerate(panels):
         panel = pygame.Surface((panelWidth, panelHeight))
         renderer = EyeRenderer(
             panel,
@@ -112,10 +145,22 @@ def renderSheet(
             theme,
             quality=quality,
             cornerRadius=settings.cornerRadius,
+            mouthEnabled=settings.mouthEnabled,
         )
-        renderer.draw(EyeFrame(expression=Expression.NEUTRAL, left=left, right=right))
+        renderer.draw(
+            EyeFrame(
+                expression=Expression.NEUTRAL,
+                left=p.left,
+                right=p.right,
+                eyeColor=p.eye,
+                backgroundColor=p.background,
+                mouth=p.mouth,
+                swirl=p.swirl,
+                swirlPhase=p.swirlPhase,
+            )
+        )
 
-        panel.blit(font.render(label, True, theme.caption), (LABEL_MARGIN, LABEL_MARGIN))
+        panel.blit(font.render(p.label, True, theme.caption), (LABEL_MARGIN, LABEL_MARGIN))
         pygame.draw.rect(panel, theme.caption, (0, 0, panelWidth, panelHeight), 1)
         sheet.blit(panel, ((index % COLUMNS) * panelWidth, (index // COLUMNS) * panelHeight))
 

@@ -21,6 +21,11 @@ LOOK_RANGE = 380
 CAPTION_MARGIN = 40
 CAPTION_SIZE = 46
 
+# A boca fica centrada, abaixo dos olhos.
+MOUTH_WIDTH = 820
+MOUTH_HEIGHT = 240
+MOUTH_Y_OFFSET = 320
+
 
 @dataclass(frozen=True, slots=True)
 class EyeLayout:
@@ -36,6 +41,11 @@ class EyeLayout:
     leftEyeX: int
     rightEyeX: int
     eyeCenterY: int
+
+    mouthCenterX: int
+    mouthCenterY: int
+    mouthWidth: int
+    mouthHeight: int
 
     @classmethod
     def forScreen(cls, width: int, height: int) -> EyeLayout:
@@ -54,6 +64,10 @@ class EyeLayout:
             leftEyeX=width // 3,
             rightEyeX=2 * width // 3,
             eyeCenterY=height // 2 + int(EYE_Y_OFFSET * scale),
+            mouthCenterX=width // 2,
+            mouthCenterY=height // 2 + int(MOUTH_Y_OFFSET * scale),
+            mouthWidth=px(MOUTH_WIDTH),
+            mouthHeight=px(MOUTH_HEIGHT),
         )
 
     def px(self, baseValue: float) -> int:

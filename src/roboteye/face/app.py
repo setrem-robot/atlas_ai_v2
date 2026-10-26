@@ -84,7 +84,11 @@ class FaceApp:
         self.fps = 0.0
         self.fpsAge = 0.0
 
-        self.animator = EyeAnimator(idleAnimations=settings.idleAnimations)
+        self.animator = EyeAnimator(
+            idleAnimations=settings.idleAnimations,
+            baseEyeColor=settings.eyeColor,
+            baseBackground=settings.backgroundColor,
+        )
         self.screen: pygame.Surface | None = None
         self.renderer: EyeRenderer | None = None
         self.clock: pygame.time.Clock | None = None
@@ -125,6 +129,7 @@ class FaceApp:
             Theme.fromSettings(self.settings),
             quality=quality,
             cornerRadius=self.settings.cornerRadius,
+            mouthEnabled=self.settings.mouthEnabled,
         )
         self.clock = pygame.time.Clock()
         logger.info("face iniciada em %dx%d (qualidade %s)", width, height, quality.name)
