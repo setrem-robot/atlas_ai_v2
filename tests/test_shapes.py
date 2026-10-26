@@ -153,6 +153,32 @@ class TestBoca:
         assert HIDDEN_MOUTH.isHidden
         assert not mouthFor(Expression.HAPPY).isHidden
 
+    def testLerpInterpolaOsDentes(self) -> None:
+        a, b = MouthShape(teeth=0.0), MouthShape(teeth=1.0)
+        assert a.lerp(b, 0.5).teeth == pytest.approx(0.5)
+
+
+class TestMonstro:
+    def testRageEMaisFeraQueBravo(self) -> None:
+        """O monstro cerra mais o olho e inclina mais que o bravo comum."""
+        rage = presetFor(Expression.RAGE)
+        angry = presetFor(Expression.ANGRY)
+        assert rage.topLid > angry.topLid
+        assert rage.topLidSlant >= angry.topLidSlant > 0
+
+    def testRageTemDentes(self) -> None:
+        boca = mouthFor(Expression.RAGE)
+        assert boca.teeth > 0.5
+        assert boca.openness > 0.3  # um maw aberto, nao um traco
+
+    def testRageEMaisTenebrosoQueBravo(self) -> None:
+        rage = accentFor(Expression.RAGE)
+        angry = accentFor(Expression.ANGRY)
+        assert rage.background is not None and angry.background is not None
+        assert sum(rage.background) < sum(angry.background)  # fundo mais escuro
+        assert rage.background[0] > rage.background[1]  # ainda vermelho
+        assert rage.eye is not None and min(rage.eye) > 200  # olhos palidos
+
 
 class TestAcentoDeCor:
     def testBravoFicaBrancoNoVermelho(self) -> None:

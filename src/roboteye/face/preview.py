@@ -67,12 +67,14 @@ def montarPaineis() -> list[Panel]:
         Expression.NEUTRAL,
         Expression.HAPPY,
         Expression.ANGRY,
+        Expression.RAGE,
         Expression.TIRED,
         Expression.LAUGH,
         Expression.SLEEP,
     ):
         shape = presetFor(expression)
-        panels.append(panelFor(expression.value.upper(), expression, shape, shape))
+        label = "MALUCO DE BRABO" if expression is Expression.RAGE else expression.value.upper()
+        panels.append(panelFor(label, expression, shape, shape))
 
     dizzy = presetFor(Expression.DIZZY)
     panels += [

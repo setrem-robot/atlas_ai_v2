@@ -421,6 +421,30 @@ class TestCorEBoca:
         assert max(aberturas) > 0.2
 
 
+class TestMonstro:
+    def testRageFicaMonstro(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.RAGE)
+        frame = avancar(animator, 0.6)
+        r, g, b = frame.backgroundColor
+        assert r > 50 and g < 40 and b < 40  # vermelho escuro
+        assert min(frame.eyeColor) > 200  # olhos palidos
+        assert frame.mouth.teeth > 0.5  # com dentes
+
+    def testRageTreme(self, animator: EyeAnimator) -> None:
+        """A furia vibra os olhos, e eles vao em sentidos opostos no eixo x."""
+        animator.setMood(Expression.RAGE)
+        quadros = coletar(animator, 0.6)
+        xs = [f.left.offsetX for f in quadros]
+        assert max(xs) - min(xs) > 4
+        assert any((f.left.offsetX - f.right.offsetX) > 6 for f in quadros)
+
+    def testRageNaoSurgeSozinha(self) -> None:
+        """O monstro nunca aparece no sorteio ocioso: so quando pedido."""
+        face = EyeAnimator(idleAnimations=True, rng=random.Random(7))
+        vistos = {face.update(PASSO).expression for _ in range(60 * 120)}
+        assert Expression.RAGE not in vistos
+
+
 class TestVortice:
     def testTontoLigaOVortice(self, animator: EyeAnimator) -> None:
         animator.setMood(Expression.DIZZY)

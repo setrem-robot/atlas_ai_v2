@@ -221,6 +221,13 @@ MOUTH_CURVE_DEPTH = 0.5
 #: numa boca aberta sem precisar de um parametro separado de altura.
 MOUTH_OPEN_GAIN = 0.55
 
+#: Quantos dentes atravessam a boca de monstro (contados numa fileira).
+MOUTH_TEETH_COUNT = 5
+#: Quanto cada dente avanca para dentro do maw, como fracao da meia-altura. Perto
+#: de 1 os dentes de cima quase encostam nos de baixo (mordida cerrada); mais
+#: baixo deixa o maw aberto com as presas visiveis em volta.
+MOUTH_TOOTH_DEPTH = 0.62
+
 
 @dataclass(frozen=True, slots=True)
 class MouthGeometry:
@@ -266,14 +273,48 @@ def mouthField(mouth: MouthShape, geometry: MouthGeometry) -> np.ndarray:
 
     halfLength = max((geometry.mouthWidth / 2.0) / unit, 1e-6)
     u = np.clip(x / halfLength, -1.0, 1.0)
-    centerX = u * halfLength
     # curve positivo baixa o meio (barriga para baixo) = sorriso; negativo sobe o
     # meio e deixa as pontas caidas = a boca do mal.
     centerY = mouth.curve * MOUTH_CURVE_DEPTH * (1.0 - u * u)
 
+    if mouth.teeth > 1e-3 and mouth.openness > 1e-3:
+        return toothedMaw(x, y, u, centerY, mouth)
+
+    centerX = u * halfLength
     halfThickness = mouth.thickness + mouth.openness * MOUTH_OPEN_GAIN
     distance = np.hypot(x - centerX, y - centerY)
     return distance - halfThickness
+
+
+def toothedMaw(
+    x: np.ndarray, y: np.ndarray, u: np.ndarray, centerY: np.ndarray, mouth: MouthShape
+) -> np.ndarray:
+    """O maw de monstro: uma boca escancarada com dentes triangulares que encaixam.
+
+    O maw e a faixa entre uma borda de cima e uma de baixo. Em cada borda corre
+    uma onda triangular — sao os dentes —, e as duas ondas andam defasadas meio
+    periodo, entao os dentes de cima caem entre os de baixo e a mordida fecha em
+    zigue-zague. As pontas afinam (o fator `taper`) para o maw arredondar em vez
+    de terminar reto.
+    """
+    halfHeight = mouth.thickness + mouth.openness * MOUTH_OPEN_GAIN
+    taper = np.sqrt(np.clip(1.0 - u * u, 0.0, 1.0))
+    reach = halfHeight * taper
+
+    # Uma onda triangular (0..1) ao longo do comprimento; a de baixo defasada.
+    s = (u * 0.5 + 0.5) * MOUTH_TEETH_COUNT
+    triUp = np.abs((s % 1.0) - 0.5) * 2.0
+    triDown = np.abs(((s + 0.5) % 1.0) - 0.5) * 2.0
+    depth = halfHeight * MOUTH_TOOTH_DEPTH * mouth.teeth
+
+    topEdge = centerY - reach + triUp * depth
+    bottomEdge = centerY + reach - triDown * depth
+
+    gap = bottomEdge - topEdge
+    inside = np.minimum(y - topEdge, bottomEdge - y)
+    # Onde ha abertura, a distancia (com sinal) ate a borda mais proxima; onde os
+    # dentes se encontram, fora da boca.
+    return np.where(gap > 0.0, -inside, np.abs(y - centerY)).astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
