@@ -79,7 +79,15 @@ class OllamaClient:
                     # responde e o descarrega antes da primeira pergunta de
                     # verdade. Quem manda aquecer quer o modelo *residente*.
                     "keep_alive": self.keepAliveDeAquecimento(),
-                    "options": {"num_predict": 1, "num_ctx": self.numCtx},
+                    # As mesmas opções de `streamReply`: `num_thread` diferente
+                    # faz o Ollama recarregar o modelo, e o aquecimento ia para
+                    # o lixo — medido no Pi: 40 s na primeira pergunta mesmo
+                    # aquecido, 0,5 s da segunda em diante.
+                    "options": {
+                        "num_predict": 1,
+                        "num_ctx": self.numCtx,
+                        **({"num_thread": self.numThread} if self.numThread else {}),
+                    },
                 },
                 timeout=60.0,
             )
