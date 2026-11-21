@@ -1,0 +1,7 @@
+# Instalado por scripts/setup-raspberry-pi.sh em /etc/udev/rules.d/.
+#
+# Plugar uma placa de som USB (headset, dongle, caixinha) reaponta o áudio do
+# robô para ela, sem SSH. Sem isto, /etc/asound.conf continua com o nome da placa
+# que estava plugada na instalação, e a nova não toca nem grava:
+# "Cannot get card index for Device".
+ACTION=="add", SUBSYSTEM=="sound", KERNEL=="card*", SUBSYSTEMS=="usb", TAG+="systemd", ENV{SYSTEMD_WANTS}+="roboteye-audio.service"

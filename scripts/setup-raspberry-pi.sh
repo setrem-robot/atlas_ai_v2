@@ -213,6 +213,13 @@ if sudo "${REPO_DIR}/scripts/configurar-audio.sh"; then
 else
     warn "não consegui configurar o áudio; rode ./scripts/configurar-audio.sh --mostrar"
 fi
+# Trocar de headset ou de caixinha USB depois da instalação reaponta o áudio
+# sozinho. Ver scripts/roboteye-audio.rules.
+sed -e "s|@REPO_DIR@|${REPO_DIR}|g" "${REPO_DIR}/scripts/roboteye-audio.service" \
+    | sudo tee /etc/systemd/system/roboteye-audio.service >/dev/null
+sudo install -m 0644 "${REPO_DIR}/scripts/roboteye-audio.rules" /etc/udev/rules.d/90-roboteye-audio.rules
+sudo systemctl daemon-reload
+sudo udevadm control --reload
 
 # --- 3.6 escuta -------------------------------------------------------------
 if [[ "${WITH_HEARING}" == true ]]; then
