@@ -8,9 +8,20 @@ from __future__ import annotations
 
 import threading
 from collections import deque
+from datetime import date
 from collections.abc import Iterable
 
 from roboteye.llm.base import ChatMessage
+
+_DIAS = ("segunda-feira", "terca-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sabado", "domingo")
+_MESES = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto",
+          "setembro", "outubro", "novembro", "dezembro")
+
+
+def hojePorExtenso(dia: date | None = None) -> str:
+    """A data dita como gente, sem depender do locale do sistema (o Pi não tem pt_BR)."""
+    d = dia or date.today()
+    return f"Hoje e {_DIAS[d.weekday()]}, {d.day} de {_MESES[d.month - 1]} de {d.year}."
 
 
 class ConversationMemory:
@@ -34,9 +45,14 @@ class ConversationMemory:
             self.history.append(message)
 
     def buildPrompt(self) -> list[ChatMessage]:
-        """Mensagens a enviar ao modelo: prompt de sistema + historico."""
+        """Mensagens a enviar ao modelo: prompt de sistema + historico.
+
+        A data entra aqui, e não no prompt guardado: o robô fica semanas ligado,
+        e sem ela o modelo inventa o dia com toda a confiança.
+        """
+        sistema = ChatMessage(role="system", content=f"{self.system.content}\n\n{hojePorExtenso()}")
         with self.lock:
-            return [self.system, *self.history]
+            return [sistema, *self.history]
 
     def clear(self) -> None:
         with self.lock:

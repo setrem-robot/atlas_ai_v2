@@ -89,7 +89,9 @@ class Application:
         """Instancia todos os subsistemas sem ainda carregar modelos."""
         bus = EventBus()
 
-        personaStore = PersonaStore(settings.llm.personaDir, settings.llm.persona)
+        personaStore = PersonaStore(
+            settings.llm.personaDir, settings.llm.persona, curto=settings.llm.promptCurto
+        )
         persona = personaStore.load(settings.llm.replyLanguage)
         logger.info("persona %r carregada (%d fatos aprendidos)", persona.name, len(persona.facts))
         conferirOTamanhoDaPersona(persona.systemPrompt(), settings.llm)

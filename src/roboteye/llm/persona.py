@@ -88,6 +88,10 @@ quem fala com voce: prefere o que serve para qualquer pessoa.\
 """
 
 
+#: Prompt do modelo treinado (`ROBOTEYE_LLM_PROMPT_CURTO=true`).
+PROMPT_CURTO = "Voce e Atlas, robo da Engenharia de Computacao da SETREM."
+
+
 @dataclass(frozen=True, slots=True)
 class Persona:
     """Identidade carregada do disco, pronta para virar prompt de sistema."""
@@ -96,9 +100,19 @@ class Persona:
     identity: str
     facts: tuple[str, ...] = ()
     language: str = "en"
+    #: Modelo treinado na persona: identidade e regras já estão nos pesos.
+    curto: bool = False
 
     def systemPrompt(self) -> str:
         """Monta o prompt de sistema: identidade + fatos + regras de saida."""
+        if self.curto:
+            # Tem de bater, palavra por palavra, com o que scripts/treino/ usou
+            # no treino; um prompt diferente devolve o modelo ao chute.
+            blocos = [PROMPT_CURTO]
+            if self.facts:
+                blocos.append("Fatos:\n" + "\n".join(f"- {fato}" for fato in self.facts))
+            return "\n\n".join(blocos)
+
         blocos = [self.identity.strip()]
 
         if self.facts:
@@ -113,9 +127,10 @@ class Persona:
 class PersonaStore:
     """Le e escreve as personas em disco."""
 
-    def __init__(self, directory: Path, name: str = "atlas") -> None:
+    def __init__(self, directory: Path, name: str = "atlas", *, curto: bool = False) -> None:
         self.directory = directory
         self.name = name
+        self.curto = curto
 
     # -- caminhos ----------------------------------------------------------
     @property
@@ -147,6 +162,7 @@ class PersonaStore:
             identity=identity,
             facts=self.loadFacts(),
             language=language,
+            curto=self.curto,
         )
 
     def loadFacts(self) -> tuple[str, ...]:
