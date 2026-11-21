@@ -82,7 +82,7 @@ class TestAssistant:
         assert recorder.waitFor(SpeechFinished, timeout=10)
         primeira = llm.prompts[-1][0]
         assert primeira.role == "system"
-        assert primeira.content == "seja sarcástica"
+        assert primeira.content.startswith("seja sarcástica\n\nHoje e ")
 
     def testMensagemVaziaEIgnorada(self, makeAssistant, makeLlm, recorder) -> None:
         assistant, _ = makeAssistant(makeLlm())
@@ -178,7 +178,7 @@ class TestConversationMemory:
         prompt = memory.buildPrompt()
 
         assert prompt[0].role == "system"
-        assert prompt[0].content == "seja breve"
+        assert prompt[0].content.startswith("seja breve\n\nHoje e ")
         assert prompt[1].content == "olá"
 
     def testJanelaDescartaAsMensagensAntigas(self) -> None:
@@ -209,4 +209,4 @@ class TestConversationMemory:
         memory = ConversationMemory("antigo")
         memory.replaceSystemPrompt("novo")
 
-        assert memory.buildPrompt()[0].content == "novo"
+        assert memory.buildPrompt()[0].content.startswith("novo\n\nHoje e ")

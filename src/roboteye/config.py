@@ -257,6 +257,13 @@ class LLMSettings:
     #: modelo que toma a maquina inteira faz a animacao engasgar bem no momento
     #: em que a pessoa esta esperando resposta.
     numThread: int = 0
+    #: Criatividade da resposta. 0,8 servia a modelos grandes; num modelo de 1B
+    #: é o que faz ela inventar data, nome e número com toda a confiança.
+    temperature: float = 0.8
+    #: Para um modelo treinado na persona (scripts/treino/): ele já sabe quem é
+    #: e como falar, então o prompt leva só os fatos e a data. Cada token a menos
+    #: é tempo a menos até o primeiro som no Pi.
+    promptCurto: bool = False
     #: Quanto tempo o modelo fica na memoria depois de responder, no formato do
     #: Ollama ("5m", "30s", "0"). Vale para o `host` principal, que costuma ser
     #: a maquina de mesa — onde memoria sobra.
@@ -299,6 +306,8 @@ class LLMSettings:
             probeInterval=getFloat("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
             numCtx=getInt("LLM_NUM_CTX", DEFAULT_NUM_CTX, minimum=256),
             numThread=getInt("LLM_NUM_THREAD", 0, minimum=0),
+            temperature=getFloat("LLM_TEMPERATURE", 0.8, minimum=0.0),
+            promptCurto=getBool("LLM_PROMPT_CURTO", False),
             keepAlive=getStr("LLM_KEEP_ALIVE", "5m"),
             fallbackKeepAlive=getStr("LLM_FALLBACK_KEEP_ALIVE", "0"),
             linguagemNeutra=getBool("LINGUAGEM_NEUTRA", True),
