@@ -1,0 +1,11 @@
+# Instalado por scripts/setup-raspberry-pi.sh; disparado por
+# scripts/roboteye-audio.rules quando uma placa de som USB é plugada.
+[Unit]
+Description=RobotEye - aponta o audio para a placa USB plugada
+
+[Service]
+Type=oneshot
+# O evento da placa chega antes dos dispositivos dela; sem esperar, o script
+# pode não ver a saída nem o microfone ainda.
+ExecStartPre=/usr/bin/udevadm settle --timeout=10
+ExecStart=@REPO_DIR@/scripts/configurar-audio.sh
