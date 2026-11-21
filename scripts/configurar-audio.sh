@@ -34,6 +34,7 @@ USAR_HDMI=false
 SO_MOSTRAR=false
 
 log() { echo "    $*"; }
+warn() { echo "    [aviso] $*" >&2; }
 fail() { echo "[erro] $*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
@@ -99,6 +100,19 @@ else
     warn "não achei o nome da placa; usando o número, que pode mudar no reboot"
 fi
 
+# dmix e dsnoop abrem a placa com um número fixo de canais, e uma placa que não
+# o aceita deixa o robô mudo ou surdo. Fixo em 2/1 servia ao dongle antigo, mas
+# há headsets com microfone só estéreo e viva-vozes com saída só mono. A placa
+# USB diz o que aceita em /proc/asound/cardN/stream0; sem esse arquivo (HDMI),
+# fica o 2/1 de sempre.
+canais() {
+    awk -v secao="$1:" '$0 == secao { achou = 1 } achou && /Channels:/ { print $2; exit }' \
+        "/proc/asound/card${CARD}/stream0" 2>/dev/null
+}
+CANAIS_SAIDA="$(canais Playback)"; CANAIS_SAIDA="${CANAIS_SAIDA:-2}"
+CANAIS_ENTRADA="$(canais Capture)"; CANAIS_ENTRADA="${CANAIS_ENTRADA:-1}"
+log "canais: ${CANAIS_SAIDA} de saída, ${CANAIS_ENTRADA} de entrada"
+
 # --- escrever o padrão do sistema -------------------------------------------
 # Três camadas, e cada uma resolve um problema que já quebrou este robô:
 #
@@ -155,7 +169,7 @@ pcm.roboteye_dmix {
     slave {
         pcm "${ALVO}"
         rate 48000
-        channels 2
+        channels ${CANAIS_SAIDA}
         period_size 1024
         buffer_size 8192
     }
@@ -173,7 +187,7 @@ pcm.roboteye_dsnoop {
     slave {
         pcm "${ALVO}"
         rate 48000
-        channels 1
+        channels ${CANAIS_ENTRADA}
         period_size 1024
         buffer_size 8192
     }
