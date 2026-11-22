@@ -96,6 +96,19 @@ ESCALA_INT16 = 32767.0
 #: concluiria que não era com ele.
 SILENCIO_DE_PARTIDA_S = 0.5
 
+#: O que o Vosk escreve quando ouve ruído com jeito de fala (fone `spn`).
+#:
+#: Não é palavra: é o modelo dizendo "tinha som aqui". Medido no banco de
+#: testes (`scripts/escuta-treino/`), o modelo grande punha um `[unk]` no fim
+#: de quase toda frase — e o modelo de linguagem recebia "que horas são unk".
+#: Cada modelo grafa de um jeito: no Pi, o grande sai `<UNK>`.
+RUIDO = {"[unk]", "<unk>"}
+
+
+def limparTexto(texto: str) -> str:
+    """Tira as marcas de ruído do que o Vosk reconheceu."""
+    return " ".join(p for p in texto.split() if p.lower() not in RUIDO)
+
 
 class VoskEars:
     """Ouve o microfone e devolve o que foi dito, em português."""
@@ -305,7 +318,7 @@ class VoskEars:
             inicio = time.perf_counter()
             if not reconhecedor.AcceptWaveform(bloco):
                 continue
-            texto = json.loads(reconhecedor.Result()).get("text", "").strip()
+            texto = limparTexto(json.loads(reconhecedor.Result()).get("text", ""))
             if not texto:
                 continue
             # O som de "terminei de ouvir" sai antes de a frase ser entregue: é

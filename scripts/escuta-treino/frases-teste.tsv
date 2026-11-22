@@ -1,0 +1,75 @@
+# Banco de testes da escuta: categoria<TAB>frase falada.
+# A referência é a frase em minúsculas, sem pontuação (ver avaliar.py).
+# Estas frases NÃO entram no corpus do modelo de linguagem (corpus.py as
+# filtra), para a medida de "domínio" mostrar generalização e não decoreba.
+# Números sempre por extenso: é assim que o Vosk escreve.
+dominio	Atlas, que dia é hoje?
+dominio	Atlas, quem é o coordenador do curso?
+dominio	Atlas, você pode me explicar o que é um algoritmo?
+dominio	Atlas, o que é uma variável?
+dominio	Atlas, qual é a lei de Ohm?
+dominio	Atlas, quanto é três vezes quatro?
+dominio	Atlas, me conta uma piada sobre computador.
+dominio	Atlas, que horas são agora?
+dominio	Atlas, como funciona uma rede neural?
+dominio	Atlas, o que você sabe fazer?
+dominio	Atlas, tudo bem com você?
+dominio	Atlas, qual a diferença entre hardware e software?
+dominio	Atlas, o que é um resistor?
+dominio	Atlas, o que significa a sigla cpu?
+dominio	Atlas, explica o que é recursão.
+dominio	qual é o seu nome?
+dominio	o que é engenharia de computação?
+dominio	você é um robô de verdade?
+dominio	quem construiu você?
+dominio	quantos semestres tem o curso de engenharia de computação?
+dominio	o que é programação orientada a objetos?
+dominio	qual a derivada de x ao cubo?
+dominio	quanto é cinquenta dividido por cinco?
+dominio	o que faz um transistor?
+dominio	o que é um sistema operacional?
+dominio	para que serve um capacitor?
+dominio	o que é um banco de dados relacional?
+dominio	me explica o que é inteligência artificial.
+dominio	qual linguagem de programação você usa?
+dominio	como eu faço para estudar para a prova de cálculo?
+dominio	o que é um microcontrolador?
+dominio	qual a capital do rio grande do sul?
+dominio	onde fica o laboratório de informática?
+dominio	o que é uma porta lógica?
+dominio	você gosta de matemática?
+nomes	Atlas, o que é a SETREM?
+nomes	quem é o Leonardo Ropke?
+nomes	quem é o Eduardo Goetz?
+nomes	Atlas, quem é o diretor da SETREM?
+nomes	o professor Leonardo Ropke é o coordenador.
+nomes	Atlas, o Eduardo Goetz é aluno da SETREM?
+nomes	quem é o Antonio Ternes?
+nomes	eu estudo na SETREM em Três de Maio.
+nomes	Atlas, você conhece o Ropke?
+nomes	o Goetz está em qual semestre?
+geral	hoje o dia está muito bonito lá fora.
+geral	eu gosto de tomar chimarrão de manhã.
+geral	vamos almoçar juntos amanhã?
+geral	o ônibus atrasou de novo hoje.
+geral	minha mãe fez um bolo de chocolate.
+geral	você viu o jogo de futebol ontem à noite?
+geral	está fazendo muito frio nesta semana.
+geral	preciso comprar pão e leite no mercado.
+geral	o meu cachorro adora correr no parque.
+geral	ele chegou atrasado na reunião de trabalho.
+geral	a gente pode conversar depois da aula?
+geral	eu não entendi a pergunta, pode repetir?
+geral	o filme que eu assisti ontem era muito engraçado.
+geral	o carro do meu pai estragou na estrada.
+geral	amanhã vai chover o dia inteiro.
+geral	qual é o seu filme favorito?
+geral	nós vamos viajar para a praia nas férias.
+geral	o médico disse que eu preciso descansar.
+geral	a festa de aniversário começa às oito horas.
+geral	eu moro numa casa perto da escola.
+geral	você pode abrir a janela, por favor?
+geral	meu irmão trabalha numa fábrica de móveis.
+geral	o preço da gasolina subiu outra vez.
+geral	obrigado pela ajuda, até mais.
+geral	bom dia, como você está?
