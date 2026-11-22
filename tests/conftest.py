@@ -211,6 +211,7 @@ def makeAssistant(makeSpeaker, bus: EventBus):
         personaDir: Path | None = None,
         language: str = "en",
         linguagemNeutra: bool = False,
+        esquecerAposS: float = 120.0,
     ):
         store = PersonaStore(personaDir, "atlas") if personaDir else None
         prompt = store.load().systemPrompt() if store else systemPrompt
@@ -225,6 +226,7 @@ def makeAssistant(makeSpeaker, bus: EventBus):
             persona=store,
             language=language,
             linguagemNeutra=linguagemNeutra,
+            esquecerAposS=esquecerAposS,
         )
         assistant.start()
         criados.append(assistant)

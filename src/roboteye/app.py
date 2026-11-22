@@ -34,7 +34,7 @@ from roboteye.hearing import (
     createEars,
     dirigidoAoRobo,
 )
-from roboteye.hearing.gatilho import Conversa
+from roboteye.hearing.gatilho import Conversa, pareceRuido
 from roboteye.llm.base import LLMClient
 from roboteye.llm.factory import createLlmClient
 from roboteye.llm.memory import ConversationMemory
@@ -289,6 +289,15 @@ class Application:
                     if conversa.aberta():
                         self.bus.publish(ListeningChanged(active=True))
                         self.perguntarSeFicouNoAr()
+                    continue
+                if pareceRuido(pergunta):
+                    # Pede de novo sem passar pelo modelo nem pelo histórico, e
+                    # deixa a janela aberta para a pergunta vir sem o nome.
+                    logger.info(
+                        "ouvi %r, solto demais para ser pergunta; pedindo de novo", pergunta
+                    )
+                    conversa.abrir()
+                    self.assistant.sayDirectly("Não entendi. Pode repetir?")
                     continue
                 logger.info("ouvi: %s", pergunta)
                 self.cancelarPergunta()

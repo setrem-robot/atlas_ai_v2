@@ -115,3 +115,21 @@ def simplificar(texto: str) -> str:
         if unicodedata.category(letra) != "Mn"
     )
     return re.sub(r"[^\w\s]", " ", semAcento)
+
+
+#: Uma palavra só que ainda é conversa: cumprimento, agradecimento, resposta.
+UMA_PALAVRA_QUE_VALE = frozenset(
+    {"oi", "ola", "opa", "obrigado", "obrigada", "valeu", "tchau", "sim", "nao", "beleza"}
+)
+
+
+def pareceRuido(pergunta: str) -> bool:
+    """Uma palavra solta que não é conversa ("aí", "um", "de").
+
+    É o que o Vosk tira de um barulho logo depois do "Atlas": mandada ao modelo
+    de 1B, vira um despejo dos fatos da memória, e essa resposta no histórico
+    ensina o modelo a responder assim todas as perguntas seguintes (visto no
+    Pi: "aí" -> "Atlas, o Eduardo Goetz está no décimo catorze semestre...").
+    """
+    palavras = simplificar(pergunta).split()
+    return len(palavras) == 1 and palavras[0] not in UMA_PALAVRA_QUE_VALE

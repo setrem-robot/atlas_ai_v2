@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 
 from roboteye.core.events import (
     AssistantReply,
@@ -32,6 +33,11 @@ from roboteye.speech.speaker import Speaker
 
 logger = getLogger(__name__)
 
+#: Depois de tanto tempo sem pergunta, a conversa recomeça do zero. Num robô de
+#: corredor, quem pergunta agora quase nunca é quem perguntou antes; e uma
+#: resposta ruim no histórico vira molde para as seguintes num modelo de 1B.
+ESQUECER_APOS_S = 120.0
+
 
 class Assistant:
     """Consome mensagens do usuario e produz resposta falada."""
@@ -46,6 +52,7 @@ class Assistant:
         persona: PersonaStore | None = None,
         language: str = "en",
         linguagemNeutra: bool = False,
+        esquecerAposS: float = ESQUECER_APOS_S,
     ) -> None:
         self.llm = llm
         self.memoryStore = memory
@@ -57,6 +64,9 @@ class Assistant:
         #: So existe a versao em portugues: e a lingua em que quase todo
         #: adjetivo flexiona, e a unica em que o robo fala hoje.
         self.linguagemNeutra = linguagemNeutra and language.lower().startswith("pt")
+
+        self.esquecerAposS = esquecerAposS
+        self.ultimoTurno: float | None = None
 
         self.inbox: queue.Queue[str | None] = queue.Queue()
         self.thread: threading.Thread | None = None
@@ -236,6 +246,14 @@ class Assistant:
 
     def handleTurn(self, message: str) -> None:
         logger.info("usuario: %s", truncate(message))
+        agora = time.monotonic()
+        if self.ultimoTurno is not None and agora - self.ultimoTurno > self.esquecerAposS:
+            if len(self.memoryStore):
+                logger.info(
+                    "conversa parada ha %.0f s; comecando do zero", agora - self.ultimoTurno
+                )
+            self.memoryStore.clear()
+        self.ultimoTurno = agora
         self.memoryStore.addUser(message)
         self.bus.publish(ThinkingStarted())
 

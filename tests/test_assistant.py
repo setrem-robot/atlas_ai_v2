@@ -91,6 +91,32 @@ class TestAssistant:
         assert ultima.content == "Uma resposta suficientemente longa para o teste."
         assert not assistant.isBusy
 
+    def testConversaParadaRecomecaDoZero(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Uma resposta suficientemente longa para o teste.")
+        assistant, _ = makeAssistant(llm, esquecerAposS=0.0)
+
+        assistant.submit("primeira")
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        recorder.events.clear()
+        time.sleep(0.01)
+        assistant.submit("segunda")
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+
+        conteudos = [m.content for m in llm.prompts[-1][1:]]
+        assert conteudos == ["segunda"]
+
+    def testConversaSeguidaGuardaOHistorico(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Uma resposta suficientemente longa para o teste.")
+        assistant, _ = makeAssistant(llm)
+
+        assistant.submit("primeira")
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        recorder.events.clear()
+        assistant.submit("segunda")
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+
+        assert llm.prompts[-1][1].content == "primeira"
+
     def testPromptDeSistemaVaiJunto(self, makeAssistant, makeLlm, recorder) -> None:
         llm = makeLlm("Uma resposta suficientemente longa para o teste.")
         assistant, _ = makeAssistant(llm, systemPrompt="seja sarcástica")

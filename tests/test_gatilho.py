@@ -95,3 +95,17 @@ class TestJanelaDeConversa:
     def testSemSerChamadaContinuaIgnorando(self) -> None:
         conversa = Conversa(janelaS=8.0)
         assert dirigidoAoRobo("que horas sao", "atlas", conversa=conversa, agora=0.0) is None
+
+
+class TestPareceRuido:
+    def testPalavraSoltaEhRuido(self) -> None:
+        from roboteye.hearing.gatilho import pareceRuido
+
+        assert pareceRuido("aí")
+        assert pareceRuido("um")
+
+    def testCumprimentoEPerguntaPassam(self) -> None:
+        from roboteye.hearing.gatilho import pareceRuido
+
+        for fala in ("olá", "Obrigado", "não", "quanto é um mais cinco", "que horas são"):
+            assert not pareceRuido(fala), fala
