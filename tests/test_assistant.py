@@ -288,3 +288,29 @@ class TestPiadas:
 
         assert recorder.waitFor(SpeechFinished, timeout=10)
         assert len(llm.prompts) == 1
+
+
+class TestRespostasSemModelo:
+    def testContaSaiCertaSemOModelo(self, makeAssistant, makeLlm, recorder) -> None:
+        """O modelo pequeno chuta aritmetica; a conta sai calculada."""
+        llm = makeLlm("A raiz quadrada de dezesseis é oito.")
+        assistant, _ = makeAssistant(llm, language="pt")
+
+        assistant.submit("qual a raiz quadrada de dezesseis")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        assert llm.prompts == []
+        assert recorder.ofType(AssistantReply)[0].text.rstrip(".").endswith("4")  # type: ignore[attr-defined]
+
+    def testFraseRepetidaPeloModeloSaiUmaVez(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm(
+            "O céu é azul por causa da luz do sol. "
+            "O céu é azul por causa da luz do sol. Ela espalha mais o azul."
+        )
+        assistant, _ = makeAssistant(llm, language="pt")
+
+        assistant.submit("por que o céu é azul")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        resposta = recorder.ofType(AssistantReply)[0].text  # type: ignore[attr-defined]
+        assert resposta == "O céu é azul por causa da luz do sol. Ela espalha mais o azul."
