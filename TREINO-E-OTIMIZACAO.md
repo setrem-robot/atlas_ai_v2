@@ -204,6 +204,17 @@ deve trazer a velocidade de volta. Mais threads não ajudam: 2 geram 10 tok/s,
 3 geram 9,5, 4 geram 8. As rodadas treinam sobre o Qwen2.5
 (`ATLAS_BASE=qwen` em `treinar.py`, template ChatML com asserts).
 
+**`atlas-qwen-r2`** (rodada 2, 14964 exemplos, release `atlas-qwen-r2`): **64/72
+(89%)** na prova, conversa com mediana de 2,5 s até começar a falar. É o
+modelo do robô desde 22/11 de manhã.
+
+Cuidado ao importar no Ollama: o `transformers` 5 grava a frequência do RoPE
+só em `rope_parameters`, e o conversor de safetensors do Ollama procura
+`rope_theta` no topo do `config.json`; sem ele usa 10000, e o Qwen2.5
+(1000000) importado assim só gera lixo (a primeira tentativa do r2 tirou
+10/72). `treinar.py` (`ropeComoOOllamaLe`) copia o valor para o topo depois de
+salvar.
+
 Prova antiga (68 perguntas): `gemma3:1b` 35/68, `atlas-1b` v1 52/68.
 
 ### Por que ela respondia sem nexo

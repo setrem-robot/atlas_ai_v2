@@ -23,6 +23,7 @@ mesmo comando continua do último. Sai `atlas-1b/` em safetensors;
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -193,8 +194,26 @@ def main(arquivo: str) -> int:
     # e pede `sudo apt`. O Ollama do PC importa safetensors do Gemma 3 direto e
     # quantiza na hora (`ollama create --quantize`), sem compilar nada.
     model.save_pretrained_merged(SAIDA, tokenizer, save_method="merged_16bit")
+    ropeComoOOllamaLe(Path(SAIDA) / "config.json")
     print(f"pronto: {SAIDA}/ — rode scripts/treino/instalar-no-pi.sh")
     return 0
+
+
+def ropeComoOOllamaLe(caminho: Path) -> None:
+    """O transformers 5 grava a frequência do RoPE só em `rope_parameters`; o
+    conversor de safetensors do Ollama lê `rope_theta` no topo e, sem ele, usa
+    10000 — o Qwen2.5 (1000000) importado assim só gera lixo (rodada 2, 22/11:
+    10/72 na prova). Copia os valores para onde o Ollama procura."""
+    cfg = json.loads(caminho.read_text(encoding="utf-8"))
+    rope = cfg.get("rope_parameters") or {}
+    if "rope_theta" in rope:
+        cfg.setdefault("rope_theta", rope["rope_theta"])
+    else:  # Gemma 3: um RoPE por tipo de camada
+        if "rope_theta" in rope.get("full_attention", {}):
+            cfg.setdefault("rope_theta", rope["full_attention"]["rope_theta"])
+        if "rope_theta" in rope.get("sliding_attention", {}):
+            cfg.setdefault("rope_local_base_freq", rope["sliding_attention"]["rope_theta"])
+    caminho.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":
