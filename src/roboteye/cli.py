@@ -59,8 +59,7 @@ def buildParser() -> argparse.ArgumentParser:
         sub.add_argument(
             "--voice",
             metavar="NOME",
-            help=f"voz do catalogo ({', '.join(voiceCatalog.names())}); "
-            "sobrescreve ROBOTEYE_VOICE",
+            help=f"voz do catalogo ({', '.join(voiceCatalog.names())}); sobrescreve ROBOTEYE_VOICE",
         )
 
     def addPersonaOption(sub: argparse.ArgumentParser) -> None:
@@ -72,9 +71,7 @@ def buildParser() -> argparse.ArgumentParser:
 
     run = subparsers.add_parser("run", help="face animada + chat de texto (padrao)")
     run.add_argument("--fullscreen", action="store_true", help="abre a face em tela cheia")
-    run.add_argument(
-        "--no-face", dest="noFace", action="store_true", help="roda apenas o chat"
-    )
+    run.add_argument("--no-face", dest="noFace", action="store_true", help="roda apenas o chat")
     addVoiceOption(run)
     addPersonaOption(run)
     run.set_defaults(handler=commandRun)
@@ -150,16 +147,12 @@ def buildParser() -> argparse.ArgumentParser:
     web.add_argument("--port", type=int, help="porta (padrao: 8080)")
     web.set_defaults(handler=commandWeb)
 
-    ble = subparsers.add_parser(
-        "ble", help="ponte bluetooth: o celular controla o robo pelo Pi"
-    )
+    ble = subparsers.add_parser("ble", help="ponte bluetooth: o celular controla o robo pelo Pi")
     ble.add_argument("--nome", default="Atlas", help="nome que aparece na busca do celular")
     ble.add_argument(
         "--mqtt-host", dest="mqttHost", default="127.0.0.1", help="broker (padrao: 127.0.0.1)"
     )
-    ble.add_argument(
-        "--mqtt-port", dest="mqttPort", type=int, default=1883, help="porta do broker"
-    )
+    ble.add_argument("--mqtt-port", dest="mqttPort", type=int, default=1883, help="porta do broker")
     ble.set_defaults(handler=commandBle)
 
     voice = subparsers.add_parser("voice", help="gerencia modelos de voz")

@@ -13,10 +13,29 @@ from datetime import date
 
 from roboteye.llm.base import ChatMessage
 
-_DIAS = ("segunda-feira", "terca-feira", "quarta-feira", "quinta-feira", "sexta-feira",
-         "sabado", "domingo")
-_MESES = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto",
-          "setembro", "outubro", "novembro", "dezembro")
+_DIAS = (
+    "segunda-feira",
+    "terca-feira",
+    "quarta-feira",
+    "quinta-feira",
+    "sexta-feira",
+    "sabado",
+    "domingo",
+)
+_MESES = (
+    "janeiro",
+    "fevereiro",
+    "marco",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+)
 
 
 def hojePorExtenso(dia: date | None = None) -> str:
