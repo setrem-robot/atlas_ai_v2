@@ -29,7 +29,7 @@ from dataclasses import dataclass, replace
 
 from roboteye.face import easing
 from roboteye.face.easing import Tween
-from roboteye.face.expressions import IDLE_WEIGHTS, Expression
+from roboteye.face.expressions import IDLE_WEIGHTS, REST_WEIGHT, Expression
 from roboteye.face.layout import LOOK_RANGE
 from roboteye.face.shapes import (
     HIDDEN_MOUTH,
@@ -304,6 +304,8 @@ class EyeAnimator:
 
         # -- o que ela sente e o que ela faz --------------------------------
         self.mood = Expression.NEUTRAL
+        #: O humor que a conversa deixou: a cara que o sorteio ocioso mais escolhe.
+        self.restMood = Expression.NEUTRAL
         self.activityAtual: Expression | None = None
         self.sleeping = False
 
@@ -628,7 +630,9 @@ class EyeAnimator:
         Riso sacode na vertical; tontura, na horizontal e fora de fase; furia
         treme sem descanso.
         """
-        if self.activityAtual is not None:
+        # Falando, so a risada sacode: e ela que esta rindo, e o riso tem de
+        # aparecer no corpo junto com o som. As outras ficam para o repouso.
+        if self.activityAtual is not None and self.mood is not Expression.LAUGH:
             return 0.0, 0.0, 0.0, 0.0
 
         if self.mood is Expression.RAGE:
@@ -980,9 +984,11 @@ class EyeAnimator:
         return self.rng.uniform(*interval)
 
     def weightedMood(self) -> Expression:
+        weights = dict(IDLE_WEIGHTS)
+        weights[self.restMood] = weights.get(self.restMood, 0) + REST_WEIGHT
         candidates = [
             expression
-            for expression, weight in IDLE_WEIGHTS.items()
+            for expression, weight in weights.items()
             if expression != self.mood
             for _ in range(weight)
         ]

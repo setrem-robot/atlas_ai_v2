@@ -65,11 +65,16 @@ _TRANSIENT = frozenset({Expression.LAUGH, Expression.DIZZY})
 #: que troca de expressao o tempo todo parece nervosa, nao viva. RAGE fica de
 #: fora: um rosto de monstro surgindo sozinho assustaria sem motivo — ele so
 #: aparece quando alguem o pede.
+#:
+#: Brava e rindo sairam do sorteio: agora as duas tem motivo (xingamento, piada),
+#: e uma cara brava ou uma gargalhada do nada desmentia o humor que a conversa
+#: deixou. O humor de repouso (`EyeAnimator.restMood`) ganha `REST_WEIGHT` a mais.
 IDLE_WEIGHTS: dict[Expression, int] = {
     Expression.NEUTRAL: 8,
     Expression.HAPPY: 3,
     Expression.TIRED: 2,
-    Expression.ANGRY: 2,
-    Expression.LAUGH: 1,
     Expression.DIZZY: 1,
 }
+
+#: Peso extra do humor de repouso no sorteio ocioso.
+REST_WEIGHT = 10

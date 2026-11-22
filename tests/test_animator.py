@@ -519,6 +519,27 @@ class TestOuvir:
         assert barulho.left.width == pytest.approx(quieto.left.width, rel=0.01)
 
 
+class TestHumorDeRepouso:
+    def testOciosoNuncaSorteiaBravaNemRiso(self) -> None:
+        animator = EyeAnimator(idleAnimations=True, rng=random.Random(1))
+        vistos = set()
+        for _ in range(400):
+            vistos.add(animator.weightedMood())
+        assert Expression.ANGRY not in vistos and Expression.LAUGH not in vistos
+
+    def testHumorDeRepousoDominaOSorteio(self) -> None:
+        animator = EyeAnimator(idleAnimations=True, rng=random.Random(1))
+        animator.restMood = Expression.HAPPY
+        sorteados = [animator.weightedMood() for _ in range(400)]
+        assert sorteados.count(Expression.HAPPY) > sorteados.count(Expression.NEUTRAL)
+
+    def testRisoSacodeMesmoFalando(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.SPEAKING)
+        animator.setMood(Expression.LAUGH)
+        ys = [f.left.offsetY for f in coletar(animator, 0.6)]
+        assert max(ys) - min(ys) > 20.0
+
+
 class TestMonstro:
     def testRageFicaMonstro(self, animator: EyeAnimator) -> None:
         animator.setMood(Expression.RAGE)

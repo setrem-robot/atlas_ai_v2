@@ -23,6 +23,7 @@ from roboteye.core.events import (
     UserMessage,
 )
 from roboteye.core.neutroPt import neutralize
+from roboteye.core.piadas import Piadas
 from roboteye.core.text import streamSentences, truncate
 from roboteye.llm.base import LLMClient, LLMError
 from roboteye.llm.fallback import FallbackLLMClient
@@ -67,6 +68,9 @@ class Assistant:
 
         self.esquecerAposS = esquecerAposS
         self.ultimoTurno: float | None = None
+        #: Piadas respondidas sem o modelo, que nao entende graca (`core/piadas.py`).
+        #: So em portugues: as formas que ela reconhece sao as daqui.
+        self.piadas = Piadas() if language.lower().startswith("pt") else None
 
         self.inbox: queue.Queue[str | None] = queue.Queue()
         self.thread: threading.Thread | None = None
@@ -255,6 +259,19 @@ class Assistant:
             self.memoryStore.clear()
         self.ultimoTurno = agora
         self.memoryStore.addUser(message)
+
+        pronta = self.piadas.responder(message, agora) if self.piadas else None
+        if pronta is not None:
+            # Sem `ThinkingStarted`: nao ha o que pensar, e a cara de pensativa
+            # antes de rir de uma piada desmancharia a graca. O microfone pausa
+            # do mesmo jeito, no `SpeechStarted` da fala.
+            self.speaker.say(pronta)
+            self.memoryStore.addAssistant(pronta)
+            self.bus.publish(AssistantReply(text=pronta))
+            self.speaker.endTurn()
+            logger.info("assistente: %s [pronta]", truncate(pronta))
+            return
+
         self.bus.publish(ThinkingStarted())
 
         spoken: list[str] = []

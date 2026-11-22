@@ -264,3 +264,27 @@ class TestConversationMemory:
         memory.replaceSystemPrompt("novo")
 
         assert memory.buildPrompt()[0].content.startswith("novo\n\nHoje e ")
+
+
+class TestPiadas:
+    def testPiadaRespondeSemOModelo(self, makeAssistant, makeLlm, recorder) -> None:
+        """O modelo nao entende graca; a piada pedida sai pronta e sem pensar."""
+        llm = makeLlm("Não sei contar piadas.")
+        assistant, _ = makeAssistant(llm, language="pt")
+
+        assistant.submit("me conta uma piada")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        assert llm.prompts == []
+        assert "ThinkingStarted" not in recorder.typeNames()
+        resposta = recorder.ofType(AssistantReply)[0].text  # type: ignore[attr-defined]
+        assert "Hahaha" in resposta
+
+    def testConversaNormalVaiAoModelo(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Sou a Atlas.")
+        assistant, _ = makeAssistant(llm, language="pt")
+
+        assistant.submit("qual é o seu nome")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        assert len(llm.prompts) == 1

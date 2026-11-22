@@ -15,9 +15,11 @@ from collections.abc import Generator, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 
 from roboteye.core.events import ErrorOccurred, EventBus, SpeechFinished, SpeechStarted
+from roboteye.core.humor import trechosDaRisada
 from roboteye.core.text import cleanForSpeech, truncate
 from roboteye.loggingSetup import getLogger
-from roboteye.speech.base import SpeechChunk, SpeechError, TTSEngine
+from roboteye.speech import sinal
+from roboteye.speech.base import AudioFormat, SpeechChunk, SpeechError, TTSEngine
 from roboteye.speech.envelope import SpeechEnvelope
 from roboteye.speech.player import AudioSink
 from roboteye.speech.polish import AudioPolish
@@ -119,10 +121,32 @@ def synthesizePolished(
     separados, `say` pulava a normalizacao e o acabamento, e servia mal como
     ferramenta de conferencia justamente por isso.
     """
-    cleaned = cleanForSpeech(text, language=language)
-    if not cleaned:
-        return
-    yield from (polish or AudioPolish()).process(engine.synthesize(cleaned))
+    acabamento = polish or AudioPolish()
+    # A voz nao sabe rir: cada "haha" vira o som de riso, no formato da voz que
+    # o cerca. Risada antes de qualquer voz espera o primeiro bloco dela para
+    # saber o formato — so sobra no formato padrao se a fala for so risada.
+    formato: AudioFormat | None = None
+    risadasPendentes = 0
+    for trecho, eRisada in trechosDaRisada(text):
+        if eRisada:
+            if formato is None:
+                risadasPendentes += 1
+            else:
+                yield from sinal.risada(formato)
+            continue
+
+        cleaned = cleanForSpeech(trecho, language=language)
+        if not cleaned:
+            continue
+        for chunk in acabamento.process(engine.synthesize(cleaned)):
+            formato = chunk.format
+            for _ in range(risadasPendentes):
+                yield from sinal.risada(formato)
+            risadasPendentes = 0
+            yield chunk
+
+    for _ in range(risadasPendentes):
+        yield from sinal.risada(formato)
 
 
 @dataclass(frozen=True, slots=True)

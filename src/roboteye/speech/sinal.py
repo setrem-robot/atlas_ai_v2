@@ -124,3 +124,60 @@ def ouvi() -> tuple[SpeechChunk, ...]:
 def duracaoS() -> float:
     """Quanto tempo um sinal dura. Os dois têm a mesma duração."""
     return len(par(NOTA_GRAVE_HZ, NOTA_AGUDA_HZ)) / 2 / TAXA
+
+
+# ---------------------------------------------------------------------------
+# A risada
+# ---------------------------------------------------------------------------
+#: As sílabas do riso, em Hz: cada "he" um pouco mais grave que o anterior, que
+#: é como uma risada de gente cai. Agudo de propósito — robô pequeno, riso fino.
+SILABAS_DO_RISO_HZ = (560.0, 525.0, 495.0, 465.0)
+DURACAO_SILABA_S = 0.085
+PAUSA_ENTRE_SILABAS_S = 0.06
+#: Mais alto que o bipe: o riso é parte da fala, não um aviso discreto.
+VOLUME_RISO = 0.32
+
+
+def silaba(frequencia: float, taxa: int) -> array:
+    """Um "he": tom que escorrega para baixo e se apaga, com harmônicos de voz.
+
+    Uma senoide pura soaria como bipe. Os dois harmônicos dão o timbre de voz
+    sintetizada, e a queda de altura dentro da sílaba é o que faz o ouvido
+    ler "ha" em vez de "piii".
+    """
+    total = int(taxa * DURACAO_SILABA_S)
+    ataque = max(1, int(taxa * RAMPA_S))
+    amostras = array("h", bytes(2 * total))
+    fase = 0.0
+    for i in range(total):
+        progresso = i / total
+        # De 12% acima até 5% abaixo da nota, ao longo da sílaba.
+        agora = frequencia * (1.12 - 0.17 * progresso)
+        fase += 2.0 * math.pi * agora / taxa
+        envelope = min(1.0, i / ataque) * (1.0 - progresso) ** 1.5
+        valor = math.sin(fase) + 0.5 * math.sin(2.0 * fase) + 0.25 * math.sin(3.0 * fase)
+        amostras[i] = int(valor / 1.75 * envelope * VOLUME_RISO * 32767)
+    return amostras
+
+
+@cache
+def pcmDaRisada(taxa: int, canais: int) -> bytes:
+    """A risada inteira em PCM, na taxa e nos canais da voz que ela interrompe."""
+    som = array("h")
+    for frequencia in SILABAS_DO_RISO_HZ:
+        som.extend(silaba(frequencia, taxa))
+        som.extend(array("h", bytes(2 * int(taxa * PAUSA_ENTRE_SILABAS_S))))
+    if canais > 1:
+        som = array("h", (amostra for amostra in som for _ in range(canais)))
+    return som.tobytes()
+
+
+def risada(formato: AudioFormat | None = None) -> tuple[SpeechChunk, ...]:
+    """O som de riso que substitui "haha" na fala (ver `synthesizePolished`).
+
+    No formato da voz que está tocando: um bloco em outra taxa obrigaria a
+    placa a fechar e reabrir no meio da frase, e isso se ouve como um estalo
+    seguido de silêncio.
+    """
+    formato = formato or AudioFormat(sampleRate=TAXA, channels=1, sampleWidth=2)
+    return (SpeechChunk(audio=pcmDaRisada(formato.sampleRate, formato.channels), format=formato),)

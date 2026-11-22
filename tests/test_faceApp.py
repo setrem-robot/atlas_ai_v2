@@ -87,8 +87,35 @@ class TestFaceApp:
         face.apply(UserMessage(text="cala a boca"))
         face.apply(UserMessage(text="sua idiota"))
         assert face.animator.mood is Expression.RAGE
+        # Parou de xingar: a braveza passa, mas a magoa fica um tempo (o ânimo).
         face.apply(UserMessage(text="o que é um bit"))
+        assert face.animator.mood is Expression.TIRED
+
+    def testRiQuandoAPessoaRi(self, settings: FaceSettings, bus: EventBus) -> None:
+        face = FaceApp(settings, bus)
+        face.apply(UserMessage(text="kkkkk você é engraçada"))
+        assert face.animator.mood is Expression.LAUGH
+
+    def testElogioSorriNaHora(self, settings: FaceSettings, bus: EventBus) -> None:
+        face = FaceApp(settings, bus)
+        face.apply(UserMessage(text="você é muito inteligente atlas"))
+        assert face.animator.mood is Expression.HAPPY
+
+    def testPiadaSoRiNaGraca(self, settings: FaceSettings, bus: EventBus) -> None:
+        """A pergunta da piada e seria; a cara ri junto com a risada."""
+        face = FaceApp(settings, bus)
+        face.apply(UserMessage(text="me conta uma piada"))
+        face.apply(SpeechStarted(text="Por que o computador foi ao médico?"))
         assert face.animator.mood is Expression.NEUTRAL
+        face.apply(SpeechStarted(text="Porque estava com vírus! Hahaha!"))
+        assert face.animator.currentExpression is Expression.LAUGH
+
+    def testBomHumorFicaDepoisDaConversa(self, settings: FaceSettings, bus: EventBus) -> None:
+        face = FaceApp(settings, bus)
+        face.apply(UserMessage(text="kkkkk"))
+        face.apply(SpeechStarted(text="Hahaha! É bom rir junto."))
+        face.apply(UserMessage(text="o que é um bit"))
+        assert face.animator.mood is Expression.HAPPY  # o riso deixou ela alegre
 
     def testFalaAlegreSorri(self, settings: FaceSettings, bus: EventBus) -> None:
         face = FaceApp(settings, bus)

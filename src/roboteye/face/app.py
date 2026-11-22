@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import queue
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -30,7 +31,7 @@ from roboteye.core.events import (
     UserMessage,
     queueSubscriber,
 )
-from roboteye.core.humor import humorDaFala, xingou
+from roboteye.core.humor import Animo, elogiou, humorDaFala, riu, xingou
 from roboteye.core.text import truncate
 from roboteye.face.animator import EyeAnimator
 from roboteye.face.expressions import Expression
@@ -89,11 +90,10 @@ class FaceApp:
         self.caption = ""
         self.captionAge = 0.0
 
-        # Humor do turno (core/humor.py): xingamentos seguidos e a pergunta, para
-        # o primeiro trecho falado com emoção dar a cara da resposta.
+        # Humor (core/humor.py): xingamentos seguidos deixam brava; o ânimo e o
+        # humor que dura a conversa e decide a cara de quando nada acontece.
         self.xingamentos = 0
-        self.pergunta = ""
-        self.humorDoTurno: str | None = None
+        self.animo = Animo()
 
         self.fps = 0.0
         self.fpsAge = 0.0
@@ -166,6 +166,8 @@ class FaceApp:
                     self.animator.setSpeechLevel(self.envelope.level())
                 if self.hearingLevel is not None:
                     self.animator.setHearingLevel(self.hearingLevel())
+                if not self.xingamentos:
+                    self.animator.restMood = Expression(self.animo.repouso(time.monotonic()))
 
                 frame = self.animator.update(dt)
                 self.renderer.draw(
@@ -234,16 +236,26 @@ class FaceApp:
             case UserMessage(text=text):
                 self.animator.wake()
                 self.setCaption("")
-                self.pergunta, self.humorDoTurno = text, None
+                agora = time.monotonic()
                 if xingou(text):
                     # Xingou, fica brava; na terceira seguida, vira monstro.
                     self.xingamentos += 1
+                    self.animo.sentir("xingou", agora)
                     self.animator.setMood(
                         Expression.RAGE if self.xingamentos >= 3 else Expression.ANGRY
                     )
+                    return
+                self.xingamentos = 0
+                # Reage ao que ouviu antes de responder: quem elogia ou ri ve a
+                # cara mudar na hora, nao so quando a resposta chega.
+                if riu(text):
+                    self.animo.sentir("laugh", agora)
+                    self.animator.setMood(Expression.LAUGH)
+                elif elogiou(text):
+                    self.animo.sentir("elogio", agora)
+                    self.animator.setMood(Expression.HAPPY)
                 else:
-                    self.xingamentos = 0
-                    self.animator.setMood(Expression.NEUTRAL)
+                    self.animator.setMood(Expression(self.animo.repouso(agora)))
 
             case ListeningChanged(active=True):
                 self.animator.setActivity(Expression.LISTENING)
@@ -257,10 +269,13 @@ class FaceApp:
 
             case SpeechStarted(text=text):
                 # O humor vem antes da atividade, para a cara entrar já com ele.
-                if not self.xingamentos and self.humorDoTurno is None:
-                    self.humorDoTurno = humorDaFala(text, self.pergunta)
-                    if self.humorDoTurno:
-                        self.animator.setMood(Expression(self.humorDoTurno))
+                # Frase a frase, e nao so a primeira: a piada pergunta séria e
+                # ri no fim, e a cara tem de rir junto com o riso, nao antes.
+                # Brava, fica brava ate a pessoa parar de xingar.
+                humor = None if self.xingamentos else humorDaFala(text)
+                if humor:
+                    self.animo.sentir(humor, time.monotonic())
+                    self.animator.setMood(Expression(humor))
                 self.animator.setActivity(Expression.SPEAKING)
                 self.setCaption(text)
 

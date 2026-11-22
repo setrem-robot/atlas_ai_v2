@@ -343,3 +343,35 @@ class TestSpeakerEncerramento:
     def testWarmUpDelegaAoMotor(self, engine, sink, bus) -> None:
         Speaker(engine, sink, bus).warmUp()
         assert engine.warmedUp
+
+
+class TestRisada:
+    """A voz nao sabe rir: "haha" vira som de riso, e o resto e falado."""
+
+    def testRisadaNaoVaiParaAVoz(self, engine) -> None:
+        from roboteye.speech.speaker import synthesizePolished
+
+        blocos = list(synthesizePolished(engine, "Hahaha! Essa foi boa!"))
+        assert engine.spoken == ["Essa foi boa!"]
+        assert len(blocos) >= 2  # o riso e a fala
+
+    def testRisadaSaiNoFormatoDaVoz(self, engine) -> None:
+        """Outro formato obrigaria a placa a reabrir no meio da frase."""
+        from roboteye.speech.speaker import synthesizePolished
+
+        blocos = list(synthesizePolished(engine, "Hahaha! Essa foi boa!"))
+        assert {b.format for b in blocos} == {blocos[-1].format}
+
+    def testRisadaNoFimTocaDepoisDaFala(self, engine) -> None:
+        from roboteye.speech import sinal
+        from roboteye.speech.speaker import synthesizePolished
+
+        blocos = list(synthesizePolished(engine, "Porque estava com vírus! Hahaha!"))
+        assert blocos[-1].audio == sinal.risada(blocos[0].format)[0].audio
+
+    def testSoRisadaAindaToca(self, engine) -> None:
+        from roboteye.speech.speaker import synthesizePolished
+
+        blocos = list(synthesizePolished(engine, "kkkkk"))
+        assert engine.spoken == []
+        assert blocos and any(blocos[0].audio)
