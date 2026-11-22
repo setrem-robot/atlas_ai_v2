@@ -430,6 +430,12 @@ class EyeAnimator:
     def currentExpression(self) -> Expression:
         if self.sleeping:
             return Expression.SLEEP
+        # Falando, a cara é a do humor (a voz continua pulsando olho e boca,
+        # que olham `activityAtual`); brava continua brava pensando e ouvindo.
+        if self.activityAtual is Expression.SPEAKING and self.mood is not Expression.NEUTRAL:
+            return self.mood
+        if self.activityAtual is not None and self.mood in (Expression.ANGRY, Expression.RAGE):
+            return self.mood
         return self.activityAtual or self.mood
 
     # -----------------------------------------------------------------------

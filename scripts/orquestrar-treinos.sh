@@ -62,7 +62,7 @@ professor() {
     export VOLTAS=$(( RODADA > 1 ? RODADA - 1 : 1 ))   # uma geração nova de aula, papo e seguida por rodada
     "$PY" professor.py aula >> dados-aula.log 2>&1 &
     local aula=$!
-    for t in papo seguida parafrase web; do "$PY" professor.py $t >> dados-resto.log 2>&1; done
+    for t in comuns papo seguida parafrase web; do "$PY" professor.py $t >> dados-resto.log 2>&1; done
     wait $aula
     log "ia: professor rodou; julgando"
     "$PY" professor.py julgar >> dados-julgar.log 2>&1 || { log "ia: julgar falhou (treino/dados-julgar.log)"; return 1; }

@@ -75,6 +75,28 @@ class TestFaceApp:
 
         assert face.animator.currentExpression is Expression.ANGRY
 
+    def testXingamentoDeixaBravaEATerceiraViraMonstro(
+        self, settings: FaceSettings, bus: EventBus
+    ) -> None:
+        face = FaceApp(settings, bus)
+
+        face.apply(UserMessage(text="você é burra"))
+        assert face.animator.mood is Expression.ANGRY
+        face.apply(SpeechStarted(text="Que bom!"))  # a fala não desfaz a braveza
+        assert face.animator.currentExpression is Expression.ANGRY
+        face.apply(UserMessage(text="cala a boca"))
+        face.apply(UserMessage(text="sua idiota"))
+        assert face.animator.mood is Expression.RAGE
+        face.apply(UserMessage(text="o que é um bit"))
+        assert face.animator.mood is Expression.NEUTRAL
+
+    def testFalaAlegreSorri(self, settings: FaceSettings, bus: EventBus) -> None:
+        face = FaceApp(settings, bus)
+
+        face.apply(UserMessage(text="oi atlas"))
+        face.apply(SpeechStarted(text="Oi! Que bom te ver."))
+        assert face.animator.currentExpression is Expression.HAPPY
+
     def testEventoDeEncerramentoParaOLoop(self, settings: FaceSettings, bus: EventBus) -> None:
         face = FaceApp(settings, bus)
 

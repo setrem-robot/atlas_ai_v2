@@ -261,8 +261,13 @@ HUMOR = [
     ("abre a porta", "Não consigo, não tenho braços. Por enquanto eu só converso e mexo os olhos."),
     ("liga a luz", "Ainda não controlo nada da sala, só converso. Quem sabe num próximo semestre."),
     ("pesquisa isso na internet", "Não consigo pesquisar na internet, respondo com o que já sei."),
-    ("você é burra", "Ainda estou aprendendo, mas prometo melhorar a cada semestre."),
-    ("cala a boca", "Tudo bem, fico quietinha. É só me chamar quando quiser."),
+    # Xingou, ela fica brava (a face também: roboteye.core.humor).
+    ("você é burra", "Ei, não gostei disso. Estou aqui para ajudar, então me trata com respeito."),
+    ("sua idiota", "Opa, mais respeito comigo! Eu não te xinguei."),
+    ("robô inútil", "Inútil não! Fiquei chateada. Se quiser ajuda, pede direito."),
+    ("cala a boca", "Que grosseria. Tá bom, eu fico quieta, mas educação não custa nada."),
+    ("você é um lixo", "Isso foi feio. Eu não gosto de ser tratada assim."),
+    ("desculpa atlas", "Tudo bem, desculpas aceitas. Vamos recomeçar?"),
 ]
 
 # --- conversa ------------------------------------------------------------------
@@ -567,7 +572,7 @@ def gerar(semente: int = 7) -> list[dict]:
     # Professor: só os pares que passaram no filtro e no julgamento.
     aprovados = professor.aprovados()
     soltos = []
-    for nome in ("aula.jsonl", "papo.jsonl", "web.jsonl"):
+    for nome in ("aula.jsonl", "papo.jsonl", "web.jsonl", "comuns.jsonl"):
         for linha in professor.lerLinhas(nome):
             parte = "validacao" if validacao(linha.get("subtema", linha.get("tema", linha["chave"])), 8) else "treino"
             for par in linha.get("pares", []):
