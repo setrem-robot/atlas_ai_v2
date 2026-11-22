@@ -59,10 +59,10 @@ validação ter com o que comparar.
 | 2 | os dois `active`, sem erro no boot |
 | 3 | tudo passa |
 | 4 | `roboteye` ≤ 1000 MiB; CPU ≤ 50% de um núcleo; `throttled 0x0`; livre ≥ 5 GB (medido: 821 MiB, 43%, 5,7 GB) |
-| 5 | mediana ≤ 2,5 s e pior ≤ 4 s até começar a falar (medido: 1,7 s / 3,3 s) |
+| 5 | mediana ≤ 2,5 s e pior ≤ 4 s até começar a falar (gemma3:1b: 1,7 s / 3,3 s). Com o qwen2.5:1.5b sem treino, em uso desde 22/11: ≤ 4 s / 6,5 s (medido 3,4 s / 5,9 s); o treinado tem de voltar a 2,5 s |
 | 6 | cada pergunta real lê ≤ 20 tokens |
 | 7 | frase inteira certa ≥ 77% e RAM pico ≤ 600 MiB (medido: 78,6–79,3%, 537 MiB; varia uma frase entre rodadas) |
-| 8 | certas ≥ as do modelo em uso (`gemma3:1b`: 51%; `atlas-1b` v1: 76%) |
+| 8 | certas ≥ as do modelo em uso, na prova de 72 (`qwen2.5:1.5b`: 42; `gemma3:1b`: 34) |
 
 ## O relatório
 
