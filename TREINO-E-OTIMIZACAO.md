@@ -31,7 +31,11 @@ Os arquivos de cada medida ficam no Pi em `~/avaliacoes/`
 (`consumo-antes.txt`, `conversa-antes.txt`, `20261122-producao-consumo.txt`,
 `20261122-producao-conversa.txt`, `20261122-batch8-conversa.txt`, ...).
 
-**O que ainda está errado:** o `gemma3:1b` mistura fatos — diz que o
+**Desde a madrugada de 22/11** o LLM do robô é o `qwen2.5:1.5b` (seção 3): responde
+com sentido, mas a mediana até começar a falar subiu para 3,4 s até o modelo
+treinado entrar.
+
+**O que estava errado:** o `gemma3:1b` mistura fatos — diz que o
 coordenador é o Antonio Ternes (o diretor), com os dois fatos certos na memória.
 É o que o `atlas-1b` v2 (seção 3) está sendo treinado para corrigir.
 
@@ -162,7 +166,7 @@ O que sobra é gerar a primeira frase (~10 tokens/s no Pi).
 
 ---
 
-## 3. LLM treinado: `atlas-1b`
+## 3. LLM treinado: `atlas-1b` e `atlas-qwen`
 
 LoRA sobre o `gemma-3-1b-it`, treinado no PC e instalado no Ollama do Pi como
 GGUF q4_K_M (o mesmo tamanho e velocidade do `gemma3:1b`). Troca a persona
@@ -181,40 +185,79 @@ os fatos e a data (`LLM_PROMPT_CURTO=true`).
   corrigidas sozinhas, com o tempo até o primeiro texto. Aquece com o system de
   cada caso, como o robô (senão mede um reprocessamento que o robô nunca paga).
 
-| modelo (prova no Pi) | certas |
-|---|---|
-| `gemma3:1b` (persona longa) | 35/68 (51%) |
-| `atlas-1b` v1 (587 exemplos à mão) | 52/68 (76%) |
-| `atlas-1b` v2 (com o professor) | em treino — ver abaixo |
+### Os modelos base
 
-### Orquestração
+A prova mudou desde o v1 (72 perguntas, com contas e falas soltas), então os
+números não se comparam com a tabela antiga. Sem treino, com a persona do robô:
 
-`scripts/orquestrar-treinos.sh` roda tudo no WSL, destacado do terminal, e é
-retomável do começo ao fim:
+| modelo (prova no Pi, 22/11) | certas | 1º texto (mediana) |
+|---|---|---|
+| `gemma3:1b` | 34/72 (47%) | 0,5 s |
+| **`qwen2.5:1.5b`** | **42/72 (58%)** | 0,5 s |
+| `qwen3:1.7b` | 44/72 (61%) | 2,0 s |
+
+Desde 22/11 o robô usa o `qwen2.5:1.5b` (`ROBOTEYE_LLM_MODEL`): responde com
+sentido onde o Gemma despejava fatos. Custa velocidade: gera a ~8 tok/s contra
+~11, e sem treino escreve mais, então a conversa foi de 1,7 s para 3,4 s de
+mediana até começar a falar. O treino (respostas de até 30 palavras) é o que
+deve trazer a velocidade de volta. Mais threads não ajudam: 2 geram 10 tok/s,
+3 geram 9,5, 4 geram 8. As rodadas treinam sobre o Qwen2.5
+(`ATLAS_BASE=qwen` em `treinar.py`, template ChatML com asserts).
+
+Prova antiga (68 perguntas): `gemma3:1b` 35/68, `atlas-1b` v1 52/68.
+
+### Por que ela respondia sem nexo
+
+Visto no journal: depois do "Oi?", o Vosk ouviu só "aí"; o `gemma3:1b`
+despejou os fatos da memória, e com essa resposta no histórico passou a
+responder tudo do mesmo jeito ("quanto é um mais cinco" -> "Atlas, o diretor
+da SETREM é o Antonio Ternes"). Três correções:
+
+- `gatilho.pareceRuido`: palavra solta que não é cumprimento pede repetição e
+  não vai ao modelo nem ao histórico;
+- `Assistant`: depois de 120 s sem pergunta, a conversa recomeça do zero;
+- dados: contas por extenso com resposta exata e mais falas soltas que pedem
+  para repetir (o `train_on_responses_only` treina todas as respostas da
+  conversa, então exemplo com resposta ruim no histórico ensinaria a resposta
+  ruim — por isso não há).
+
+### Orquestração: rodadas a noite toda
+
+`scripts/orquestrar-treinos.sh` roda no WSL, destacado do terminal, até alguém
+parar. Estado em `~/atlas-run/estado.env` (`RODADA`, `MELHOR`, `NOTA`,
+`LINHAS`, `BASE`):
 
 ```
-IA   (GPU): professor (aula ‖ papo -> seguida -> parafrase) -> julgar -> dataset
-            -> descarrega o professor -> LoRA -> instala no Pi como atlas-1b-v2
-            -> release atlas-1b-v2 no GitHub (GGUF + dados) -> prova no Pi
-            -> troca no robô se ganhar (e volta se a conversa ficar lenta)
-Vosk (CPU): constrói e avalia cada combinação de pesos; resumo em ~/escuta-treino/resumo.txt
+cada rodada: professor (aula ‖ papo -> seguida -> parafrase -> web) -> julgar
+             -> dataset -> release dados-professor no GitHub
+             -> (com 5% de exemplos novos) LoRA do zero em ~/atlas-run/rN
+             -> instala no Pi como atlas-qwen-rN -> prova no Pi
+             -> se ganhar do MELHOR: troca o .env, mede a conversa no mudo,
+                fica só com mediana até 2,5 s, e publica o GGUF numa release
+             -> senão apaga o modelo do Pi
 ```
 
-O LoRA espera o Vosk acabar (o WSL tem 7 GB de RAM). Andamento em
-`scripts/orquestrar-treinos.log`. Relançar depois de reiniciar o PC:
+- **Perguntas da web**: `baixar-perguntas.py` junta 6000 perguntas reais
+  (`aya_dataset`, `oasst2`, `MMMLU` PT-BR de exatas) em
+  `fontes/perguntas-web.txt`; a tarefa `web` do professor as responde no jeito
+  da Atlas, e o julgamento filtra.
+- **Ollama do Windows**: `OLLAMA_NUM_PARALLEL=3`, `OLLAMA_FLASH_ATTENTION=1`,
+  `OLLAMA_KV_CACHE_TYPE=q8_0` (variáveis de usuário). O professor e o
+  julgamento mandam três chamadas ao mesmo tempo (`PARALELO=3`).
+- **Cuidado ao reiniciar o Ollama do Windows**: matar o `ollama.exe` deixa o
+  `llama-server.exe` filho vivo, segurando VRAM e RAM. Na noite de 22/11 um
+  órfão de 22:42 deixava o PC com 530 MiB livres e o professor a 50 s por item;
+  sem ele, 5,7 GB livres e 8–11 s por item. Confira com
+  `Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'"` (o pai tem
+  de ser o `ollama.exe` vivo).
+- **O Pi fica mudo** durante qualquer medida (`medir-conversa.sh` silencia o
+  `Speaker` e restaura no fim).
+
+Relançar depois de reiniciar o PC:
 
 ```
 powershell Start-Process -WindowStyle Hidden wsl -ArgumentList '-d','Ubuntu','--','bash','<caminho no WSL>/scripts/orquestrar-treinos.sh'
 ```
-
-**A troca no robô é automática, com portão e volta.** O orquestrador só põe o
-`atlas-1b-v2` no `.env` do Pi (`ROBOTEYE_LLM_MODEL=atlas-1b-v2`,
-`ROBOTEYE_LLM_PROMPT_CURTO=true`) se a prova der mais certas que o `gemma3:1b`
-**e** que o v1 (52/68). Depois mede a conversa real (`medir-conversa.sh`, a Atlas
-fala em voz alta): com mediana até 2,5 s o modelo fica e a release deixa de ser
-pré-lançamento; acima disso, o `.env` de antes volta
-(`~/avaliacoes/env-pre-atlas-1b-v2.bak`). Cada decisão fica no
-`orquestrar-treinos.log`. Valide depois com o `atlas-validador`.
 
 ---
 
@@ -230,7 +273,7 @@ inteira e compara com as linhas de base desta página. As ferramentas, uma a uma
 | conversa ponta a ponta | `ssh atlas@atlas.local bash -s rotulo < scripts/medir-conversa.sh` | mediana ≤ 2,5 s, pior ≤ 4 s (a Atlas fala em voz alta) |
 | cache | `journalctl -u ollama` → `prompt eval time` | pergunta real lê ≤ ~20 tokens |
 | escuta | `scripts/escuta-treino/avaliar.py` no Pi, `~/escuta-treino` | frase certa ≥ 77%, RAM ≤ 600 MiB |
-| LLM | `scripts/treino/avaliar.py --modelo <m> [--curto]` no Pi | certas ≥ a do modelo em uso |
+| LLM | `scripts/treino/avaliar.py --modelo <m> [--curto]` no Pi | certas ≥ a do modelo em uso (qwen2.5:1.5b: 42/72) |
 
 ## Reiniciar o robô
 
