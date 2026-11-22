@@ -3,7 +3,7 @@
 #
 # Cada rodada (IA, GPU): o professor gera mais dados (aula ‖ papo -> seguida ->
 # parafrase -> web) -> julgar -> dataset -> LoRA do zero em ~/atlas-run/rN ->
-# instala no Pi como atlas-1b-rN -> prova no Pi -> se ganhar do modelo do robô,
+# instala no Pi como atlas-1b-rN (ou atlas-qwen-rN) -> prova no Pi -> se ganhar do modelo do robô,
 # troca no .env e mede a conversa no mudo (volta se ficar lenta) -> GGUF numa
 # release do GitHub. Os dados vão para a release dados-professor toda rodada.
 # Sem 5% de exemplos novos, gera mais em vez de treinar de novo.
@@ -74,15 +74,16 @@ lora() {
     local D=~/atlas-run/r$1
     mkdir -p "$D" && cd "$D" || return 1
     cp "$S/treino/atlas-treino.jsonl" "$S/treino/treinar.py" .
-    "$PY" treinar.py atlas-treino.jsonl >> "$S/treino/treino.log" 2>&1 && [[ -f atlas-1b/config.json ]]
+    ATLAS_BASE=$BASE "$PY" treinar.py atlas-treino.jsonl >> "$S/treino/treino.log" 2>&1 && [[ -f atlas-1b/config.json ]]
 }
 
-# Instala a rodada $1 no Ollama do Pi como atlas-1b-r$1 (o .env não muda) e
-# devolve a nota da prova (certas de 68) em $NOTA_R.
+# Instala a rodada $1 no Ollama do Pi como $MOD (o .env não muda) e devolve a
+# nota da prova (certas) em $NOTA_R.
 provar() {
-    local m=atlas-1b-r$1
+    local m=$MOD
+    "$GB" -lc "ollama pull $TPL" >> "$S/treino/treino.log" 2>&1   # o template do Modelfile vem dele
     rm -rf "$SAI/r$1" && mkdir -p "$SAI/r$1" && cp -r ~/atlas-run/r$1/atlas-1b "$SAI/r$1/" || return 1
-    "$GB" -lc "cd '$(winp "$SAI/r$1")' && bash '$(winp "$S")/treino/instalar-no-pi.sh' $DEST $m" \
+    "$GB" -lc "cd '$(winp "$SAI/r$1")' && TEMPLATE_DE=$TPL bash '$(winp "$S")/treino/instalar-no-pi.sh' $DEST $m" \
         >> "$S/treino/treino.log" 2>&1 || { log "pi: instalar $m falhou (treino/treino.log)"; return 1; }
     "$GB" -lc "ssh $DEST 'mkdir -p ~/bench/scripts/treino ~/avaliacoes && ln -sfn ~/atlas_ai_v2/src ~/bench/src' \
         && scp -q '$(winp "$S")/treino/avaliar.py' $DEST:bench/scripts/treino/" >> "$LOG" 2>&1
@@ -90,13 +91,13 @@ provar() {
     noPi "$P --modelo $m --curto --mostrar > ~/avaliacoes/$m.txt 2>&1; tail -n2 ~/avaliacoes/$m.txt" >> "$LOG" 2>&1
     NOTA_R=$(noPi "cat ~/avaliacoes/$m.txt" 2>/dev/null | grep -oE "^$m: [0-9]+" | grep -oE '[0-9]+$')
     [[ -n "$NOTA_R" ]] || { log "pi: a prova de $m não deu nota (~/avaliacoes/$m.txt)"; return 1; }
-    log "pi: $m acertou $NOTA_R/68"
+    log "pi: $m acertou $NOTA_R"
 }
 
 # A régua: o que o robô usa hoje, medido com a mesma prova.
 notaDoAtual() {
     noPi "cd ~/atlas_ai_v2 && .venv/bin/python ~/bench/scripts/treino/avaliar.py --modelo $MELHOR \
-        $([[ $MELHOR == gemma3:1b ]] || echo --curto) > ~/avaliacoes/regua-$MELHOR.txt 2>&1" >> "$LOG" 2>&1
+        $([[ $MELHOR == atlas-* ]] && echo --curto) > ~/avaliacoes/regua-$MELHOR.txt 2>&1" >> "$LOG" 2>&1
     NOTA=$(noPi "cat ~/avaliacoes/regua-$MELHOR.txt" 2>/dev/null | grep -oE "^$MELHOR: [0-9]+" | grep -oE '[0-9]+$')
 }
 
@@ -148,6 +149,11 @@ main() {
     [[ -s $W/resumo.txt ]] || vosk
     while true; do
         source "$ESTADO"
+        BASE=${BASE:-gemma}
+        case $BASE in
+            qwen) TPL=qwen2.5:1.5b; MOD=atlas-qwen-r$RODADA ;;
+            *)    TPL=gemma3:1b;    MOD=atlas-1b-r$RODADA ;;
+        esac
         log "rodada $RODADA: gerando dados"
         professor || { sleep 600; continue; }
         local linhas; linhas=$(wc -l < "$S/treino/atlas-treino.jsonl")
@@ -162,15 +168,15 @@ main() {
         lora $RODADA || { log "rodada $RODADA: LoRA falhou (treino/treino.log)"; sleep 600; continue; }
         provar $RODADA || { sleep 300; continue; }
         [[ -n $NOTA ]] || notaDoAtual
-        log "rodada $RODADA: atlas-1b-r$RODADA $NOTA_R/68 contra $MELHOR ${NOTA:-?}/68"
+        log "rodada $RODADA: $MOD $NOTA_R contra $MELHOR ${NOTA:-?}"
         MELHOR_ANTES=$MELHOR
-        if [[ -n $NOTA ]] && (( NOTA_R > NOTA )) && trocar atlas-1b-r$RODADA; then
-            salvarModelo atlas-1b-r$RODADA
-            MELHOR=atlas-1b-r$RODADA; NOTA=$NOTA_R
+        if [[ -n $NOTA ]] && (( NOTA_R > NOTA )) && trocar $MOD; then
+            salvarModelo $MOD
+            MELHOR=$MOD; NOTA=$NOTA_R
         else
-            noPi "ollama rm atlas-1b-r$RODADA >/dev/null" >> "$LOG" 2>&1   # libera o cartão do Pi
+            noPi "ollama rm $MOD >/dev/null" >> "$LOG" 2>&1   # libera o cartão do Pi
         fi
-        printf 'RODADA=%s\nMELHOR=%s\nNOTA=%s\nLINHAS=%s\n' $((RODADA + 1)) "$MELHOR" "$NOTA" "$linhas" > "$ESTADO"
+        printf 'RODADA=%s\nMELHOR=%s\nNOTA=%s\nLINHAS=%s\nBASE=%s\n' $((RODADA + 1)) "$MELHOR" "$NOTA" "$linhas" "$BASE" > "$ESTADO"
     done
 }
 # Tudo numa linha só: o bash lê o script aos poucos, e editar este arquivo com
