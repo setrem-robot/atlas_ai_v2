@@ -58,10 +58,10 @@ validação ter com o que comparar.
 | 1 | árvore limpa, `HEAD` = `origin/producao` |
 | 2 | os dois `active`, sem erro no boot |
 | 3 | tudo passa |
-| 4 | `roboteye` ≤ 1100 MiB; CPU ≤ 55% de um núcleo; `throttled 0x0`; livre ≥ 5 GB |
-| 5 | mediana ≤ 2,5 s e pior ≤ 4 s até começar a falar |
+| 4 | `roboteye` ≤ 1000 MiB; CPU ≤ 50% de um núcleo; `throttled 0x0`; livre ≥ 5 GB (medido: 821 MiB, 43%, 5,7 GB) |
+| 5 | mediana ≤ 2,5 s e pior ≤ 4 s até começar a falar (medido: 1,7 s / 3,3 s) |
 | 6 | cada pergunta real lê ≤ 20 tokens |
-| 7 | frase inteira certa ≥ 79% e RAM pico ≤ 600 MiB |
+| 7 | frase inteira certa ≥ 77% e RAM pico ≤ 600 MiB (medido: 78,6–79,3%, 537 MiB; varia uma frase entre rodadas) |
 | 8 | certas ≥ as do modelo em uso (`gemma3:1b`: 51%; `atlas-1b` v1: 76%) |
 
 ## O relatório

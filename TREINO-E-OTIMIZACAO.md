@@ -17,19 +17,23 @@ Para validar, use o agente [`atlas-validador`](./.claude/agents/atlas-validador.
 
 Medido no Pi 5 do robô (`atlas.local`), com face, escuta e LLM no ar:
 
-| | antes | depois |
+| | antes | depois (`producao` 3f938a0) |
 |---|---|---|
-| RAM do processo `roboteye` | 3249 MiB | **1015 MiB** |
-| RAM livre do Pi | 3,3 GB | **5,5 GB** |
-| Até começar a falar, conversa de 10 perguntas (mediana / pior) | 8,8 s / 10,2 s | **2,0 s / 3,4 s** |
+| RAM do processo `roboteye` | 3249 MiB | **821 MiB** |
+| RAM livre do Pi | 3,3 GB | **5,7 GB** |
+| Até começar a falar, conversa de 10 perguntas (mediana / pior) | 8,8 s / 10,2 s | **1,7 s / 3,3 s** |
 | Escuta: frase inteira certa (banco do Pi, SNR 10) | 25% | **79%** |
 | Escuta: WER da fala geral | 11% | **3,5%** |
 | Escuta: carga do modelo | 27,6 s | **0,5 s** |
-| CPU parado (% de um núcleo: face + escuta) | 50,8% | 46,4% |
+| CPU parado (% de um núcleo: face + escuta) | 50,8% | **43,2%** |
 
 Os arquivos de cada medida ficam no Pi em `~/avaliacoes/`
-(`consumo-antes.txt`, `consumo-vosk-novo.txt`, `conversa-antes.txt`,
-`conversa-cache2.txt`, ...).
+(`consumo-antes.txt`, `conversa-antes.txt`, `20261122-producao-consumo.txt`,
+`20261122-producao-conversa.txt`, `20261122-batch8-conversa.txt`, ...).
+
+**O que ainda está errado:** o `gemma3:1b` mistura fatos — diz que o
+coordenador é o Antonio Ternes (o diretor), com os dois fatos certos na memória.
+É o que o `atlas-1b` v2 (seção 3) está sendo treinado para corrigir.
 
 ---
 
@@ -140,6 +144,7 @@ Medido no Pi, conversa de 10 perguntas (`scripts/medir-conversa.sh`):
 | antes | 8,8 s | 10,2 s | 109 → 224 |
 | reaquecendo com `buildPrompt` | 6,2 s | 7,8 s | 136 → 156 (janela deslizando) |
 | **com `buildNextPrefix`** | **2,0 s** | **3,4 s** | **10 a 13** |
+| `producao` 3f938a0 (com a face nova) | 1,7 s | 3,3 s | 10 a 13 |
 
 O que sobra é gerar a primeira frase (~10 tokens/s no Pi).
 
@@ -148,8 +153,9 @@ O que sobra é gerar a primeira frase (~10 tokens/s no Pi).
 - `LLM_NUM_THREAD=2`: gera 12,3 tok/s; 3 threads 11,5; 4 threads 3,7–10 (disputa
   com a face e a escuta). Fica 2.
 - `LLM_NUM_BATCH=8`: põe o checkpoint perto do fim de um prompt curto (achado
-  com o `atlas-1b`: 7,4 s → 0,5 s até o primeiro texto). Complementa o
-  reaquecimento; ver a validação para o número com os dois juntos.
+  com o `atlas-1b` antes do reaquecimento: 7,4 s → 0,5 s). Com a conversa
+  aquecida a cada turno não ganha nada (mediana 2,1 s com 8, 1,7 s sem), então
+  o robô fica no padrão do Ollama. Medir de novo ao trocar para o `atlas-1b`.
 - `LLM_TEMPERATURE=0.4`: erra menos fato que o 0.8 padrão.
 - `OLLAMA_MAX_LOADED_MODELS=1` no Pi: trocar de modelo custa ~40 s (carga +
   persona inteira relida). Não rode provas de outro modelo com o robô em uso.
@@ -218,7 +224,7 @@ inteira e compara com as linhas de base desta página. As ferramentas, uma a uma
 | consumo parado | `ssh atlas@atlas.local bash -s 30 < scripts/medir-pi.sh` | `roboteye` ≤ ~1,1 GB; CPU ≤ ~50% de um núcleo; `throttled 0x0` |
 | conversa ponta a ponta | `ssh atlas@atlas.local bash -s rotulo < scripts/medir-conversa.sh` | mediana ≤ 2,5 s, pior ≤ 4 s (a Atlas fala em voz alta) |
 | cache | `journalctl -u ollama` → `prompt eval time` | pergunta real lê ≤ ~20 tokens |
-| escuta | `scripts/escuta-treino/avaliar.py` no Pi, `~/escuta-treino` | frase certa ≥ 79%, RAM ≤ 600 MiB |
+| escuta | `scripts/escuta-treino/avaliar.py` no Pi, `~/escuta-treino` | frase certa ≥ 77%, RAM ≤ 600 MiB |
 | LLM | `scripts/treino/avaliar.py --modelo <m> [--curto]` no Pi | certas ≥ a do modelo em uso |
 
 ## Reiniciar o robô
