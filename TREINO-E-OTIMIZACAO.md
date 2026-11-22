@@ -206,7 +206,19 @@ deve trazer a velocidade de volta. Mais threads não ajudam: 2 geram 10 tok/s,
 
 **`atlas-qwen-r2`** (rodada 2, 14964 exemplos, release `atlas-qwen-r2`): **64/72
 (89%)** na prova, conversa com mediana de 2,5 s até começar a falar. É o
-modelo do robô desde 22/11 de manhã.
+modelo do robô desde 22/11 de manhã, e ficou como definitivo.
+
+| rodada | exemplos | prova |
+|---|---|---|
+| `atlas-qwen-r2` | 14964 | **64/72** (em uso) |
+| `atlas-qwen-r3` | 21588 | 64/72 (empate, não entrou) |
+| `atlas-qwen-r4` | 27272 | 62/72 (não entrou) |
+
+Quase o dobro de exemplos não subiu a nota: o modelo de 1,5 B chegou ao platô.
+O treino foi **encerrado em 22/11 à noite** e o que ainda falha passou a ser
+resolvido no código (seção 4).
+
+![Prova de 72 perguntas por modelo](docs/img/evolucao-llm.png)
 
 Cuidado ao importar no Ollama: o `transformers` 5 grava a frequência do RoPE
 só em `rope_parameters`, e o conversor de safetensors do Ollama procura
@@ -232,10 +244,10 @@ da SETREM é o Antonio Ternes"). Três correções:
   conversa, então exemplo com resposta ruim no histórico ensinaria a resposta
   ruim — por isso não há).
 
-### Orquestração: rodadas a noite toda
+### Orquestração: rodadas a noite toda (parada desde 22/11)
 
 `scripts/orquestrar-treinos.sh` roda no WSL, destacado do terminal, até alguém
-parar. Estado em `~/atlas-run/estado.env` (`RODADA`, `MELHOR`, `NOTA`,
+parar. Está parado desde o fim do treino; relance só para treinar de novo. Estado em `~/atlas-run/estado.env` (`RODADA`, `MELHOR`, `NOTA`,
 `LINHAS`, `BASE`):
 
 ```
@@ -272,6 +284,58 @@ powershell Start-Process -WindowStyle Hidden wsl -ArgumentList '-d','Ubuntu','--
 
 ---
 
+## 4. Respostas sem modelo e a bateria de conversas
+
+Com o modelo no platô, o que ele erra sempre foi tirado dele. Em
+`Assistant.handleTurn`, antes do modelo (só em português):
+
+- `core/braveza.py`: xingamento → resposta firme; no terceiro seguido, mais
+  brava; "desculpa" → perdoa.
+- `core/contas.py`: conta falada ("quanto é sete vezes oito", "raiz quadrada de
+  oitenta e um", "doze ao quadrado") é calculada; uma casa decimal com vírgula,
+  e "mais ou menos" só quando arredondou.
+- `core/piadas.py`: piadas prontas.
+
+Depois do modelo, `core/text.py`: `pararNoLaco` encerra a geração quando um
+grupo de quatro palavras aparece pela terceira vez, `cortarLaco` apara a frase
+na segunda, e frase igual a uma já dita no turno é pulada.
+
+**Bateria** (`scripts/treino/bateria.py`, roda no Pi): 56 perguntas em
+conversas, pelo mesmo `Assistant` do robô, sem áudio, corrigidas pelo texto.
+Grava em `~/avaliacoes/bateria-*.jsonl`.
+
+```bash
+cd ~/atlas_ai_v2 && .venv/bin/python scripts/treino/bateria.py [--modelo M] [--so memoria] [--mostrar]
+```
+
+| | antes | depois das correções |
+|---|---|---|
+| total | 46/56 | **48/56** |
+| conta · identidade · memória | 12/12 · 5/5 · 4/4 | 12/12 · 5/5 · 4/4 |
+| laço · humor | 10/11 · 7/10 | **11/11 · 10/10** |
+| número · lixo | 7/10 · 1/4 | 6/10 · 0/4 |
+| resposta inteira: mediana / pior | 2,1 s / 12,0 s | **1,9 s / 3,8 s** |
+
+![Bateria por categoria, antes e depois](docs/img/bateria-conversas.png)
+
+Contexto por pronome ("o que é a setrem" → "e onde ela fica"): 11/12. Falta:
+fatos numéricos (conhecimento do modelo) e frase sem sentido do Vosk (lixo),
+que o modelo tenta responder em vez de pedir para repetir.
+
+## 5. Pi enxuto
+
+- `ROBOTEYE_LLM_KEEP_ALIVE=-1s`: o modelo nunca sai da memória (o Ollama exige
+  a unidade; `-1` sozinho é recusado).
+- `ROBOTEYE_LLM_NUM_THREAD=2`: a geração é limitada pela memória e a face
+  disputa CPU; 2 threads é o mais rápido.
+- No Pi ficam só o `atlas-qwen-r2` no Ollama e `vosk-pt-atlas` + `vosk-pt` em
+  `models/escuta`. Saíram `gemma3:1b`, `gemma3:4b`, `qwen2.5:1.5b`, `atlas-1b`,
+  `vosk-pt-grande` e faster-whisper (22/11): disco de 76% para 43%. O Vosk grande
+  volta com `scripts/baixar-modelo-escuta.sh --grande`; o r2, da release
+  `atlas-qwen-r2`.
+
+---
+
 ## Validar
 
 O agente `atlas-validador` (`.claude/agents/atlas-validador.md`) roda a bateria
@@ -284,7 +348,8 @@ inteira e compara com as linhas de base desta página. As ferramentas, uma a uma
 | conversa ponta a ponta | `ssh atlas@atlas.local bash -s rotulo < scripts/medir-conversa.sh` | mediana ≤ 2,5 s, pior ≤ 4 s (a Atlas fala em voz alta) |
 | cache | `journalctl -u ollama` → `prompt eval time` | pergunta real lê ≤ ~20 tokens |
 | escuta | `scripts/escuta-treino/avaliar.py` no Pi, `~/escuta-treino` | frase certa ≥ 77%, RAM ≤ 600 MiB |
-| LLM | `scripts/treino/avaliar.py --modelo <m> [--curto]` no Pi | certas ≥ a do modelo em uso (qwen2.5:1.5b: 42/72) |
+| LLM | `scripts/treino/avaliar.py --modelo <m> [--curto]` no Pi | certas ≥ a do modelo em uso (atlas-qwen-r2: 64/72) |
+| conversa pelo texto | `scripts/treino/bateria.py` no Pi | certas ≥ 48/56 |
 
 ## Reiniciar o robô
 
@@ -299,6 +364,7 @@ kill -KILL $(systemctl show -p MainPID --value roboteye)
 ## Voltar atrás
 
 - Escuta: `ROBOTEYE_HEARING_VOSK_MODEL=vosk-pt-grande` no `.env`.
-- LLM: `ROBOTEYE_LLM_MODEL=gemma3:1b`, `ROBOTEYE_LLM_PROMPT_CURTO=false`.
+- LLM: `ROBOTEYE_LLM_MODEL=gemma3:1b`, `ROBOTEYE_LLM_PROMPT_CURTO=false` (o
+  `gemma3:1b` saiu do Pi em 22/11: `ollama pull gemma3:1b` antes).
 - Código: o reaquecimento não tem chave; reverter o commit
   "IA: conversa aquecida a cada turno".

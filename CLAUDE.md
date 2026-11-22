@@ -6,7 +6,8 @@ microfone até a face, as peças uma a uma, e as decisões que explicam o desenh
 
 **Modelos treinados e otimização no Pi:**
 [`TREINO-E-OTIMIZACAO.md`](./TREINO-E-OTIMIZACAO.md) — a escuta `vosk-pt-atlas`,
-o LLM `atlas-1b`, o cache da conversa, os números de antes e depois e como
+o LLM `atlas-qwen-r2` (treino encerrado), as respostas sem modelo, a bateria
+de conversas, o cache da conversa, os números de antes e depois e como
 refazer cada peça. Depois de qualquer deploy, valide com o agente
 [`atlas-validador`](./.claude/agents/atlas-validador.md).
 
