@@ -23,7 +23,7 @@ set -uo pipefail
 
 S="$(cd "$(dirname "$0")" && pwd)"
 LOG="$S/orquestrar-treinos.log"
-PY=~/atlas-treino/bin/python   # tem unsloth e httpx (dataset.py importa o roboteye)
+PY=~/atlas-treino/bin/python   # tem unsloth, httpx e python-dotenv (dataset.py importa o avaliar.py, que importa o config)
 W=~/escuta-treino
 export PYTHONIOENCODING=utf-8 PYTHONUNBUFFERED=1
 
