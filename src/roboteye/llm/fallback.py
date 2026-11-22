@@ -305,6 +305,15 @@ class FallbackLLMClient:
     def isAvailable(self) -> bool:
         return self.primary.isAvailable() or self.backup.isAvailable()
 
+    def warmConversation(self, messages: Sequence[ChatMessage]) -> None:
+        # Só quem vai responder a próxima: aquecer o outro carregaria o modelo
+        # do Pi na RAM sem necessidade (ver `warmUp`).
+        alvo = self.primary if self.usingPrimary else self.backup
+        try:
+            alvo.warmConversation(messages)
+        except Exception as exc:
+            logger.debug("aquecimento da conversa em %s falhou: %s", alvo.name, exc)
+
     def watch(self) -> None:
         while not self.stop.wait(self.probeInterval):
             self.setPrimary(self.primary.isAvailable())

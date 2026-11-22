@@ -40,5 +40,8 @@ class EchoClient:
     def warmUp(self, messages: Sequence[ChatMessage] = ()) -> None:
         return None
 
+    def warmConversation(self, messages: Sequence[ChatMessage]) -> None:
+        return None
+
     def close(self) -> None:
         return None

@@ -33,6 +33,7 @@ class OllamaClient:
         self.numPredict = settings.maxTokens
         self.numCtx = settings.numCtx
         self.numThread = settings.numThread
+        self.numBatch = settings.numBatch
         self.temperature = settings.temperature
         #: Mutavel de proposito — ver `set_keep_alive`.
         self.keepAlive = keepAlive if keepAlive is not None else settings.keepAlive
@@ -87,12 +88,18 @@ class OllamaClient:
                         "num_predict": 1,
                         "num_ctx": self.numCtx,
                         **({"num_thread": self.numThread} if self.numThread else {}),
+                        **({"num_batch": self.numBatch} if self.numBatch else {}),
                     },
                 },
                 timeout=60.0,
             )
         except httpx.HTTPError as exc:
             logger.debug("aquecimento do LLM falhou (segue o jogo): %s", exc)
+
+    def warmConversation(self, messages: Sequence[ChatMessage]) -> None:
+        # O "oi" que o `warmUp` acrescenta é o que põe o checkpoint do
+        # llama-server bem no fim do histórico, onde a próxima pergunta começa.
+        self.warmUp(messages)
 
     def keepAliveDeAquecimento(self) -> str:
         return "5m" if self.keepAlive.strip() in {"0", "0s", ""} else self.keepAlive
@@ -174,6 +181,7 @@ class OllamaClient:
                 # numero util, e o padrao dele (todos os nucleos) e o certo
                 # numa maquina de mesa.
                 **({"num_thread": self.numThread} if self.numThread else {}),
+                **({"num_batch": self.numBatch} if self.numBatch else {}),
             },
         }
 
