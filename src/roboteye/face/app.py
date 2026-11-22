@@ -29,6 +29,7 @@ from roboteye.core.events import (
     UserMessage,
     queueSubscriber,
 )
+from roboteye.core.humor import humorDaFala, xingou
 from roboteye.core.text import truncate
 from roboteye.face.animator import EyeAnimator
 from roboteye.face.expressions import Expression
@@ -80,6 +81,12 @@ class FaceApp:
 
         self.caption = ""
         self.captionAge = 0.0
+
+        # Humor do turno (core/humor.py): xingamentos seguidos e a pergunta, para
+        # o primeiro trecho falado com emoção dar a cara da resposta.
+        self.xingamentos = 0
+        self.pergunta = ""
+        self.humorDoTurno: str | None = None
 
         self.fps = 0.0
         self.fpsAge = 0.0
@@ -215,9 +222,19 @@ class FaceApp:
 
     def apply(self, event: Event) -> None:
         match event:
-            case UserMessage():
+            case UserMessage(text=text):
                 self.animator.wake()
                 self.setCaption("")
+                self.pergunta, self.humorDoTurno = text, None
+                if xingou(text):
+                    # Xingou, fica brava; na terceira seguida, vira monstro.
+                    self.xingamentos += 1
+                    self.animator.setMood(
+                        Expression.RAGE if self.xingamentos >= 3 else Expression.ANGRY
+                    )
+                else:
+                    self.xingamentos = 0
+                    self.animator.setMood(Expression.NEUTRAL)
 
             case ListeningChanged(active=True):
                 self.animator.setActivity(Expression.LISTENING)
@@ -230,6 +247,11 @@ class FaceApp:
                 self.animator.setActivity(Expression.THINKING)
 
             case SpeechStarted(text=text):
+                # O humor vem antes da atividade, para a cara entrar já com ele.
+                if not self.xingamentos and self.humorDoTurno is None:
+                    self.humorDoTurno = humorDaFala(text, self.pergunta)
+                    if self.humorDoTurno:
+                        self.animator.setMood(Expression(self.humorDoTurno))
                 self.animator.setActivity(Expression.SPEAKING)
                 self.setCaption(text)
 

@@ -295,8 +295,19 @@ class TestAtividades:
 
     def testAtividadeTemPrioridadeSobreOHumor(self, animator: EyeAnimator) -> None:
         animator.setMood(Expression.HAPPY)
+        animator.setActivity(Expression.THINKING)
+        assert animator.currentExpression is Expression.THINKING
+
+    def testFalaMostraOHumor(self, animator: EyeAnimator) -> None:
         animator.setActivity(Expression.SPEAKING)
         assert animator.currentExpression is Expression.SPEAKING
+        animator.setMood(Expression.HAPPY)
+        assert animator.currentExpression is Expression.HAPPY
+
+    def testBravaContinuaBravaPensando(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.ANGRY)
+        animator.setActivity(Expression.THINKING)
+        assert animator.currentExpression is Expression.ANGRY
 
     def testHumorVoltaAoFimDaAtividade(self, animator: EyeAnimator) -> None:
         animator.setMood(Expression.HAPPY)

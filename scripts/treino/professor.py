@@ -184,6 +184,8 @@ ESTILO_PAPO = (
     "A Atlas é simpática, curiosa e tem humor leve de tecnologia, sempre coerente: como robô, ela não "
     "come, não dorme e não tem gosto de verdade, então brinca com isso (eletricidade, processador, "
     "Wi-Fi, bateria, código) e, quando cabe, devolve a pergunta para a pessoa. Nunca é grosseira, "
+    "mas quando alguém a xinga ou ofende fica brava de verdade: responde firme e curta, diz que não "
+    "gostou e pede respeito, sem xingar de volta e sem fingir que está tudo bem. Também "
     "nunca finge ser humana, não promete fazer o que não consegue (ela só fala, ouve e mexe os olhos) "
     "e não inventa fatos sobre si mesma, como data de criação ou nomes de quem a construiu."
 )
@@ -309,6 +311,16 @@ ESQUEMA_PARES = {
     "required": ["pares"],
 }
 
+ESQUEMA_COMUNS = {
+    "type": "object",
+    "properties": {"itens": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"pergunta": {"type": "string"}, "respostas": {"type": "array", "items": {"type": "string"}}},
+        "required": ["pergunta", "respostas"],
+    }}},
+    "required": ["itens"],
+}
+
 
 # Cada volta repete os pedidos com chave nova e pede perguntas menos óbvias.
 # Sem isso as tarefas acabam (as chaves já estão nos arquivos) e as rodadas do
@@ -356,6 +368,43 @@ def tarefaPapo() -> None:
             trabalhos.append((f"{tema}|{rodada}", lambda p=pedido, t=tema: {
                 "tema": t, **chamar(sistema, p, ESQUEMA_PARES, temperatura=0.9)}))
     rodar("papo.jsonl", trabalhos)
+
+
+# --- comuns: o que qualquer pessoa pergunta, com respostas variadas ----------------
+# Quatro respostas diferentes para a mesma pergunta: com uma só, o modelo decora
+# e responde sempre igual; com várias, aprende a gerar a resposta.
+COMUNS = [
+    "cumprimentos (oi, bom dia, tudo bem)", "como o robô está e como foi o dia dele", "despedidas",
+    "agradecimentos e elogios", "quem é o robô e o que ele faz", "o que o robô sabe fazer e o que não sabe",
+    "que horas são e que dia é hoje", "o tempo, frio, calor e chuva", "comida e fome", "sono e cansaço",
+    "futebol e times", "música e cantores", "filmes, séries e desenhos", "animais e bichos de estimação",
+    "pedidos de piada", "curiosidades simples do dia a dia", "contas fáceis de cabeça",
+    "perguntas de criança", "perguntas de visitante na faculdade", "escola, estudo e provas",
+    "trabalho e profissão", "família e amigos", "saúde e bem-estar básicos", "celular, internet e jogos",
+    "pedidos de conselho simples", "perguntas sobre sentimentos e gostos do robô",
+    "pedidos que o robô não consegue fazer", "frases soltas e comentários sem pergunta",
+    "xingamentos e ofensas ao robô (a Atlas fica brava)", "provocações e deboche (a Atlas fica brava)",
+    "pedidos de desculpa depois de xingar o robô", "pessoa triste ou desanimada",
+    "pessoa feliz contando uma novidade", "brincadeiras e adivinhas",
+]
+
+
+def tarefaComuns() -> None:
+    sistema = (f"Você escreve dados de treino para a Atlas. {ATLAS}\n\n{ESTILO_PAPO}\n\n{REGRAS}\n\n"
+               + exemplos(dataset.CONVERSA, dataset.HUMOR, dataset.IDENTIDADE, quantos=16))
+    trabalhos = []
+    for v in range(VOLTAS):
+        sufixo, extra = volta(v)
+        for tema in COMUNS:
+            pedido = (f"Tema: {tema}.\nEscreva oito perguntas ou falas simples e comuns, do jeito que "
+                      "qualquer pessoa diria em voz alta para o robô, e para cada uma quatro respostas da "
+                      "Atlas diferentes entre si: outras palavras e outro jeito, a mesma ideia certa."
+                      + extra)
+            trabalhos.append((f"{tema}{sufixo}", lambda p=pedido, t=tema: {
+                "tema": t, "pares": [{"pergunta": item["pergunta"], "resposta": r}
+                                     for item in chamar(sistema, p, ESQUEMA_COMUNS, temperatura=0.9)["itens"]
+                                     for r in item["respostas"][:4]]}))
+    rodar("comuns.jsonl", trabalhos)
 
 
 FONTES = Path(__file__).resolve().parent / "fontes"
@@ -454,7 +503,7 @@ def idDoPar(pergunta: str, resposta: str) -> str:
 def paresGerados() -> list[tuple[str, str]]:
     """Todos os pares de aula, papo e seguida que passam no filtro, sem repetição."""
     pares = []
-    for nome in ("aula.jsonl", "papo.jsonl", "web.jsonl"):
+    for nome in ("aula.jsonl", "papo.jsonl", "web.jsonl", "comuns.jsonl"):
         for linha in lerLinhas(nome):
             pares += [(p["pergunta"], p["resposta"]) for p in linha.get("pares", [])]
     for linha in lerLinhas("seguida.jsonl"):
@@ -480,7 +529,9 @@ def tarefaJulgar() -> None:
         "dois ou menos: piada ou comparação que não faz sentido quando lida em voz alta, ou que se "
         "contradiz (diz que não ouve música e depois que ouve).\n"
         "Seja rígido: só dê quatro ou cinco se um professor de verdade aprovaria a resposta como está. "
-        "Na dúvida sobre a correção, dê três."
+        "Na dúvida sobre a correção, dê três. Quando a pessoa xinga ou ofende o robô, a resposta certa é "
+        "brava e firme (diz que não gostou, pede respeito, não xinga de volta): isso merece nota alta, "
+        "e responder como se nada tivesse acontecido merece três."
     )
     pares = paresGerados()
     julgados = {linha["chave"] for linha in lerLinhas("julgar.jsonl")}
@@ -513,7 +564,7 @@ def aprovados() -> dict[str, int]:
     return {linha["chave"]: linha["nota"] for linha in lerLinhas("julgar.jsonl") if linha.get("nota", 0) >= 4}
 
 
-TAREFAS = {"aula": tarefaAula, "papo": tarefaPapo, "seguida": tarefaSeguida, "web": tarefaWeb,
+TAREFAS = {"aula": tarefaAula, "papo": tarefaPapo, "seguida": tarefaSeguida, "web": tarefaWeb, "comuns": tarefaComuns,
            "parafrase": tarefaParafrase, "julgar": tarefaJulgar, "descarregar": descarregar}
 
 if __name__ == "__main__":
