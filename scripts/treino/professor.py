@@ -337,6 +337,35 @@ def tarefaPapo() -> None:
     rodar("papo.jsonl", trabalhos)
 
 
+FONTES = Path(__file__).resolve().parent / "fontes"
+
+
+def tarefaWeb() -> None:
+    """Perguntas reais de datasets abertos (fontes/perguntas-web.txt, de
+    baixar-perguntas.py), respondidas no jeito da Atlas. É o que ensina a
+    entender o pedido dito de mil jeitos, e não só os temas que o professor
+    inventa. Pergunta que não dá para responder falando em duas frases vira
+    uma resposta curta e honesta, ou é descartada pelo julgamento."""
+    sistema = (f"Você escreve dados de treino para a Atlas. {ATLAS}\n\n{REGRAS}\n\n"
+               + exemplos(dataset.AULA, dataset.CONVERSA, quantos=14))
+    arquivo = FONTES / "perguntas-web.txt"
+    if not arquivo.exists():
+        print("web: sem fontes/perguntas-web.txt (rode baixar-perguntas.py)", file=sys.stderr)
+        return
+    perguntas = [linha.strip() for linha in arquivo.read_text(encoding="utf-8").splitlines() if linha.strip()]
+    trabalhos = []
+    for inicio in range(0, len(perguntas), 10):
+        lote = perguntas[inicio:inicio + 10]
+        pedido = ("Para cada pergunta abaixo, escreva a pergunta como uma pessoa diria em voz alta para o "
+                  "robô (português do Brasil, curta, sem pontuação de texto) e a resposta da Atlas. Mantenha "
+                  "o sentido do que foi pedido. Se a pergunta pedir algo que não cabe em duas frases faladas, "
+                  "responda o essencial ou diga com honestidade que é longo demais para explicar falando.\n\n"
+                  + "\n".join(f"- {q}" for q in lote))
+        chave = hashlib.sha1("\n".join(lote).encode()).hexdigest()[:16]
+        trabalhos.append((chave, lambda p=pedido: chamar(sistema, p, ESQUEMA_PARES, temperatura=0.6)))
+    rodar("web.jsonl", trabalhos)
+
+
 ESQUEMA_CONVERSA = {
     "type": "object",
     "properties": {"conversas": {"type": "array", "items": {
@@ -403,7 +432,7 @@ def idDoPar(pergunta: str, resposta: str) -> str:
 def paresGerados() -> list[tuple[str, str]]:
     """Todos os pares de aula, papo e seguida que passam no filtro, sem repetição."""
     pares = []
-    for nome in ("aula.jsonl", "papo.jsonl"):
+    for nome in ("aula.jsonl", "papo.jsonl", "web.jsonl"):
         for linha in lerLinhas(nome):
             pares += [(p["pergunta"], p["resposta"]) for p in linha.get("pares", [])]
     for linha in lerLinhas("seguida.jsonl"):
@@ -435,14 +464,15 @@ def tarefaJulgar() -> None:
     julgados = {linha["chave"] for linha in lerLinhas("julgar.jsonl")}
     pendentes = [(p, r) for p, r in pares if idDoPar(p, r) not in julgados]
     print(f"julgar: {len(julgados)} feitos, {len(pendentes)} pendentes", file=sys.stderr)
-    for inicio in range(0, len(pendentes), 12):
+
+    def julgarLote(inicio: int) -> None:
         lote = pendentes[inicio:inicio + 12]
         texto = "\n".join(f"{i}. Pergunta: {p}\n   Resposta: {r}" for i, (p, r) in enumerate(lote))
         try:
             notas = chamar(sistema, texto, ESQUEMA_NOTAS, temperatura=0.1)["notas"]
         except Exception as erro:  # o lote volta na próxima rodada
             print(f"  lote {inicio}: {erro}", file=sys.stderr)
-            continue
+            return
         # Par sem nota fica para a próxima rodada: grava só os que voltaram.
         for n in notas:
             if 0 <= n["id"] < len(lote):
@@ -451,13 +481,17 @@ def tarefaJulgar() -> None:
         if inicio % 240 == 0:
             print(f"  {inicio}/{len(pendentes)}", file=sys.stderr)
 
+    # Em paralelo, como `rodar`: o Ollama decodifica os lotes no mesmo passo da GPU.
+    with ThreadPoolExecutor(int(os.environ.get("PARALELO", "2"))) as fila:
+        list(fila.map(julgarLote, range(0, len(pendentes), 12)))
+
 
 def aprovados() -> dict[str, int]:
     """id do par -> nota, só os de nota quatro ou cinco."""
     return {linha["chave"]: linha["nota"] for linha in lerLinhas("julgar.jsonl") if linha.get("nota", 0) >= 4}
 
 
-TAREFAS = {"aula": tarefaAula, "papo": tarefaPapo, "seguida": tarefaSeguida,
+TAREFAS = {"aula": tarefaAula, "papo": tarefaPapo, "seguida": tarefaSeguida, "web": tarefaWeb,
            "parafrase": tarefaParafrase, "julgar": tarefaJulgar, "descarregar": descarregar}
 
 if __name__ == "__main__":

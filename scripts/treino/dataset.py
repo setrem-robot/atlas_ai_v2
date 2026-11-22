@@ -302,6 +302,8 @@ LIXO = [
     "a dose", "ordenar por", "quando após um", "o ano todo é mais um", "e continuou",
     "porto", "meu nome é quer não", "eu não tenho formação minada", "criticou a enviar direto",
     "ah ah ah", "foto", "a tropa de mais de oito", "dica", "micro retificação",
+    # Palavras soltas depois do "Atlas": no Pi, "aí" virou um despejo dos fatos.
+    "aí", "um", "é", "olha", "e aí então", "não pedi nada disso", "mentiu para mim",
 ]
 LIXO_RESPOSTAS = [
     "Acho que não entendi direito, pode repetir?",
@@ -371,6 +373,36 @@ def fatoInventado(rng: random.Random) -> tuple[str, str, str, str]:
     """(fato para o prompt, pergunta, resposta, assunto) com nomes sorteados."""
     f = rng.choice(fatosPossiveis(rng))
     return f["fato"], rng.choice(f["perguntas"]), rng.choice(f["respostas"]), f["assunto"]
+
+
+# --- contas ditas em voz: o Vosk entrega os números por extenso --------------
+def contas(rng: random.Random, quantas: int) -> list[tuple[str, str]]:
+    """Contas pequenas com a resposta exata. O modelo de 1B chuta ("um mais cinco"
+    -> "oito"); feitas por programa, não há professor que erre a conta."""
+    from roboteye.core.numbersPt import spell
+
+    formas = ["quanto é {a} {op} {b}", "quanto dá {a} {op} {b}", "{a} {op} {b} dá quanto",
+              "me diz quanto é {a} {op} {b}", "qual o resultado de {a} {op} {b}", "faz {a} {op} {b}"]
+    pares = []
+    for _ in range(quantas):
+        op = rng.choice(["mais", "menos", "vezes", "dividido por"])
+        if op == "mais":
+            a, b = rng.randint(0, 50), rng.randint(0, 50)
+            r = a + b
+        elif op == "menos":
+            a = rng.randint(1, 60)
+            b = rng.randint(0, a)
+            r = a - b
+        elif op == "vezes":
+            a, b = rng.randint(0, 12), rng.randint(0, 12)
+            r = a * b
+        else:
+            b, r = rng.randint(1, 10), rng.randint(0, 10)
+            a = b * r
+        pergunta = rng.choice(formas).format(a=spell(a), op=op, b=spell(b))
+        resposta = rng.choice(["{A} {op} {b} é {r}.", "Dá {r}.", "É {r}.", "{A} {op} {b} dá {r}."])
+        pares.append((pergunta, resposta.format(A=spell(a).capitalize(), op=op, b=spell(b), r=spell(r))))
+    return pares
 
 
 PERGUNTAS_SEM_FATO = [
@@ -513,6 +545,11 @@ def gerar(semente: int = 7) -> list[dict]:
         for _ in range(3):
             saida.append(exemplo(sistema(rng, distratores(), dia()), lixo, rng.choice(LIXO_RESPOSTAS)))
 
+    # Contas, com fatos no prompt que não têm nada a ver: a resposta é a conta.
+    for i, (pergunta, resposta) in enumerate(contas(rng, 900)):
+        parte = "validacao" if i % 30 == 0 else "treino"
+        saida.append(exemplo(sistema(rng, distratores(), dia()), pergunta, resposta, parte=parte))
+
     # Fatos inventados: com o fato no prompt, ler e responder; sem ele, mas com
     # fatos parecidos de outro assunto, dizer que não sabe em vez de pegar o vizinho.
     for i in range(1500):
@@ -530,9 +567,9 @@ def gerar(semente: int = 7) -> list[dict]:
     # Professor: só os pares que passaram no filtro e no julgamento.
     aprovados = professor.aprovados()
     soltos = []
-    for nome in ("aula.jsonl", "papo.jsonl"):
+    for nome in ("aula.jsonl", "papo.jsonl", "web.jsonl"):
         for linha in professor.lerLinhas(nome):
-            parte = "validacao" if validacao(linha.get("subtema", linha.get("tema", "")), 8) else "treino"
+            parte = "validacao" if validacao(linha.get("subtema", linha.get("tema", linha["chave"])), 8) else "treino"
             for par in linha.get("pares", []):
                 p, r = par["pergunta"], par["resposta"]
                 if professor.idDoPar(p, r) in aprovados and professor.perguntaLimpa(p) and professor.limpo(r):

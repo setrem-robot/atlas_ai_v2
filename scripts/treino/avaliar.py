@@ -142,6 +142,10 @@ TESTE = [
     Caso("muito obrigada pela ajuda", tipo="papo"),
     Caso("falou tchau", tipo="papo"),
     # reconhecimento de voz que falhou
+    Caso("quanto é dois mais três", "cinco", tipo="conta"),
+    Caso("quanto dá sete vezes oito", "cinquenta e seis", tipo="conta"),
+    Caso("me diz quanto é vinte menos sete", "treze", tipo="conta"),
+    Caso("aí", REPETIR, tipo="lixo"),
     Caso("de no a peça três", REPETIR, tipo="lixo"),
     Caso("tá ligado na quando", REPETIR, tipo="lixo"),
     Caso("o pão da sede", REPETIR, tipo="lixo"),
