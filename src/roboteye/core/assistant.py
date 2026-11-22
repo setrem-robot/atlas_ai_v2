@@ -15,6 +15,7 @@ import queue
 import threading
 import time
 
+from roboteye.core.braveza import Braveza
 from roboteye.core.contas import responder as responderConta
 from roboteye.core.events import (
     AssistantReply,
@@ -26,7 +27,7 @@ from roboteye.core.events import (
 from roboteye.core.humor import simplificar
 from roboteye.core.neutroPt import neutralize
 from roboteye.core.piadas import Piadas
-from roboteye.core.text import streamSentences, truncate
+from roboteye.core.text import cortarLaco, pararNoLaco, streamSentences, truncate
 from roboteye.llm.base import LLMClient, LLMError
 from roboteye.llm.fallback import FallbackLLMClient
 from roboteye.llm.memory import ConversationMemory
@@ -73,6 +74,8 @@ class Assistant:
         #: Piadas respondidas sem o modelo, que nao entende graca (`core/piadas.py`).
         #: So em portugues: as formas que ela reconhece sao as daqui.
         self.piadas = Piadas() if language.lower().startswith("pt") else None
+        #: Xingamento respondido bravo, sem o modelo (`core/braveza.py`).
+        self.braveza = Braveza()
 
         self.inbox: queue.Queue[str | None] = queue.Queue()
         self.thread: threading.Thread | None = None
@@ -264,7 +267,11 @@ class Assistant:
 
         pronta = None
         if self.piadas:  # so em portugues; conta antes de piada (`core/contas.py`)
-            pronta = responderConta(message) or self.piadas.responder(message, agora)
+            pronta = (
+                self.braveza.responder(message)
+                or responderConta(message)
+                or self.piadas.responder(message, agora)
+            )
         if pronta is not None:
             # Sem `ThinkingStarted`: nao ha o que pensar, e a cara de pensativa
             # antes de rir de uma piada desmancharia a graca. O microfone pausa
@@ -280,7 +287,9 @@ class Assistant:
 
         spoken: list[str] = []
         ditas: set[str] = set()
-        for sentence in streamSentences(self.llm.streamReply(self.memoryStore.buildPrompt())):
+        tokens = pararNoLaco(self.llm.streamReply(self.memoryStore.buildPrompt()))
+        for sentence in streamSentences(tokens):
+            sentence = cortarLaco(sentence)
             # O modelo pequeno as vezes entra em laco e repete a mesma frase:
             # dita uma vez, a repeticao so atrasa e soa quebrada.
             chave = simplificar(sentence)
