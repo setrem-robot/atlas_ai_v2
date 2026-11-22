@@ -59,6 +59,7 @@ noPi() { "$GB" -lc "ssh -o ConnectTimeout=15 $DEST '$1'"; }
 professor() {
     cd "$S/treino" || return 1
     export PARALELO=3   # o Ollama do Windows atende três ao mesmo tempo (OLLAMA_NUM_PARALLEL)
+    export VOLTAS=$(( RODADA > 1 ? RODADA - 1 : 1 ))   # uma geração nova de aula, papo e seguida por rodada
     "$PY" professor.py aula >> dados-aula.log 2>&1 &
     local aula=$!
     for t in papo seguida parafrase web; do "$PY" professor.py $t >> dados-resto.log 2>&1; done
