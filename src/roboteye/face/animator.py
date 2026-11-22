@@ -175,10 +175,47 @@ SWIRL_RATE = 9.0
 
 # --- boca --------------------------------------------------------------------
 #: Quanto a voz abre a boca no pico, somado a abertura de repouso da fala.
-MOUTH_SPEECH_GAIN = 0.42
+MOUTH_SPEECH_GAIN = 0.4
 #: Boca aberta fica mais estreita: "a" e "o" juntam os cantos. Sem isso a boca
 #: so crescia para baixo e lia como um grafico de volume, nao como fala.
-MOUTH_SPEECH_NARROW = 0.2
+MOUTH_SPEECH_NARROW = 0.14
+#: A boca segue a voz por uma mola amortecida, nao direto pelo volume. O volume
+#: muda a cada 20 ms; seguido direto, a boca tremia sem nunca fechar nem abrir
+#: de verdade. Uns 4 Hz de resposta e a cadencia das silabas: abre na vogal,
+#: fecha na consoante, e o leve repique da mola (amortecimento abaixo de 1) e o
+#: que da peso de queixo ao movimento.
+MOUTH_SPRING_FREQUENCY = 26.0
+MOUTH_SPRING_DAMPING = 0.62
+#: Passo maximo da integracao da mola: um quadro atrasado nao a faz explodir.
+MOUTH_SPRING_STEP = 0.01
+#: Portao de contraste sobre o volume (ja curvado por `SPEECH_CURVE`): abaixo
+#: do piso a boca fecha, acima do teto abre toda. Sem ele a fala inteira ficava
+#: no meio da escala e a boca so ondulava.
+MOUTH_GATE = (0.22, 0.82)
+#: Entre silabas de uma mesma frase a boca nao volta a ser um risco: fica uma
+#: fresta. So fecha de todo numa pausa de verdade, quando a frase esfria.
+MOUTH_PHRASE_FLOOR = 0.12
+MOUTH_PHRASE_RISE = 12.0
+MOUTH_PHRASE_FALL = 2.5
+#: Vogais: cada silaba sorteia uma, de -1 ("i", "e": larga e baixa) a +1 ("o",
+#: "u": estreita e redonda). Nao e reconhecimento de fonema, e variacao: com a
+#: mesma forma em toda silaba a boca parecia um medidor de volume.
+MOUTH_VOWELS = (-1.0, -0.5, 0.0, 0.0, 0.3, 0.7, 1.0)
+MOUTH_VOWEL_RATE = 16.0
+MOUTH_VOWEL_ROUND = 0.26
+MOUTH_VOWEL_WIDE = 0.1
+#: Silaba nova: a mola passou deste ponto subindo, depois de ter descido do outro.
+MOUTH_SYLLABLE = (0.5, 0.25)
+#: Quanto cada humor abre a boca ao falar: alegre fala aberto, cansada mal
+#: mexe a boca, brava fala entre dentes.
+MOUTH_MOOD_GAIN: dict[Expression, float] = {
+    Expression.HAPPY: 1.15,
+    Expression.LAUGH: 1.2,
+    Expression.TIRED: 0.6,
+    Expression.ANGRY: 0.7,
+    Expression.RAGE: 0.55,
+    Expression.DIZZY: 0.8,
+}
 #: Quanto do olhar a boca acompanha. A boca vive mais perto do "rosto" que os
 #: olhos, entao anda menos que eles quando ela olha para o lado — e essa
 #: diferenca e a paralaxe de uma cabeca virando. Com 6% (o valor antigo) a boca
@@ -348,6 +385,14 @@ class EyeAnimator:
         self.speechLevel: float | None = None
         #: A mesma amplitude depois de suavizada, que e a que move o olho.
         self.speechSmoothed = 0.0
+        #: Mola da boca (abertura de 0 a ~1 e velocidade), o "calor" da frase e a
+        #: vogal corrente; ver `mouthSpeech`.
+        self.mouthOpen = 0.0
+        self.mouthVelocity = 0.0
+        self.mouthPhrase = 0.0
+        self.vowel = 0.0
+        self.vowelTarget = 0.0
+        self.syllableArmed = True
 
         # -- escuta -----------------------------------------------------------
         #: RMS cru do microfone, ou None se a escuta nao informa nivel.
@@ -510,7 +555,8 @@ class EyeAnimator:
         left, right = self.applyLife(left, right, dt, envelope, hearing)
 
         mouth = self.mouthFrom.lerp(self.mouthTo, self.morph.value)
-        mouth = self.animateMouth(mouth, envelope)
+        self.mouthSpeech(dt)
+        mouth = self.animateMouth(mouth)
 
         eyeColor = lerpColor(self.eyeFrom, self.eyeTo, self.morph.value)
         bgColor = lerpColor(self.bgFrom, self.bgTo, self.morph.value)
@@ -657,7 +703,7 @@ class EyeAnimator:
 
         return 0.0, 0.0, 0.0, 0.0
 
-    def animateMouth(self, mouth: MouthShape, speechEnvelope: float) -> MouthShape:
+    def animateMouth(self, mouth: MouthShape) -> MouthShape:
         """Da vida a boca: ela anda como parte do rosto e fala com a voz.
 
         A boca soma as mesmas camadas de posicao dos olhos — deriva, respiracao,
@@ -686,14 +732,18 @@ class EyeAnimator:
             + gazeY * MOUTH_GAZE_FOLLOW
             + self.shakeY * MOUTH_SHAKE_FOLLOW
         )
-        openness = mouth.openness
-        width = mouth.width
-
-        if self.activityAtual is Expression.SPEAKING:
-            # O envelope vem em -1..1; aqui vira 0..1 (silencio fecha, pico abre).
-            drive = (speechEnvelope + 1.0) * 0.5
-            openness = min(1.0, openness + drive * MOUTH_SPEECH_GAIN)
-            width *= 1.0 - drive * MOUTH_SPEECH_NARROW
+        # Fora da fala a mola ja descansa em zero; nao precisa de um "se".
+        drive = self.mouthOpen * MOUTH_MOOD_GAIN.get(self.currentExpression, 1.0)
+        rounded = max(0.0, self.vowel)
+        wide = max(0.0, -self.vowel)
+        # "i" abre pouco e estica; "o" abre mais e junta os cantos.
+        openness = mouth.openness + drive * MOUTH_SPEECH_GAIN * (1.0 - 0.4 * wide + 0.15 * rounded)
+        openness = min(1.0, max(0.0, openness))
+        width = mouth.width * (
+            1.0
+            - drive * (MOUTH_SPEECH_NARROW + MOUTH_VOWEL_ROUND * rounded)
+            + drive * MOUTH_VOWEL_WIDE * wide
+        )
 
         return replace(
             mouth,
@@ -702,6 +752,43 @@ class EyeAnimator:
             offsetX=mouth.offsetX + offsetX,
             offsetY=mouth.offsetY + offsetY,
         )
+
+    def mouthSpeech(self, dt: float) -> None:
+        """Avanca a mola da boca rumo ao volume da voz (ou a zero, calada)."""
+        if self.activityAtual is Expression.SPEAKING:
+            if self.speechLevel is None:
+                level = (self.syntheticEnvelope(self.activityClock) + 1.0) * 0.5
+            else:
+                level = self.speechLevel**SPEECH_CURVE
+            low, high = MOUTH_GATE
+            gated = easing.clamp((level - low) / (high - low))
+            gated = gated * gated * (3.0 - 2.0 * gated)
+        else:
+            gated = 0.0
+
+        rate = MOUTH_PHRASE_RISE if gated > self.mouthPhrase else MOUTH_PHRASE_FALL
+        self.mouthPhrase = easing.approach(self.mouthPhrase, gated, dt, rate)
+        target = max(gated, MOUTH_PHRASE_FLOOR * min(1.0, self.mouthPhrase * 3.0))
+
+        # Mola semi-implicita em passos curtos: estavel mesmo num quadro longo.
+        omega = MOUTH_SPRING_FREQUENCY
+        steps = max(1, math.ceil(dt / MOUTH_SPRING_STEP))
+        h = dt / steps
+        for _ in range(steps):
+            accel = omega * omega * (target - self.mouthOpen)
+            accel -= 2.0 * MOUTH_SPRING_DAMPING * omega * self.mouthVelocity
+            self.mouthVelocity += accel * h
+            self.mouthOpen += self.mouthVelocity * h
+        if self.mouthOpen < 0.0:
+            self.mouthOpen, self.mouthVelocity = 0.0, 0.0
+
+        rise, fall = MOUTH_SYLLABLE
+        if self.syllableArmed and self.mouthOpen > rise:
+            self.syllableArmed = False
+            self.vowelTarget = self.rng.choice(MOUTH_VOWELS)
+        elif self.mouthOpen < fall:
+            self.syllableArmed = True
+        self.vowel = easing.approach(self.vowel, self.vowelTarget, dt, MOUTH_VOWEL_RATE)
 
     def hearingDrive(self, dt: float) -> float:
         """Quanto a voz de quem fala esta chegando, de 0 a 1, suavizado.

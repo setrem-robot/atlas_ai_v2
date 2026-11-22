@@ -431,6 +431,50 @@ class TestCorEBoca:
         aberturas = [f.mouth.openness for f in coletar(animator, 1.0)]
         assert max(aberturas) > 0.2
 
+    def testBocaFechaEntreSilabas(self, animator: EyeAnimator) -> None:
+        """O defeito: a boca seguia o volume e ficava numa pilula tremendo, sem
+        nunca fechar. Vogal abre, consoante (silencio curto) volta a uma fresta."""
+        animator.setActivity(Expression.SPEAKING)
+        animator.setSpeechLevel(1.0)
+        aberta = max(f.mouth.openness for f in coletar(animator, 0.25))
+        animator.setSpeechLevel(0.0)
+        fresta = avancar(animator, 0.2).mouth.openness
+        assert aberta > 0.3
+        assert fresta < aberta * 0.3
+
+    def testBocaNaoPulaDeQuadroEmQuadro(self, animator: EyeAnimator) -> None:
+        """A mola: do silencio ao pico, nenhum quadro salta mais que um pedaco."""
+        animator.setActivity(Expression.SPEAKING)
+        animator.setSpeechLevel(0.0)
+        avancar(animator, 0.3)
+        animator.setSpeechLevel(1.0)
+        aberturas = [f.mouth.openness for f in coletar(animator, 0.3)]
+        assert max(abs(b - a) for a, b in pairwise(aberturas)) < 0.1
+
+    def testCalarFechaABocaSemEstalo(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.SPEAKING)
+        animator.setSpeechLevel(1.0)
+        aberta = avancar(animator, 0.3).mouth.openness
+        animator.setActivity(None)
+        logoDepois = animator.update(PASSO).mouth.openness
+        assert logoDepois > aberta * 0.5  # nao some de um quadro para o outro
+        assert avancar(animator, 1.0).mouth.openness < 0.02
+
+    def testHumorMudaOJeitoDeFalar(self) -> None:
+        """Alegre fala de boca aberta; cansada mal mexe a boca."""
+
+        def pico(humor: Expression) -> float:
+            face = EyeAnimator(idleAnimations=False, rng=random.Random(7))
+            face.setMood(humor)
+            face.setActivity(Expression.SPEAKING)
+            face.setSpeechLevel(1.0)
+            avancar(face, 1.0)
+            repouso = EyeAnimator(idleAnimations=False, rng=random.Random(7))
+            repouso.setMood(humor)
+            return face.update(PASSO).mouth.openness - avancar(repouso, 1.0).mouth.openness
+
+        assert pico(Expression.HAPPY) > pico(Expression.TIRED) * 1.5
+
     def testBocaNaoFicaEstaticaEmRepouso(self, animator: EyeAnimator) -> None:
         """O defeito: a boca cravada enquanto os olhos vivem. Ela tem de respirar."""
         quadros = coletar(animator, 4.0)

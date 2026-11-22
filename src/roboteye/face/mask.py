@@ -220,6 +220,17 @@ MOUTH_CURVE_DEPTH = 0.5
 #: Quanto `openness` abre a boca no meio, por unidade. E o que transforma um
 #: traco numa boca aberta sem precisar de um parametro separado de altura.
 MOUTH_OPEN_GAIN = 0.9
+#: Perfil da abertura ao longo da boca: `(1 - u^2)^p`. Com p = 0,5 (a elipse) a
+#: abertura chegava ao canto com borda vertical e a ponta do traco sobrava para
+#: fora dela, duas "orelhinhas" visiveis a cada silaba. Com 1 a abertura
+#: afina ate o canto e se funde no traco, como labios que se encontram; acima
+#: disso ela vira um sino.
+MOUTH_OPEN_PROFILE = 1.0
+#: Quanto da abertura e do queixo: o labio de baixo desce, o de cima quase nao
+#: sobe. Com 0 os dois se afastavam por igual e a boca inchava em vez de falar.
+MOUTH_JAW = 0.45
+#: Teto da inclinacao usada para corrigir a distancia vertical (ver `mouthField`).
+_MOUTH_MAX_SLOPE = 6.0
 
 #: Quantos dentes atravessam a boca de monstro (contados numa fileira).
 MOUTH_TEETH_COUNT = 5
@@ -286,9 +297,23 @@ def mouthField(mouth: MouthShape, geometry: MouthGeometry) -> np.ndarray:
     if mouth.teeth > 1e-3 and mouth.openness > 1e-3:
         return toothedMaw(x, y, u, centerY, mouth)
 
-    opening = mouth.openness * MOUTH_OPEN_GAIN * np.sqrt(1.0 - u * u)
+    opening = mouth.openness * MOUTH_OPEN_GAIN * (1.0 - u * u) ** MOUTH_OPEN_PROFILE
+    middle = centerY + opening * MOUTH_JAW
+    # A distancia e medida na vertical; numa borda inclinada a real e menor, e
+    # sem dividir pela inclinacao a borda suavizada ficava fina ali (degraus nos
+    # cantos de um sorriso aberto). So depende de x, entao sai barato.
+    below = y >= middle
+    upperEdge = middle - opening
+    lowerEdge = middle + opening
+    if gridWidth > 1:
+        slope = np.where(
+            below, np.gradient(lowerEdge, xs, axis=1), np.gradient(upperEdge, xs, axis=1)
+        )
+    else:
+        slope = np.zeros_like(y * x)
+    stretch = np.sqrt(1.0 + np.minimum(slope * slope, _MOUTH_MAX_SLOPE**2))
     dx = np.abs(x) - halfLength
-    dy = np.abs(y - centerY) - opening
+    dy = (np.abs(y - middle) - opening) / stretch
     outside = np.hypot(np.maximum(dx, 0.0), np.maximum(dy, 0.0))
     inside = np.minimum(np.maximum(dx, dy), 0.0)
     return (outside + inside - mouth.thickness).astype(np.float32)

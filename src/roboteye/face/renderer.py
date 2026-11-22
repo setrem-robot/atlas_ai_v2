@@ -378,7 +378,7 @@ class EyeRenderer:
         unit = layout.mouthHeight / 2.0
         reach = (
             abs(mouth.curve) * mask.MOUTH_CURVE_DEPTH
-            + mouth.openness * mask.MOUTH_OPEN_GAIN
+            + mouth.openness * mask.MOUTH_OPEN_GAIN * (1.0 + mask.MOUTH_JAW)
             + mouth.thickness
         )
         # Folga para a borda suavizada, e o tamanho arredondado para cima em
