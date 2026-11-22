@@ -31,7 +31,7 @@ def test_numero_por_extenso(texto: str, valor: int | None) -> None:
         ("quanto dá cem dividido por oito", "12,5"),
         ("quanto é dois menos cinco", "menos 3"),
         ("Atlas, quanto é nove ao quadrado?", "81"),
-        ("raiz quadrada de dois", "1,41"),
+        ("raiz quadrada de dois", "mais ou menos 1,4"),
     ],
 )
 def test_conta_certa(pergunta: str, resultado: str) -> None:
@@ -52,6 +52,10 @@ def test_conta_certa(pergunta: str, resultado: str) -> None:
 )
 def test_nao_e_conta(pergunta: str) -> None:
     assert responder(pergunta) is None
+
+
+def test_decimal_exato_nao_e_aproximado() -> None:
+    assert "mais ou menos" not in (responder("quanto é cem dividido por oito") or "mais ou menos")
 
 
 def test_divisao_por_zero() -> None:

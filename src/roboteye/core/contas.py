@@ -111,7 +111,9 @@ def _falado(valor: float) -> str:
     """Numero com digitos e virgula decimal, como o locutor sabe ler."""
     if valor == int(valor):
         return str(int(valor))
-    return f"{valor:.2f}".rstrip("0").replace(".", ",")
+    return f"{valor:.1f}".replace(".", ",").removesuffix(
+        ",0"
+    )  # uma casa: "um virgula quatro" se fala
 
 
 def responder(pergunta: str) -> str | None:
@@ -132,8 +134,6 @@ def responder(pergunta: str) -> str | None:
             return None
         valor = math.sqrt(a)
         conta = f"A raiz quadrada de {a}"
-        if valor != int(valor):
-            return f"{conta} é mais ou menos {_falado(valor)}."
     elif m := _POTENCIA.match(s):
         a = numero(m["a"])
         if a is None:
@@ -145,7 +145,7 @@ def responder(pergunta: str) -> str | None:
     resultado = _falado(valor)
     if valor < 0:
         resultado = f"menos {_falado(-valor)}"
-    if valor != int(valor):
+    if round(valor, 1) != valor:  # so o arredondado e "mais ou menos"; 12,5 e exato
         resultado = f"mais ou menos {resultado}"
     conta = conta[0].upper() + conta[1:]
     return random.choice(
