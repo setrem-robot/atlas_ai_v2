@@ -107,6 +107,37 @@ pi() {
             tail -qn2 ~/avaliacoes/atlas-1b-v2.txt ~/avaliacoes/gemma3-1b-banca2.txt'" \
         >> "$LOG" 2>&1 || { log "pi: a prova falhou (ver ~/avaliacoes no Pi)"; return 1; }
     log "pi: prova pronta (placar acima; detalhe em ~/avaliacoes/ no Pi)"
+    trocar
+}
+
+# Põe o atlas-1b-v2 no robô sozinho, mas só se ganhar na prova do gemma3:1b e
+# do v1 (52/68), e só fica se a conversa real continuar rápida; senão o .env
+# volta como estava. A medida faz a Atlas falar dez respostas em voz alta.
+trocar() {
+    local DEST=atlas@atlas.local gb="/mnt/c/Program Files/Git/bin/bash.exe" placar v2 g
+    placar=$("$gb" -lc "ssh $DEST 'cat ~/avaliacoes/atlas-1b-v2.txt ~/avaliacoes/gemma3-1b-banca2.txt'" 2>/dev/null)
+    v2=$(grep -oE '^atlas-1b-v2: [0-9]+' <<< "$placar" | grep -oE '[0-9]+$')
+    g=$(grep -oE '^gemma3:1b: [0-9]+' <<< "$placar" | grep -oE '[0-9]+$')
+    if [[ -z "$v2" || -z "$g" ]] || (( v2 <= g || v2 < 52 )); then
+        log "troca: não (v2 ${v2:-?}/68, gemma3:1b ${g:-?}/68, v1 52/68); o robô segue como está"
+        return 0
+    fi
+    log "troca: v2 ${v2}/68 contra ${g}/68 do gemma3:1b; pondo no robô"
+    "$gb" -lc "ssh $DEST 'cd ~/atlas_ai_v2 && cp .env ~/avaliacoes/env-pre-atlas-1b-v2.bak \
+        && sed -i -e \"/^ROBOTEYE_LLM_MODEL=/d\" -e \"/^ROBOTEYE_LLM_PROMPT_CURTO=/d\" .env \
+        && printf \"ROBOTEYE_LLM_MODEL=atlas-1b-v2\nROBOTEYE_LLM_PROMPT_CURTO=true\n\" >> .env \
+        && kill -KILL \$(systemctl show -p MainPID --value roboteye); sleep 60; systemctl is-active roboteye'" >> "$LOG" 2>&1
+    local conversa mediana
+    conversa=$("$gb" -lc "ssh $DEST 'bash -s atlas-1b-v2 | tee ~/avaliacoes/conversa-atlas-1b-v2.txt' < '$(sed -E 's#^/mnt/(.)#/\1#' <<< "$S")/medir-conversa.sh'" 2>&1)
+    mediana=$(grep -oE 'mediana [0-9.]+' <<< "$conversa" | grep -oE '[0-9.]+$')
+    if [[ -n "$mediana" ]] && awk -v m="$mediana" 'BEGIN { exit !(m <= 2.5) }'; then
+        log "troca: atlas-1b-v2 no ar; conversa com mediana ${mediana} s"
+        "$gb" -lc "gh release edit atlas-1b-v2 --repo setrem-robot/atlas_ai_v2 --prerelease=false --title 'IA: atlas-1b v2'" >> "$LOG" 2>&1
+    else
+        log "troca: conversa lenta (mediana ${mediana:-?} s); voltando o .env de antes"
+        "$gb" -lc "ssh $DEST 'cp ~/avaliacoes/env-pre-atlas-1b-v2.bak ~/atlas_ai_v2/.env \
+            && kill -KILL \$(systemctl show -p MainPID --value roboteye); sleep 45; systemctl is-active roboteye'" >> "$LOG" 2>&1
+    fi
 }
 
 main() {

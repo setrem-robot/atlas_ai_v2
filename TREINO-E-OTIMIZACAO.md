@@ -196,6 +196,7 @@ retomável do começo ao fim:
 IA   (GPU): professor (aula ‖ papo -> seguida -> parafrase) -> julgar -> dataset
             -> descarrega o professor -> LoRA -> instala no Pi como atlas-1b-v2
             -> release atlas-1b-v2 no GitHub (GGUF + dados) -> prova no Pi
+            -> troca no robô se ganhar (e volta se a conversa ficar lenta)
 Vosk (CPU): constrói e avalia cada combinação de pesos; resumo em ~/escuta-treino/resumo.txt
 ```
 
@@ -206,10 +207,14 @@ O LoRA espera o Vosk acabar (o WSL tem 7 GB de RAM). Andamento em
 powershell Start-Process -WindowStyle Hidden wsl -ArgumentList '-d','Ubuntu','--','bash','<caminho no WSL>/scripts/orquestrar-treinos.sh'
 ```
 
-**A troca do modelo no robô não é automática.** Com a prova pronta em
-`~/avaliacoes/atlas-1b-v2.txt` (e melhor que o `gemma3:1b`), no `.env` do Pi:
-`ROBOTEYE_LLM_MODEL=atlas-1b-v2` e `ROBOTEYE_LLM_PROMPT_CURTO=true`; reiniciar e
-validar.
+**A troca no robô é automática, com portão e volta.** O orquestrador só põe o
+`atlas-1b-v2` no `.env` do Pi (`ROBOTEYE_LLM_MODEL=atlas-1b-v2`,
+`ROBOTEYE_LLM_PROMPT_CURTO=true`) se a prova der mais certas que o `gemma3:1b`
+**e** que o v1 (52/68). Depois mede a conversa real (`medir-conversa.sh`, a Atlas
+fala em voz alta): com mediana até 2,5 s o modelo fica e a release deixa de ser
+pré-lançamento; acima disso, o `.env` de antes volta
+(`~/avaliacoes/env-pre-atlas-1b-v2.bak`). Cada decisão fica no
+`orquestrar-treinos.log`. Valide depois com o `atlas-validador`.
 
 ---
 
