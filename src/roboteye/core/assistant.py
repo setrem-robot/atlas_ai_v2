@@ -15,6 +15,7 @@ import queue
 import threading
 import time
 
+from roboteye.core.contas import responder as responderConta
 from roboteye.core.events import (
     AssistantReply,
     ErrorOccurred,
@@ -22,6 +23,7 @@ from roboteye.core.events import (
     ThinkingStarted,
     UserMessage,
 )
+from roboteye.core.humor import simplificar
 from roboteye.core.neutroPt import neutralize
 from roboteye.core.piadas import Piadas
 from roboteye.core.text import streamSentences, truncate
@@ -260,7 +262,9 @@ class Assistant:
         self.ultimoTurno = agora
         self.memoryStore.addUser(message)
 
-        pronta = self.piadas.responder(message, agora) if self.piadas else None
+        pronta = None
+        if self.piadas:  # so em portugues; conta antes de piada (`core/contas.py`)
+            pronta = responderConta(message) or self.piadas.responder(message, agora)
         if pronta is not None:
             # Sem `ThinkingStarted`: nao ha o que pensar, e a cara de pensativa
             # antes de rir de uma piada desmancharia a graca. O microfone pausa
@@ -275,7 +279,15 @@ class Assistant:
         self.bus.publish(ThinkingStarted())
 
         spoken: list[str] = []
+        ditas: set[str] = set()
         for sentence in streamSentences(self.llm.streamReply(self.memoryStore.buildPrompt())):
+            # O modelo pequeno as vezes entra em laco e repete a mesma frase:
+            # dita uma vez, a repeticao so atrasa e soa quebrada.
+            chave = simplificar(sentence)
+            if chave in ditas:
+                logger.info("frase repetida pelo modelo, pulada: %s", truncate(sentence))
+                continue
+            ditas.add(chave)
             # Antes da voz e da legenda, e tambem do historico: guardar a versao
             # com genero ensinaria o modelo a repeti-la na resposta seguinte.
             if self.linguagemNeutra:
