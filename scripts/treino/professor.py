@@ -458,8 +458,10 @@ def tarefaSeguida() -> None:
                + exemplos(dataset.AULA, dataset.HUMOR) + "\n\n"
                "Cada conversa tem duas ou três trocas, e a partir da segunda a pergunta só faz sentido "
                "com a anterior: 'me dá um exemplo', 'e pra que serve isso', 'explica mais simples', "
-               "'e qual a diferença pro outro', 'por quê', 'quero sim', 'e você'. A resposta usa o "
-               "contexto sem repetir a anterior.")
+               "'e qual a diferença pro outro', 'por quê', 'quero sim', 'e você'. Em parte delas a "
+               "pergunta seguinte usa só um pronome para o assunto ('e ela é legal', 'e onde ele "
+               "fica', 'quem criou isso'); a resposta diz de quem fala ('A SETREM é...'). A "
+               "resposta usa o contexto sem repetir a anterior.")
     temas = [f"{area}: {s}" for area, subtemas in AREAS.items() for s in subtemas[::2]] + PAPOS[::2]
     trabalhos = [(tema + volta(v)[0], lambda t=tema, x=volta(v)[1]: {"tema": t, **chamar(
         sistema, f"Tema: {t}.\nEscreva três conversas diferentes.{x}", ESQUEMA_CONVERSA)})
