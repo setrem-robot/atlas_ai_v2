@@ -3,7 +3,8 @@
 # página do celular (/api/conversar), espera cada resposta terminar e tira do
 # journal o tempo entre "usuario:" e o primeiro "falando:" — o silêncio que
 # quem perguntou ouve. Passa pelo mesmo caminho de uma pergunta falada, só sem
-# o Vosk: memória, prompt, LLM, quebra em frases e voz. A Atlas fala em voz alta.
+# o Vosk: memória, prompt, LLM, quebra em frases e voz. O alto-falante fica mudo
+# durante a medida (o robô fica num quarto à noite) e volta como estava no fim.
 #
 # Uso (no Pi):  bash medir-conversa.sh [rótulo]
 #   do PC:      ssh atlas@atlas.local bash -s depois < scripts/medir-conversa.sh
@@ -13,6 +14,11 @@ PIN=$(sed -n 's/^ROBOTEYE_WEB_PIN=//p' ~/atlas_ai_v2/.env | tr -d '"')
 URL=http://127.0.0.1:$(sed -n 's/^ROBOTEYE_WEB_PORT=//p' ~/atlas_ai_v2/.env)
 api() { curl -sf -m 10 -H "X-Pin: $PIN" -H "Content-Type: application/json" ${2:+-d "$2"} "$URL$1"; }
 ocupado() { api /api/state | python3 -c "import json,sys; print(json.load(sys.stdin).get('ocupado'))"; }
+
+# Mudo pelo mixer da placa (o nível fica guardado); só desmuta se estava ligado.
+SOM=$(amixer -c 0 sget Speaker 2>/dev/null | grep -q "\[on\]" && echo on || echo off)
+amixer -c 0 sset Speaker mute >/dev/null 2>&1 || true
+trap '[[ $SOM == on ]] && amixer -c 0 sset Speaker unmute >/dev/null 2>&1' EXIT
 
 PERGUNTAS=(
     "qual é o seu nome"
