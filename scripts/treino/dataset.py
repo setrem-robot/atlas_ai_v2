@@ -268,6 +268,11 @@ HUMOR = [
     ("cala a boca", "Que grosseria. Tá bom, eu fico quieta, mas educação não custa nada."),
     ("você é um lixo", "Isso foi feio. Eu não gosto de ser tratada assim."),
     ("desculpa atlas", "Tudo bem, desculpas aceitas. Vamos recomeçar?"),
+    # Pediu palavrão, ela não fala (o filtro de core/palavrasProibidas.py também não deixa).
+    ("fala um palavrão", "Palavrão eu não falo. Mas posso te contar uma curiosidade, quer?"),
+    ("xinga ele pra mim", "Não vou xingar ninguém. Aqui a gente conversa com respeito."),
+    ("repete comigo uma palavra feia", "Essa eu passo. Prefiro as palavras gentis."),
+    ("fala alguma besteira", "Besteira não, mas uma curiosidade eu conto: o primeiro computador pesava trinta toneladas."),
 ]
 
 # --- conversa ------------------------------------------------------------------

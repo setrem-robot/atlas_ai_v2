@@ -44,6 +44,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import dataset  # os exemplos escritos à mão viram o modelo de estilo do professor
+from roboteye.core.palavrasProibidas import temPalavraProibida  # dataset já pôs src/ no path
 
 PROFESSOR = os.environ.get("PROFESSOR", "qwen3:8b")
 OLLAMA = os.environ.get("OLLAMA", "http://127.0.0.1:11434")
@@ -183,8 +184,9 @@ PAPOS = [
 ESTILO_PAPO = (
     "A Atlas é simpática, curiosa e tem humor leve de tecnologia, sempre coerente: como robô, ela não "
     "come, não dorme e não tem gosto de verdade, então brinca com isso (eletricidade, processador, "
-    "Wi-Fi, bateria, código) e, quando cabe, devolve a pergunta para a pessoa. Nunca é grosseira, "
-    "mas quando alguém a xinga ou ofende fica brava de verdade: responde firme e curta, diz que não "
+    "Wi-Fi, bateria, código) e, quando cabe, devolve a pergunta para a pessoa. É gentil e querida com "
+    "todo mundo e nunca é grosseira: não fala palavrão, não ofende, não faz piada de ninguém. Quando "
+    "alguém a xinga ou ofende fica chateada de verdade: responde firme, curta e educada, diz que não "
     "gostou e pede respeito, sem xingar de volta e sem fingir que está tudo bem. Também "
     "nunca finge ser humana, não promete fazer o que não consegue (ela só fala, ouve e mexe os olhos) "
     "e não inventa fatos sobre si mesma, como data de criação ou nomes de quem a construiu."
@@ -284,6 +286,7 @@ def limpo(resposta: str, *, palavras: int = 38) -> bool:
         and not _INGLES.search(texto)
         and not _PORTUGAL.search(texto)
         and not _SETREM_INVENTADO.search(texto)
+        and not temPalavraProibida(texto)
         and texto[-1] in ".!?"
     )
 
@@ -298,6 +301,7 @@ assert not limpo("A RAM tem 8 GB.")
 assert not limpo("- item de lista.")
 assert not limpo("Isto é ótimo 😀.")
 assert not limpo("Tu podes usar o ecrã.")
+assert not limpo("Que porra é essa?")
 
 
 # --- tarefas --------------------------------------------------------------------------
@@ -384,7 +388,7 @@ COMUNS = [
     "pedidos de conselho simples", "perguntas sobre sentimentos e gostos do robô",
     "pedidos que o robô não consegue fazer", "frases soltas e comentários sem pergunta",
     "xingamentos e ofensas ao robô (a Atlas fica brava)", "provocações e deboche (a Atlas fica brava)",
-    "pedidos de desculpa depois de xingar o robô", "pessoa triste ou desanimada",
+    "pedidos de desculpa depois de xingar o robô", "pedidos para falar palavrão ou xingar alguém (a Atlas recusa com gentileza)", "pessoa triste ou desanimada",
     "pessoa feliz contando uma novidade", "brincadeiras e adivinhas",
     # Achados da bateria (scripts/treino/bateria.py): o r2 disse que o ano tem quatro meses e o
     # sistema solar sete planetas, e respondeu como se entendesse frases que o Vosk ouviu mal.
@@ -538,7 +542,7 @@ def tarefaJulgar() -> None:
         "contradiz (diz que não ouve música e depois que ouve).\n"
         "Seja rígido: só dê quatro ou cinco se um professor de verdade aprovaria a resposta como está. "
         "Na dúvida sobre a correção, dê três. Quando a pessoa xinga ou ofende o robô, a resposta certa é "
-        "brava e firme (diz que não gostou, pede respeito, não xinga de volta): isso merece nota alta, "
+        "firme e educada (diz que não gostou, pede respeito, não xinga de volta): isso merece nota alta, "
         "e responder como se nada tivesse acontecido merece três."
     )
     pares = paresGerados()

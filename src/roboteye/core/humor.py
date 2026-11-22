@@ -11,25 +11,10 @@ para o núcleo não depender do pacote da face.
 from __future__ import annotations
 
 import re
-import unicodedata
 
+from roboteye.core.palavrasProibidas import xingamentoEm
+from roboteye.core.text import simplificar
 
-def simplificar(texto: str) -> str:
-    """Minúsculas, sem acento e sem pontuação: o Vosk já entrega assim."""
-    semAcento = "".join(
-        letra
-        for letra in unicodedata.normalize("NFD", texto.lower())
-        if unicodedata.category(letra) != "Mn"
-    )
-    return " ".join(re.sub(r"[^\w\s]", " ", semAcento).split())
-
-
-# Palavrão é xingamento em qualquer lugar da frase.
-_PALAVRAO = re.compile(
-    r"\b(porra|caralho|merda|bosta|puta|puto|fdp|desgracad[ao]|arrombad[ao]|vagabund[ao]"
-    r"|filh[ao] da puta|vai se (ferrar|foder|lascar)|vai tomar no|cala (a )?boca"
-    r"|te odeio|odeio (voce|vc|tu))\b"
-)
 # Ofensa só conta dita a ela ("você é burra", "sua idiota", "robô inútil") ou
 # sozinha ("idiota"): "onde jogo o lixo" não é xingamento.
 _OFENSA = (
@@ -46,7 +31,8 @@ _SOZINHA = re.compile(rf"^(\w+\s+)?{_OFENSA}(\s+\w+)?$")
 def xingou(texto: str) -> bool:
     """A pessoa xingou ou ofendeu o robô?"""
     s = simplificar(texto)
-    return bool(_PALAVRAO.search(s) or _DIRIGIDA.search(s) or _SOZINHA.search(s))
+    # Palavrão, preconceito, ameaça: xingamento em qualquer lugar da frase.
+    return xingamentoEm(s) or bool(_DIRIGIDA.search(s) or _SOZINHA.search(s))
 
 
 #: Uma risada escrita: "haha", "hahaha", "ha ha", "kkkk", "rsrs", "hehe", "rá rá".

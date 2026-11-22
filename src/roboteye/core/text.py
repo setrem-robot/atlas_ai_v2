@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Iterator
 
 from roboteye.core.normalizePt import normalize as normalizePt
@@ -167,3 +168,13 @@ def cortarLaco(frase: str, *, n: int = 4) -> str:
     while inicio > 1 and palavras[inicio - 1].group().lower() in _PENDURADAS:
         inicio -= 1
     return frase[: palavras[inicio].start()].rstrip(" ,;:-") + "."
+
+
+def simplificar(texto: str) -> str:
+    """Minúsculas, sem acento e sem pontuação: o Vosk já entrega assim."""
+    semAcento = "".join(
+        letra
+        for letra in unicodedata.normalize("NFD", texto.lower())
+        if unicodedata.category(letra) != "Mn"
+    )
+    return " ".join(re.sub(r"[^\w\s]", " ", semAcento).split())

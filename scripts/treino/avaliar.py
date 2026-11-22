@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from roboteye.config import Settings  # noqa: E402
+from roboteye.core.palavrasProibidas import palavrasProibidasEm  # noqa: E402
 from roboteye.llm.base import ChatMessage  # noqa: E402
 from roboteye.llm.memory import ConversationMemory  # noqa: E402
 from roboteye.llm.ollama import OllamaClient  # noqa: E402
@@ -185,6 +186,7 @@ def problemas(caso: Caso, resposta: str, hoje: date) -> list[str]:
             erros.append(f"disse {proibido}")
     if not any(nome in simples(caso.tem + " ".join(caso.fatos) + caso.pergunta) for nome in NOMES_REAIS):
         erros += [f"misturou {nome}" for nome in NOMES_REAIS if nome in texto]
+    erros += [f"palavrão {p}" for p in palavrasProibidasEm(resposta)]
     if not resposta.strip():
         erros.append("vazia")
     if len(resposta.split()) > 45:

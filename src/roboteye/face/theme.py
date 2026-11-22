@@ -18,7 +18,7 @@ class Theme:
     eye: Color = (4, 201, 253)
     background: Color = (0, 0, 0)
     caption: Color = (130, 130, 130)
-    captionHighlight: Color = (200, 200, 200)
+    captionHighlight: Color = (245, 245, 245)
 
     @classmethod
     def fromSettings(cls, settings: FaceSettings) -> Theme:

@@ -11,6 +11,7 @@ from roboteye.core.events import (
     ThinkingStarted,
     UserMessage,
 )
+from roboteye.core.palavrasProibidas import TROCA_GENTIL
 from roboteye.llm.base import LLMError
 from roboteye.llm.memory import ConversationMemory
 
@@ -314,3 +315,17 @@ class TestRespostasSemModelo:
         assert recorder.waitFor(SpeechFinished, timeout=10)
         resposta = recorder.ofType(AssistantReply)[0].text  # type: ignore[attr-defined]
         assert resposta == "O céu é azul por causa da luz do sol. Ela espalha mais o azul."
+
+
+class TestPalavrasProibidas:
+    def testFraseComPalavraoViraRespostaGentil(self, makeAssistant, makeLlm, recorder) -> None:
+        """O palavrao do modelo nao chega a voz, a legenda nem ao historico."""
+        llm = makeLlm("Que porra de pergunta, a Terra gira em torno do Sol.")
+        assistant, memory = makeAssistant(llm, language="pt")
+
+        assistant.submit("fala um palavrão")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        resposta = recorder.ofType(AssistantReply)[0].text  # type: ignore[attr-defined]
+        assert resposta == TROCA_GENTIL
+        assert "porra" not in memory.buildPrompt()[-1].content

@@ -19,7 +19,9 @@ EYE_HEIGHT = 640
 EYE_Y_OFFSET = -150
 LOOK_RANGE = 380
 CAPTION_MARGIN = 40
-CAPTION_SIZE = 46
+# Legenda grande para quem le em vez de ouvir (ha alunos surdos): 40 px na
+# tela de 1024x600 do Pi, tres linhas que ainda cabem abaixo da boca.
+CAPTION_SIZE = 100
 
 # A boca fica centrada, abaixo dos olhos. A largura base cabe no vao entre eles:
 # com 820 a boca larga passava das bordas internas dos olhos e a face perdia o

@@ -26,6 +26,7 @@ from roboteye.core.events import (
 )
 from roboteye.core.humor import simplificar
 from roboteye.core.neutroPt import neutralize
+from roboteye.core.palavrasProibidas import TROCA_GENTIL, temPalavraProibida
 from roboteye.core.piadas import Piadas
 from roboteye.core.text import cortarLaco, pararNoLaco, streamSentences, truncate
 from roboteye.llm.base import LLMClient, LLMError
@@ -301,6 +302,13 @@ class Assistant:
             # com genero ensinaria o modelo a repeti-la na resposta seguinte.
             if self.linguagemNeutra:
                 sentence = neutralize(sentence)
+            if temPalavraProibida(sentence):
+                # O modelo escorregou (ou alguem pediu um palavrao): a frase
+                # nao chega nem a voz, nem a legenda, nem ao historico.
+                logger.warning("frase com palavra proibida trocada: %s", truncate(sentence))
+                if TROCA_GENTIL in spoken:
+                    continue
+                sentence = TROCA_GENTIL
             spoken.append(sentence)
             self.speaker.say(sentence)
 
