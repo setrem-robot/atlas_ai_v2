@@ -134,10 +134,12 @@ SPEECH_RELEASE = 9.0
 #: baixo da escala, e sem isso o olho quase nao se mexeria.
 SPEECH_CURVE = 0.6
 #: Amplitudes pequenas de proposito. O olho deve parecer respirar junto com a
-#: voz, nao tremer: passando de ~6% a face fica nervosa em vez de viva.
-SPEECH_HEIGHT = 0.055
-SPEECH_WIDTH = 0.028
-SPEECH_LIFT = 6.0
+#: voz, nao tremer. Desde que a boca passou a abrir com a voz, quem fala e ela:
+#: com o olho pulsando a 5,5% os dois disputavam a silaba e a face inteira
+#: parecia bater no ritmo, em vez de so a boca falar e o olhar acompanhar.
+SPEECH_HEIGHT = 0.025
+SPEECH_WIDTH = 0.012
+SPEECH_LIFT = 3.0
 SPEECH_ONSET_POP = 1.075
 SPEECH_ONSET_DURATION = 0.3
 
@@ -173,16 +175,36 @@ SWIRL_RATE = 9.0
 
 # --- boca --------------------------------------------------------------------
 #: Quanto a voz abre a boca no pico, somado a abertura de repouso da fala.
-MOUTH_SPEECH_GAIN = 0.5
-#: Vida ociosa da boca, em sincronia com os olhos. E tudo movimento de POSICAO,
-#: nao de forma: mover a boca na tela e so um blit, enquanto mudar a forma dela
-#: obriga a recalcular o campo. Assim a boca fica mais viva *e* mais barata —
-#: parada, a forma nao muda e o desenho sai do cache.
-#:
-#: `BOB` usa o mesmo ciclo de respiracao dos olhos para os dois subirem e
-#: descerem juntos; `SWAY` desliza a boca um tico para o lado que ela olha.
-MOUTH_BREATH_BOB = 6.0
-MOUTH_GAZE_SWAY = 0.06
+MOUTH_SPEECH_GAIN = 0.42
+#: Boca aberta fica mais estreita: "a" e "o" juntam os cantos. Sem isso a boca
+#: so crescia para baixo e lia como um grafico de volume, nao como fala.
+MOUTH_SPEECH_NARROW = 0.2
+#: Quanto do olhar a boca acompanha. A boca vive mais perto do "rosto" que os
+#: olhos, entao anda menos que eles quando ela olha para o lado — e essa
+#: diferenca e a paralaxe de uma cabeca virando. Com 6% (o valor antigo) a boca
+#: ficava parada enquanto os olhos iam ate a borda, e a face se desmontava.
+MOUTH_GAZE_FOLLOW = 0.35
+#: Quanto das sacudidas (riso, tontura, furia) chega a boca. Menos que 1 pelo
+#: mesmo motivo da paralaxe: a cabeca balanca, a boca vai junto, um pouco menos.
+MOUTH_SHAKE_FOLLOW = 0.7
+
+# --- ouvir -------------------------------------------------------------------
+#: Inclinacao de cabeca enquanto ouve, em unidades base: um olho um pouco mais
+#: alto que o outro. E o gesto de cachorro atento, e e o que separa "ouvindo"
+#: de "neutro com olho grande" a distancia.
+LISTEN_TILT = 14.0
+#: Quanto o olho cresce com a voz de quem fala. Pequeno: e um aceno, nao um eco.
+LISTEN_PULSE = 0.045
+#: O microfone nao tem escala fixa — cada placa e cada sala dao um nivel. O
+#: nivel e normalizado entre um piso (o ruido da sala) e um pico (a voz mais
+#: alta recente). O piso sobe devagar e desce rapido; o pico, o contrario.
+LISTEN_FLOOR_RISE = 0.3
+LISTEN_FLOOR_FALL = 6.0
+LISTEN_PEAK_DECAY = 0.4
+#: Pico minimo (RMS): uma sala quieta nao pode ser amplificada ate parecer voz.
+LISTEN_MIN_PEAK = 0.02
+LISTEN_ATTACK = 20.0
+LISTEN_RELEASE = 6.0
 
 # --- deriva da face (a presenca viva) ----------------------------------------
 #: Uma deriva lenta aplicada aos olhos E a boca juntos, para a face inteira
@@ -325,6 +347,18 @@ class EyeAnimator:
         #: A mesma amplitude depois de suavizada, que e a que move o olho.
         self.speechSmoothed = 0.0
 
+        # -- escuta -----------------------------------------------------------
+        #: RMS cru do microfone, ou None se a escuta nao informa nivel.
+        self.hearingRms: float | None = None
+        self.hearingFloor = 0.0
+        self.hearingPeak = LISTEN_MIN_PEAK
+        self.hearingSmoothed = 0.0
+
+        # -- o que a boca herda do movimento dos olhos --------------------------
+        #: Sacudida media dos dois olhos neste quadro, para a boca ir junto.
+        self.shakeX = 0.0
+        self.shakeY = 0.0
+
         # -- relogios ----------------------------------------------------------
         self.clock = 0.0
         self.moodClock = 0.0
@@ -384,6 +418,15 @@ class EyeAnimator:
         motor que nao produz PCM.
         """
         self.speechLevel = None if level is None else min(1.0, max(0.0, level))
+
+    def setHearingLevel(self, rms: float | None) -> None:
+        """Informa o RMS cru do microfone; `None` se a escuta nao mede nada.
+
+        So move a face enquanto ela esta ouvindo: e o sinal, para quem fala, de
+        que a voz esta chegando. Fora disso o valor e so acompanhado, para o
+        piso de ruido ja estar calibrado quando a escuta abrir.
+        """
+        self.hearingRms = None if rms is None else max(0.0, rms)
 
     def blinkNow(self) -> None:
         """Forca uma piscada imediata.
@@ -458,10 +501,11 @@ class EyeAnimator:
         # A amplitude da voz e medida uma vez por quadro: o olho e a boca pulsam
         # com ela juntos. Medir duas vezes adiantaria o suavizador em dobro.
         envelope = self.speechDrive(dt) if self.activityAtual is Expression.SPEAKING else 0.0
+        hearing = self.hearingDrive(dt)
 
         left = self.leftFrom.lerp(self.leftTo, self.morph.value)
         right = self.rightFrom.lerp(self.rightTo, self.morph.value)
-        left, right = self.applyLife(left, right, dt, envelope)
+        left, right = self.applyLife(left, right, dt, envelope, hearing)
 
         mouth = self.mouthFrom.lerp(self.mouthTo, self.morph.value)
         mouth = self.animateMouth(mouth, envelope)
@@ -486,7 +530,12 @@ class EyeAnimator:
     # Camadas de movimento
     # -----------------------------------------------------------------------
     def applyLife(
-        self, left: EyeShape, right: EyeShape, dt: float, speechEnvelope: float
+        self,
+        left: EyeShape,
+        right: EyeShape,
+        dt: float,
+        speechEnvelope: float,
+        hearing: float = 0.0,
     ) -> tuple[EyeShape, EyeShape]:
         """Sobrepoe a forma de repouso tudo aquilo que se mexe."""
         blink = self.blink.value
@@ -512,6 +561,11 @@ class EyeAnimator:
             height *= 1.0 + envelope * SPEECH_HEIGHT
             width *= 1.0 - envelope * SPEECH_WIDTH
             lift -= envelope * SPEECH_LIFT
+
+        # -- ouvir: o olho cresce um tico com a voz de quem fala --------------
+        if hearing > 0.0:
+            height *= 1.0 + hearing * LISTEN_PULSE
+            width *= 1.0 + hearing * LISTEN_PULSE * 0.5
 
         pop = self.speechPop.value
         height *= pop
@@ -560,70 +614,116 @@ class EyeAnimator:
         return left.scaled(height=shrink), right.scaled(height=grow)
 
     def applyShake(self, left: EyeShape, right: EyeShape) -> tuple[EyeShape, EyeShape]:
-        """Riso sacode na vertical; tontura, na horizontal e fora de fase."""
-        if self.activityAtual is not None:
+        """Aplica as sacudidas e guarda a media delas, que a boca herda."""
+        leftX, leftY, rightX, rightY = self.shakeOffsets()
+        self.shakeX = (leftX + rightX) * 0.5
+        self.shakeY = (leftY + rightY) * 0.5
+        if not (leftX or leftY or rightX or rightY):
             return left, right
+        return left.moved(leftX, leftY), right.moved(rightX, rightY)
+
+    def shakeOffsets(self) -> tuple[float, float, float, float]:
+        """Deslocamento passageiro de cada olho: (esq. x, esq. y, dir. x, dir. y).
+
+        Riso sacode na vertical; tontura, na horizontal e fora de fase; furia
+        treme sem descanso.
+        """
+        if self.activityAtual is not None:
+            return 0.0, 0.0, 0.0, 0.0
 
         if self.mood is Expression.RAGE:
-            # Treme sem descanso enquanto esta em furia; os olhos vao em sentidos
-            # opostos no eixo x, o que da o ar seething em vez de so sacudido.
+            # Os olhos vao em sentidos opostos no eixo x, o que da o ar de quem
+            # ferve por dentro em vez de so sacudido.
             phase = 2.0 * math.pi * RAGE_SHAKE_FREQUENCY * self.clock
             jitterX = math.sin(phase) * RAGE_SHAKE_AMPLITUDE
             jitterY = math.sin(phase * 1.3 + 1.0) * RAGE_SHAKE_AMPLITUDE * 0.6
-            return left.moved(dx=jitterX, dy=jitterY), right.moved(dx=-jitterX, dy=jitterY)
+            return jitterX, jitterY, -jitterX, jitterY
 
         if self.mood is Expression.LAUGH and self.moodClock < LAUGH_DURATION:
             decay = 1.0 - self.moodClock / LAUGH_DURATION
             offset = math.sin(2.0 * math.pi * LAUGH_FREQUENCY * self.moodClock)
             offset *= LAUGH_AMPLITUDE * decay
-            return left.moved(dy=offset), right.moved(dy=offset)
+            return 0.0, offset, 0.0, offset
 
         if self.mood is Expression.DIZZY and self.moodClock < DIZZY_DURATION:
             decay = 1.0 - self.moodClock / DIZZY_DURATION
             phase = 2.0 * math.pi * DIZZY_FREQUENCY * self.moodClock
             amplitude = DIZZY_AMPLITUDE * decay
-            return (
-                left.moved(dx=math.sin(phase) * amplitude),
-                right.moved(dx=math.sin(phase + 2.4) * amplitude),
-            )
+            return math.sin(phase) * amplitude, 0.0, math.sin(phase + 2.4) * amplitude, 0.0
 
-        return left, right
+        return 0.0, 0.0, 0.0, 0.0
 
     def animateMouth(self, mouth: MouthShape, speechEnvelope: float) -> MouthShape:
-        """Da vida a boca: ela respira e desliza junto com os olhos, fala com a voz.
+        """Da vida a boca: ela anda como parte do rosto e fala com a voz.
 
-        Dormindo ela fica quieta (como os olhos). Acordada, mesmo parada, respira
-        no mesmo ritmo dos olhos e nunca congela — e o que separa uma face viva de
-        uma mascara com uma boca colada.
+        A boca soma as mesmas camadas de posicao dos olhos — deriva, respiracao,
+        olhar e sacudidas —, com a mesma fase e amplitude. Antes ela tinha a
+        propria respiracao (mais forte que a dos olhos), quase nao seguia o
+        olhar e ficava parada no riso enquanto os olhos pulavam: as pecas se
+        moviam cada uma no seu compasso, e era isso que fazia a face parecer
+        montada em vez de inteira.
+
+        O que fica de fora de proposito e o que e do olho: a queda da piscada e
+        o "pulo" da fala. Boca que desce quando o olho pisca parece puxada por
+        um fio.
         """
         if self.sleeping:
             return mouth
 
         breath = math.sin(2.0 * math.pi * BREATH_FREQUENCY * self.clock)
-        gazeX = self.gazeX.value + self.microX.value
         driftX, driftY = self.faceDrift()
+        gazeX = (self.gazeX.value + self.microX.value + self.followX) * 0.5
+        gazeY = (self.gazeY.value + self.microY.value + self.followY) * 0.5
 
-        offsetX = gazeX * MOUTH_GAZE_SWAY + driftX
-        offsetY = breath * MOUTH_BREATH_BOB + driftY
+        offsetX = driftX + gazeX * MOUTH_GAZE_FOLLOW + self.shakeX * MOUTH_SHAKE_FOLLOW
+        offsetY = (
+            driftY
+            + breath * BREATH_DRIFT
+            + gazeY * MOUTH_GAZE_FOLLOW
+            + self.shakeY * MOUTH_SHAKE_FOLLOW
+        )
         openness = mouth.openness
+        width = mouth.width
 
         if self.activityAtual is Expression.SPEAKING:
             # O envelope vem em -1..1; aqui vira 0..1 (silencio fecha, pico abre).
             drive = (speechEnvelope + 1.0) * 0.5
             openness = min(1.0, openness + drive * MOUTH_SPEECH_GAIN)
-        elif self.mood is Expression.RAGE:
-            # Treme junto com os olhos, para a furia tomar a cara inteira. E so
-            # posicao: a forma da boca nao muda, entao segue saindo do cache.
-            phase = 2.0 * math.pi * RAGE_SHAKE_FREQUENCY * self.clock
-            offsetX += math.sin(phase) * RAGE_SHAKE_AMPLITUDE * 0.5
-            offsetY += math.sin(phase * 1.3 + 1.0) * RAGE_SHAKE_AMPLITUDE * 0.4
+            width *= 1.0 - drive * MOUTH_SPEECH_NARROW
 
         return replace(
             mouth,
+            width=width,
             openness=openness,
             offsetX=mouth.offsetX + offsetX,
             offsetY=mouth.offsetY + offsetY,
         )
+
+    def hearingDrive(self, dt: float) -> float:
+        """Quanto a voz de quem fala esta chegando, de 0 a 1, suavizado.
+
+        So vale enquanto ela ouve; fora disso o piso e o pico continuam sendo
+        acompanhados, mas o valor devolvido cai a zero.
+        """
+        rms = self.hearingRms
+        if rms is None:
+            self.hearingSmoothed = easing.approach(self.hearingSmoothed, 0.0, dt, LISTEN_RELEASE)
+            return self.hearingSmoothed
+
+        floorRate = LISTEN_FLOOR_RISE if rms > self.hearingFloor else LISTEN_FLOOR_FALL
+        self.hearingFloor = easing.approach(self.hearingFloor, rms, dt, floorRate)
+        self.hearingPeak = max(
+            LISTEN_MIN_PEAK, rms, self.hearingPeak * (1.0 - LISTEN_PEAK_DECAY * dt)
+        )
+
+        target = 0.0
+        if self.activityAtual is Expression.LISTENING:
+            span = max(self.hearingPeak - self.hearingFloor, 1e-6)
+            target = min(1.0, max(0.0, (rms - self.hearingFloor) / span))
+
+        rate = LISTEN_ATTACK if target > self.hearingSmoothed else LISTEN_RELEASE
+        self.hearingSmoothed = easing.approach(self.hearingSmoothed, target, dt, rate)
+        return self.hearingSmoothed
 
     def faceDrift(self) -> tuple[float, float]:
         """Deriva lenta comum a olhos e boca: a face se move como um corpo so."""
@@ -861,6 +961,11 @@ class EyeAnimator:
 
         if expression is Expression.DIZZY:
             return replace(base, topLid=0.28), replace(base, topLid=0.14, topLidSlant=0.2)
+
+        if expression is Expression.LISTENING:
+            # Cabeca inclinada: um olho sobe, o outro desce. Vai pela forma de
+            # repouso, entao entra e sai com o mesmo morph da expressao.
+            return base.moved(dy=LISTEN_TILT), base.moved(dy=-LISTEN_TILT)
 
         if expression is Expression.RAGE:
             # Um olho mais cerrado que o outro: a cara de quem perdeu a linha.

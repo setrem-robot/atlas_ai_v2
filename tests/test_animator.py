@@ -451,12 +451,72 @@ class TestCorEBoca:
         assert inicio != depois
         assert any(abs(c) > 1.0 for c in depois)
 
+    def testBocaRespiraNoCompassoDosOlhos(self, animator: EyeAnimator) -> None:
+        """O defeito: boca com respiracao propria, fora de fase com os olhos.
+
+        Sem piscar nem olhar mudando, a distancia vertical olho-boca nao pode
+        variar: os dois sobem e descem como um rosto so.
+        """
+        animator.lookAt(0.0, 0.0, 0.01)
+        animator.nextBlink = animator.nextGaze = animator.nextMicro = 1e9
+        avancar(animator, 0.2)
+        distancias = [f.mouth.offsetY - f.left.offsetY for f in coletar(animator, 3.0)]
+        assert max(distancias) - min(distancias) < 0.5
+
+    def testBocaAcompanhaOOlharComParalaxe(self, animator: EyeAnimator) -> None:
+        animator.nextGaze = 1e9
+        animator.lookAt(300.0, 0.0, 0.05)
+        frame = avancar(animator, 0.6)
+        olho = (frame.left.offsetX + frame.right.offsetX) / 2
+        assert 0.2 * olho < frame.mouth.offsetX < 0.6 * olho  # vai junto, menos
+
+    def testBocaPulaJuntoNoRiso(self, animator: EyeAnimator) -> None:
+        animator.setMood(Expression.LAUGH)
+        quadros = coletar(animator, 0.6)
+        ys = [f.mouth.offsetY for f in quadros]
+        assert max(ys) - min(ys) > 20.0  # a boca balanca com a risada
+
+    def testFalarEstreitaABocaAoAbrir(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.SPEAKING)
+        animator.setSpeechLevel(0.0)
+        fechada = avancar(animator, 0.5).mouth
+        animator.setSpeechLevel(1.0)
+        aberta = avancar(animator, 0.3).mouth
+        assert aberta.openness > fechada.openness + 0.2
+        assert aberta.width < fechada.width
+
     def testBocaFicaQuietaDormindo(self, animator: EyeAnimator) -> None:
         animator.sleep()
         avancar(animator, 1.0)
         posicoes = {round(f.mouth.offsetY, 3) for f in coletar(animator, 1.0)}
         assert len(posicoes) == 1  # parada, como os olhos
         assert animator.faceDrift() == (0.0, 0.0)
+
+
+class TestOuvir:
+    def testOuvindoInclinaACabeca(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.LISTENING)
+        frame = avancar(animator, 0.6)
+        assert frame.left.offsetY - frame.right.offsetY > 10.0
+
+    def testOlhoPulsaComAVozDeQuemFala(self, animator: EyeAnimator) -> None:
+        animator.setActivity(Expression.LISTENING)
+        animator.nextBlink = 1e9
+        animator.setHearingLevel(0.001)  # sala quieta: calibra o piso
+        quieto = avancar(animator, 1.0).left.height
+        animator.setHearingLevel(0.08)  # alguem fala
+        falando = avancar(animator, 0.3).left.height
+        assert falando > quieto * 1.02
+
+    def testVozForaDaEscutaNaoMexeNoOlho(self, animator: EyeAnimator) -> None:
+        """Fora da escuta o nivel so calibra; a face nao reage a sala."""
+        animator.nextBlink = 1e9
+        animator.setHearingLevel(0.001)
+        quieto = avancar(animator, 1.0)
+        animator.setHearingLevel(0.08)
+        barulho = avancar(animator, 0.3)
+        assert animator.hearingSmoothed == pytest.approx(0.0)
+        assert barulho.left.width == pytest.approx(quieto.left.width, rel=0.01)
 
 
 class TestMonstro:

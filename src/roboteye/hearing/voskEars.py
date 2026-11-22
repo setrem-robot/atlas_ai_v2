@@ -130,6 +130,10 @@ class VoskEars:
         self.pausado = threading.Event()
         self.fechado = threading.Event()
         self.callbackFimFrase: Callable[[], None] | None = None
+        #: RMS do ultimo bloco do microfone, para a face mostrar que esta ouvindo.
+        #: Escrito pela thread de audio e lido pela da face sem cadeado: e um
+        #: float so, trocado inteiro, e um quadro atrasado nao se ve.
+        self.nivel = 0.0
 
     # -- ciclo de vida -----------------------------------------------------
     def warmUp(self) -> None:
@@ -260,8 +264,11 @@ class VoskEars:
             # própria voz — e também esvazia a fila, para ele não processar, ao
             # retomar, tudo o que disse enquanto falava.
             if self.pausado.is_set():
+                self.nivel = 0.0
                 return
             bloco = filtro.aplicar(reduzir(entrada[:, 0], fator))
+            # Depois do passa-alta: e o nivel da voz, nao do ronco da sala.
+            self.nivel = float(np.sqrt(np.mean(bloco * bloco))) if bloco.size else 0.0
             # Fila cheia significa que o reconhecimento ficou para trás; perder
             # um bloco (30 ms) é melhor que travar a captura do microfone, e o
             # Vosk atravessa a falta sem perceber.

@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import pygame
 
 from roboteye.face.animator import EyeAnimator
+from roboteye.face.expressions import Expression
 from roboteye.face.layout import EyeLayout
 from roboteye.face.renderer import EyeRenderer, qualityFor
 from roboteye.face.theme import Theme
@@ -68,9 +69,11 @@ class Resultado:
 
 def medir(largura: int, altura: int, qualidade: str, quadros: int) -> Resultado:
     screen = pygame.display.set_mode((largura, altura))
-    layout = EyeLayout.for_screen(largura, altura)
+    layout = EyeLayout.forScreen(largura, altura)
     renderer = EyeRenderer(screen, layout, Theme(), quality=qualityFor(qualidade))
-    animator = EyeAnimator(idle_animations=True)
+    animator = EyeAnimator(idleAnimations=True)
+    # Falando: o unico estado em que olho e boca mudam de forma a cada quadro.
+    animator.setActivity(Expression.SPEAKING)
 
     passo = 1.0 / 60.0
     for _ in range(WARMUP_FRAMES):
@@ -81,7 +84,7 @@ def medir(largura: int, altura: int, qualidade: str, quadros: int) -> Resultado:
         frame = animator.update(passo)
         # Varre o envelope de fala: e o caminho quente de verdade, porque e o
         # unico momento em que a face muda de forma a cada quadro.
-        animator.set_speech_level(abs((indice % 30) / 30.0 - 0.5) * 2.0)
+        animator.setSpeechLevel(abs((indice % 30) / 30.0 - 0.5) * 2.0)
 
         inicio = time.perf_counter()
         renderer.draw(frame, caption=CAPTION, hint="ESC sair")

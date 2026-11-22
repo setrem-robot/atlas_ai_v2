@@ -111,10 +111,6 @@ class EyeRenderer:
         # todos eles de uma vez, preservando as proporcoes entre expressoes.
         self.radiusScale = cornerRadius / DEFAULT_RADIUS
         self.buffers: dict[tuple[int, int], pygame.Surface] = {}
-        #: Superficies de boca ja prontas, por forma+cor. A vida da boca e toda de
-        #: posicao (ela desliza na tela), entao parada a forma nao muda e o desenho
-        #: sai daqui — um blit, sem recalcular campo nem recolorir.
-        self.mouthCache: dict[tuple, pygame.Surface] = {}
         self.buildFonts()
 
     def resize(self, surface: pygame.Surface, layout: EyeLayout) -> None:
@@ -122,13 +118,15 @@ class EyeRenderer:
         self.surface = surface
         self.layout = layout
         self.buffers.clear()
-        self.mouthCache.clear()
         self.buildFonts()
 
     def buildFonts(self) -> None:
         size = self.layout.captionFontSize
         self.font = pygame.font.Font(None, size)
         self.hintFont = pygame.font.Font(None, max(12, size * 2 // 3))
+        # Fonte nova (ou tela nova) invalida as linhas ja rasterizadas.
+        self.captionText = ""
+        self.captionLines: list[pygame.Surface] = []
 
     # -----------------------------------------------------------------------
     # Desenho
@@ -359,60 +357,46 @@ class EyeRenderer:
     # Boca e vortice
     # -----------------------------------------------------------------------
     def drawMouth(self, mouth: MouthShape, color: tuple[int, int, int]) -> None:
-        """Desenha a boca centrada, abaixo dos olhos.
+        """Desenha a boca abaixo dos olhos, com a mesma precisao sub-pixel deles.
 
         A boca nao tem halo nem degrade — e um traco limpo, e e tambem o que a
         mantem barata num quadro que ja desenha dois olhos. Segue o mesmo campo
         de distancia dos olhos, entao herda o antialiasing de graca.
+
+        Antes ela saia de um cache e era colada em posicao arredondada. Os olhos
+        deslizam em fracoes de pixel; a boca andava de pixel em pixel — e a
+        respiracao lenta mostrava isso como a boca "tremendo" fora do compasso
+        dos olhos. Agora a grade cobre so o traco (e nao uma faixa de 240
+        unidades quase toda vazia), o que deixa recalcular o campo todo quadro
+        mais barato do que era o cache.
         """
         layout = self.layout
-        surface = self.mouthSurface(mouth, color)
-        if surface is None:
+        drawWidth = layout.mouthWidth * mouth.width
+        if drawWidth < 1.0:
             return
 
-        # O offset (em unidades base) e o que faz a boca respirar e deslizar junto
-        # com os olhos. So a posicao muda com a vida ociosa, nao a forma — por isso
-        # o desenho acima sai do cache.
-        width, height = surface.get_size()
+        unit = layout.mouthHeight / 2.0
+        reach = (
+            abs(mouth.curve) * mask.MOUTH_CURVE_DEPTH
+            + mouth.openness * mask.MOUTH_OPEN_GAIN
+            + mouth.thickness
+        )
+        # Folga para a borda suavizada, e o tamanho arredondado para cima em
+        # degraus de 8 px: a boca falando muda de tamanho a cada quadro, e sem
+        # o degrau cada tamanho novo seria uma superficie nova em `buffer`.
+        margin = 2.0
+        targetWidth = roundUp(drawWidth + 2.0 * (mouth.thickness * unit + margin), 8)
+        targetHeight = roundUp(2.0 * (reach * unit + margin), 8)
+
         centerX = layout.mouthCenterX + mouth.offsetX * layout.scale
         centerY = layout.mouthCenterY + mouth.offsetY * layout.scale
-        self.surface.blit(surface, (round(centerX - width / 2), round(centerY - height / 2)))
-
-    def mouthSurface(self, mouth: MouthShape, color: tuple[int, int, int]) -> pygame.Surface | None:
-        """A boca ja desenhada e colorida, do cache quando a forma nao mudou.
-
-        A chave ignora o offset de proposito — ele so decide ONDE colar, nao o
-        desenho. A forma e quantizada para a boca falando (que muda de abertura a
-        cada quadro) reaproveitar um punhado de superficies em vez de criar uma por
-        quadro.
-        """
-
-        def q(value: float, step: float) -> float:
-            return round(value / step) * step
-
-        key = (
-            q(mouth.width, 0.02),
-            q(mouth.openness, 0.03),
-            q(mouth.curve, 0.03),
-            round(mouth.thickness, 3),
-            q(mouth.teeth, 0.1),
-            round(mouth.alpha, 2),
-            color,
-        )
-        cached = self.mouthCache.get(key)
-        if cached is not None:
-            return cached if cached.get_width() else None
-
-        layout = self.layout
-        drawWidth = max(1.0, layout.mouthWidth * mouth.width)
-        reserve = float(layout.mouthHeight)
-        padding = reserve * 0.18
-        targetWidth = drawWidth + 2.0 * padding
-        targetHeight = reserve
+        left = centerX - targetWidth / 2.0
+        top = centerY - targetHeight / 2.0
+        intLeft = math.floor(left)
+        intTop = math.floor(top)
 
         cap = self.quality.resolutionCap
-        largest = max(targetWidth, targetHeight)
-        factor = min(1.0, cap / largest) if cap else 1.0
+        factor = min(1.0, cap / max(targetWidth, targetHeight)) if cap else 1.0
         if factor >= NO_RESCALE_ABOVE:
             factor = 1.0
 
@@ -422,29 +406,20 @@ class EyeRenderer:
             gridWidth=gridWidth,
             gridHeight=gridHeight,
             mouthWidth=drawWidth * factor,
-            mouthHeight=reserve * factor,
+            mouthHeight=layout.mouthHeight * factor,
+            subpixelX=(left - intLeft) * factor,
+            subpixelY=(top - intTop) * factor,
         )
-        alpha = mask.fieldToAlpha(mask.mouthField(mouth, geometry), geometry.pixel) * mouth.alpha
-
-        blitWidth = max(1, round(targetWidth))
-        blitHeight = max(1, round(targetHeight))
-        surface: pygame.Surface
+        alpha = mask.fieldToAlpha(mask.mouthField(mouth, geometry), geometry.pixel)
+        if mouth.alpha < 1.0:
+            alpha = alpha * mouth.alpha
         if not alpha.any():
-            # Marca "vazio" no cache (superficie 0x0) para nao recalcular toda vez.
-            surface = pygame.Surface((0, 0))
-        else:
-            painted = self.paint(alpha, gradient=False, color=color)
-            if (gridWidth, gridHeight) != (blitWidth, blitHeight):
-                surface = pygame.transform.smoothscale(painted, (blitWidth, blitHeight))
-            else:
-                # `paint` devolve um buffer reaproveitado; copia para guardar no cache.
-                surface = painted.copy()
+            return
 
-        # Um teto simples: a vida ociosa visita um punhado de formas e as repete.
-        if len(self.mouthCache) > 80:
-            self.mouthCache.clear()
-        self.mouthCache[key] = surface
-        return surface if surface.get_width() else None
+        surface = self.paint(alpha, gradient=False, color=color)
+        if (gridWidth, gridHeight) != (targetWidth, targetHeight):
+            surface = pygame.transform.smoothscale(surface, (targetWidth, targetHeight))
+        self.surface.blit(surface, (intLeft, intTop))
 
     def drawSpiral(
         self,
@@ -491,15 +466,21 @@ class EyeRenderer:
     # -----------------------------------------------------------------------
     def drawCaption(self, caption: str, opacity: float) -> None:
         layout = self.layout
-        maxWidth = layout.screenWidth - 2 * layout.captionMargin
-        lines = wrap(caption, self.font, maxWidth)[-3:]
+        # A mesma frase fica ate 12 s na tela; quebrar e rasterizar o texto todo
+        # quadro custava mais que desenhar a boca. So o esmaecimento muda.
+        if caption != self.captionText:
+            maxWidth = layout.screenWidth - 2 * layout.captionMargin
+            lines = wrap(caption, self.font, maxWidth)[-3:]
+            self.captionText = caption
+            self.captionLines = [
+                self.font.render(line, True, self.theme.captionHighlight) for line in lines
+            ]
 
         lineHeight = self.font.get_linesize()
         bottom = layout.screenHeight - layout.captionMargin - lineHeight
         alpha = int(255 * min(1.0, max(0.0, opacity)))
 
-        for index, line in enumerate(reversed(lines)):
-            text = self.font.render(line, True, self.theme.captionHighlight)
+        for index, text in enumerate(reversed(self.captionLines)):
             text.set_alpha(alpha)
             position = text.get_rect(
                 centerx=layout.screenWidth // 2,
@@ -510,6 +491,11 @@ class EyeRenderer:
     def drawHint(self, hint: str) -> None:
         text = self.hintFont.render(hint, True, self.theme.caption)
         self.surface.blit(text, (self.layout.captionMargin, self.layout.captionMargin))
+
+
+def roundUp(value: float, step: int) -> int:
+    """Arredonda `value` para cima, no proximo multiplo de `step`."""
+    return max(step, math.ceil(value / step) * step)
 
 
 def wrap(text: str, font: pygame.font.Font, maxWidth: int) -> list[str]:

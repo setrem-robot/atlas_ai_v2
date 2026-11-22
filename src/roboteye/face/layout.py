@@ -21,10 +21,13 @@ LOOK_RANGE = 380
 CAPTION_MARGIN = 40
 CAPTION_SIZE = 46
 
-# A boca fica centrada, abaixo dos olhos.
-MOUTH_WIDTH = 820
+# A boca fica centrada, abaixo dos olhos. A largura base cabe no vao entre eles:
+# com 820 a boca larga passava das bordas internas dos olhos e a face perdia o
+# centro. `MOUTH_HEIGHT` nao e o tamanho do traco — e a regua do campo da boca
+# (meia altura = uma unidade), da qual saem espessura, curva e abertura.
+MOUTH_WIDTH = 520
 MOUTH_HEIGHT = 240
-MOUTH_Y_OFFSET = 320
+MOUTH_Y_OFFSET = 300
 
 
 @dataclass(frozen=True, slots=True)

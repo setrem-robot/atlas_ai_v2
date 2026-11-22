@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from roboteye.face import mask
 from roboteye.face.shapes import MouthShape
@@ -46,6 +47,28 @@ class TestBocaCampo:
         fechada = mask.mouthField(MouthShape(openness=0.0), mouthGeometry())
         aberta = mask.mouthField(MouthShape(openness=0.5), mouthGeometry())
         assert (aberta < 0).sum() > (fechada < 0).sum()
+
+    def testAberturaEmLenteCheiaNoMeioFinaNosCantos(self) -> None:
+        """Boca falando abre como labios, nao engrossa por igual como salsicha."""
+        geo = mouthGeometry(width=200.0, height=120.0)
+        fechada = mask.mouthField(MouthShape(width=1.0, openness=0.0), geo)
+        aberta = mask.mouthField(MouthShape(width=1.0, openness=0.5), geo)
+        meio = geo.gridWidth // 2
+        canto = meio + 95  # a 5 px da ponta de uma boca de 200 px
+
+        def altura(campo: np.ndarray, coluna: int) -> int:
+            return int((campo[:, coluna] < 0).sum())
+
+        assert altura(aberta, meio) > 3 * altura(fechada, meio)
+        assert altura(aberta, canto) < altura(aberta, meio) / 2
+
+    def testFechadaContinuaSendoACapsula(self) -> None:
+        """Sem abertura, o campo e a distancia ate o traco menos a espessura."""
+        geo = mouthGeometry()
+        campo = mask.mouthField(MouthShape(width=1.0, curve=0.0, thickness=0.1), geo)
+        meioX = geo.gridWidth // 2
+        # A 30 px do centro (meia-altura 60 px = 1 unidade): 0,5 - 0,1 de espessura.
+        assert campo[geo.gridHeight // 2 + 30, meioX] == pytest.approx(0.4, abs=0.02)
 
 
 class TestDentesDeMonstro:

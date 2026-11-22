@@ -107,15 +107,16 @@ class TestFaceApp:
         assert time.perf_counter() - inicio < 5.0
 
     def testAjudaMostraATaxaDeQuadros(self, settings: FaceSettings, bus: EventBus) -> None:
-        face = FaceApp(settings, bus)
+        face = FaceApp(settings, bus, showHint=True)
         rodarPor(face, 0.5)  # tempo de sobra para o Clock formar a media
 
         assert face.hint().startswith(HINT_TEXT)
         assert face.hint().endswith("FPS")
         assert face.fps > 0.0
 
-    def testAjudaEscondidaNaoMostraNada(self, settings: FaceSettings, bus: EventBus) -> None:
-        face = FaceApp(settings, bus, showHint=False)
+    def testAjudaNasceEscondida(self, settings: FaceSettings, bus: EventBus) -> None:
+        # No robo exposto a linha de teclas era texto tecnico em cima da cara.
+        face = FaceApp(settings, bus)
         rodarPor(face, 0.3)
 
         assert face.hint() == ""

@@ -310,6 +310,15 @@ class Application:
         except Exception:
             logger.exception("a escuta parou")
 
+    def nivelDoOuvido(self) -> float | None:
+        """RMS atual do microfone, para a face; None se a escuta nao mede nivel.
+
+        So o Vosk mede hoje. O Whisper captura por outro caminho, e sem nivel a
+        face continua mostrando que ouve — so nao pulsa com a voz.
+        """
+        nivel = getattr(self.ears, "nivel", None)
+        return nivel if isinstance(nivel, float) else None
+
     def avisarQueEstouOuvindo(self, evento: Event) -> None:
         """Toca o sinal quando a janela de escuta abre. So na abertura.
 
@@ -476,7 +485,12 @@ class Application:
         projeto passou a pagar no arranque de proposito.
         """
         self.start()
-        face = FaceApp(self.settings.face, self.bus, envelope=self.envelope)
+        face = FaceApp(
+            self.settings.face,
+            self.bus,
+            envelope=self.envelope,
+            hearingLevel=self.nivelDoOuvido,
+        )
         try:
             face.run()
         finally:
@@ -490,7 +504,12 @@ class Application:
 
         self.start()
 
-        face = FaceApp(self.settings.face, self.bus, envelope=self.envelope)
+        face = FaceApp(
+            self.settings.face,
+            self.bus,
+            envelope=self.envelope,
+            hearingLevel=self.nivelDoOuvido,
+        )
         console = ConsoleChat(self.assistant, self.bus)
 
         # Fechar a janela deve encerrar o chat, e vice-versa.

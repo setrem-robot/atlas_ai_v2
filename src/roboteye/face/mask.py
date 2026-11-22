@@ -217,9 +217,9 @@ def eyeField(
 #: Quanto a curvatura levanta ou baixa a boca no maximo, em meia-alturas de boca.
 MOUTH_CURVE_DEPTH = 0.5
 
-#: Quanto `openness` engrossa a boca, por unidade. E o que transforma um traco
-#: numa boca aberta sem precisar de um parametro separado de altura.
-MOUTH_OPEN_GAIN = 0.55
+#: Quanto `openness` abre a boca no meio, por unidade. E o que transforma um
+#: traco numa boca aberta sem precisar de um parametro separado de altura.
+MOUTH_OPEN_GAIN = 0.9
 
 #: Quantos dentes atravessam a boca de monstro (contados numa fileira).
 MOUTH_TEETH_COUNT = 5
@@ -252,12 +252,18 @@ class MouthGeometry:
 
 
 def mouthField(mouth: MouthShape, geometry: MouthGeometry) -> np.ndarray:
-    """Campo de distancia da boca: uma capsula que segue uma curva.
+    """Campo de distancia da boca: um traco que segue uma curva e abre em lente.
 
-    A boca e o conjunto de pontos a menos de `meia-espessura` da linha central
-    `y = curve*(1 - u^2)`, com `u` indo de -1 a 1 ao longo do comprimento. Clampar
-    `u` nas pontas arredonda as extremidades de graca (a distancia passa a ser
-    ate o ponto final da linha), do mesmo jeito que o olho arredonda as quinas.
+    A linha central e `y = curve*(1 - u^2)`, com `u` indo de -1 a 1 ao longo do
+    comprimento. A abertura afasta as duas bordas dessa linha por
+    `openness*sqrt(1 - u^2)`: cheia no meio e nula nos cantos, como labios que se
+    separam. A boca antiga so engrossava por igual, e falando ela virava uma
+    salsicha pulsando em vez de uma boca abrindo.
+
+    O resto e o campo de uma caixa com quinas arredondadas pela espessura: alem
+    das pontas a distancia passa a ser ate o ponto final da linha, o que
+    arredonda as extremidades de graca. Com `openness` zero sai exatamente a
+    capsula de antes.
     """
     gridWidth = max(1, geometry.gridWidth)
     gridHeight = max(1, geometry.gridHeight)
@@ -280,10 +286,12 @@ def mouthField(mouth: MouthShape, geometry: MouthGeometry) -> np.ndarray:
     if mouth.teeth > 1e-3 and mouth.openness > 1e-3:
         return toothedMaw(x, y, u, centerY, mouth)
 
-    centerX = u * halfLength
-    halfThickness = mouth.thickness + mouth.openness * MOUTH_OPEN_GAIN
-    distance = np.hypot(x - centerX, y - centerY)
-    return distance - halfThickness
+    opening = mouth.openness * MOUTH_OPEN_GAIN * np.sqrt(1.0 - u * u)
+    dx = np.abs(x) - halfLength
+    dy = np.abs(y - centerY) - opening
+    outside = np.hypot(np.maximum(dx, 0.0), np.maximum(dy, 0.0))
+    inside = np.minimum(np.maximum(dx, dy), 0.0)
+    return (outside + inside - mouth.thickness).astype(np.float32)
 
 
 def toothedMaw(

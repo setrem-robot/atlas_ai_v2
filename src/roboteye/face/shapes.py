@@ -137,10 +137,12 @@ THINKING = EyeShape(topLid=0.14, width=0.97)
 #: Falar parte do neutro; a vida vem da modulacao no animador.
 SPEAKING = EyeShape()
 
-#: Ouvindo: olhos bem abertos e atentos. Precisa ser distinguivel do neutro a
-#: distancia — e o unico sinal de que o robo entendeu que falaram com ele, e
-#: quem esta na frente decide se repete a pergunta olhando para isto.
-LISTENING = EyeShape(topLid=0.0, bottomLid=0.0, height=1.12, width=1.06)
+#: Ouvindo: olhos bem abertos, atentos e mais redondos. Precisa ser
+#: distinguivel do neutro a distancia — e o unico sinal de que o robo entendeu
+#: que falaram com ele, e quem esta na frente decide se repete a pergunta
+#: olhando para isto. O raio maior amacia o olhar; o animador ainda inclina a
+#: cabeca e faz o olho pulsar com a voz de quem fala.
+LISTENING = EyeShape(topLid=0.0, bottomLid=0.0, height=1.12, width=1.06, radius=0.36)
 
 #: Rir e um sorriso mais forte, sacudido na vertical pelo animador.
 LAUGH = EyeShape(bottomLid=0.62, height=0.94)
@@ -232,20 +234,30 @@ class MouthShape:
 HIDDEN_MOUTH = MouthShape(alpha=0.0)
 
 # Presets: um ponto no espaco de parametros para cada expressao.
-MOUTH_NEUTRAL = MouthShape(width=0.52, curve=0.0, thickness=0.11, alpha=0.5)
-MOUTH_HAPPY = MouthShape(width=0.80, openness=0.06, curve=0.85, thickness=0.13, alpha=0.95)
-#: A boca do mal: larga, aberta e virada para cima nas pontas (rosnado).
-MOUTH_ANGRY = MouthShape(width=0.96, openness=0.24, curve=-0.95, thickness=0.15, alpha=1.0)
+#
+# Larguras e espessuras sao pequenas de proposito. A primeira boca chegava a
+# ficar mais larga que o vao entre os olhos e grossa como eles: competia com o
+# olhar em vez de acompanha-lo. Um traco fino e curto le como "boca" a
+# distancia e deixa os olhos mandarem na expressao. A opacidade tambem ficou
+# quase cheia: a boca meio apagada do neutro parecia uma peca solta, de outra cor.
+MOUTH_NEUTRAL = MouthShape(width=0.42, curve=0.10, thickness=0.065, alpha=0.9)
+MOUTH_HAPPY = MouthShape(width=0.60, curve=0.80, thickness=0.075, alpha=1.0)
+#: A boca do mal: virada para baixo nas pontas (rosnado contido).
+MOUTH_ANGRY = MouthShape(width=0.56, openness=0.06, curve=-0.75, thickness=0.08, alpha=1.0)
 #: A boca de monstro: um maw escancarado com dentes que se encaixam.
-MOUTH_RAGE = MouthShape(width=1.05, openness=0.72, curve=-0.2, thickness=0.1, alpha=1.0, teeth=1.0)
-MOUTH_TIRED = MouthShape(width=0.48, curve=-0.22, thickness=0.10, alpha=0.5)
-MOUTH_LAUGH = MouthShape(width=0.84, openness=0.46, curve=0.7, thickness=0.14, alpha=1.0)
-MOUTH_DIZZY = MouthShape(width=0.42, openness=0.34, curve=0.05, thickness=0.13, alpha=0.75)
-MOUTH_SLEEP = MouthShape(width=0.40, curve=0.0, thickness=0.09, alpha=0.3)
-MOUTH_THINKING = MouthShape(width=0.46, curve=-0.12, thickness=0.10, alpha=0.5)
-#: Falar parte daqui; a abertura e modulada pela voz no animador.
-MOUTH_SPEAKING = MouthShape(width=0.60, openness=0.08, curve=0.15, thickness=0.12, alpha=0.85)
-MOUTH_LISTENING = MouthShape(width=0.54, openness=0.05, curve=0.12, thickness=0.11, alpha=0.6)
+MOUTH_RAGE = MouthShape(width=0.86, openness=0.46, curve=-0.2, thickness=0.08, alpha=1.0, teeth=1.0)
+MOUTH_TIRED = MouthShape(width=0.36, curve=-0.18, thickness=0.06, alpha=0.8)
+#: Riso: o sorriso abre em lente ("D"), cheio no meio e fino nos cantos.
+MOUTH_LAUGH = MouthShape(width=0.64, openness=0.40, curve=0.80, thickness=0.075, alpha=1.0)
+MOUTH_DIZZY = MouthShape(width=0.32, openness=0.22, curve=0.0, thickness=0.07, alpha=0.9)
+MOUTH_SLEEP = MouthShape(width=0.30, curve=0.0, thickness=0.055, alpha=0.45)
+#: Pensando, a boca encolhe e escorrega para um lado: o "hmm" de canto de boca.
+MOUTH_THINKING = MouthShape(width=0.28, curve=-0.10, thickness=0.06, alpha=0.85, offsetX=36.0)
+#: Falar parte de uma boca fechada; quem abre e a voz, no animador.
+MOUTH_SPEAKING = MouthShape(width=0.48, curve=0.12, thickness=0.07, alpha=1.0)
+#: Ouvindo: um sorriso pequeno e atento, fechado — boca que se mexe enquanto o
+#: outro fala le como interrupcao.
+MOUTH_LISTENING = MouthShape(width=0.30, curve=0.30, thickness=0.065, alpha=0.95)
 
 _MOUTHS: dict[Expression, MouthShape] = {
     Expression.NEUTRAL: MOUTH_NEUTRAL,

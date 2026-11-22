@@ -8,6 +8,7 @@ import pytest
 
 from roboteye.face import shapes
 from roboteye.face.expressions import Expression
+from roboteye.face.layout import EYE_WIDTH, MOUTH_WIDTH
 from roboteye.face.shapes import (
     HIDDEN_MOUTH,
     EyeShape,
@@ -133,17 +134,22 @@ class TestBoca:
         assert isinstance(mouthFor(expressao), MouthShape)
 
     def testNeutroEDiscreto(self) -> None:
-        """No repouso a boca e um traco sutil: quase reta e pouco visivel."""
+        """No repouso a boca e um traco curto, fino e fechado."""
         boca = mouthFor(Expression.NEUTRAL)
-        assert boca.alpha <= 0.6
-        assert abs(boca.curve) < 0.1
+        assert boca.width < mouthFor(Expression.HAPPY).width
+        assert boca.thickness <= 0.07
+        assert abs(boca.curve) < 0.2
         assert boca.openness == pytest.approx(0.0)
 
+    @pytest.mark.parametrize("expressao", list(Expression))
+    def testBocaNuncaMaisLargaQueUmOlho(self, expressao: Expression) -> None:
+        """A boca larga (ate 860 unidades) competia com o olhar em vez de segui-lo."""
+        assert mouthFor(expressao).width * MOUTH_WIDTH <= EYE_WIDTH
+
     def testBravoEBocaDoMal(self) -> None:
-        """Virada para cima nas pontas (curve negativo), aberta e bem visivel."""
+        """Virada para baixo nas pontas (curve negativo) e bem visivel."""
         boca = mouthFor(Expression.ANGRY)
         assert boca.curve < -0.5
-        assert boca.openness > 0.1
         assert boca.alpha == pytest.approx(1.0)
 
     def testFelizSorri(self) -> None:

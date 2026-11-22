@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import queue
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -67,16 +68,22 @@ class FaceApp:
         settings: FaceSettings,
         bus: EventBus,
         *,
-        showHint: bool = True,
+        showHint: bool = False,
         envelope: SpeechEnvelope | None = None,
+        hearingLevel: Callable[[], float | None] | None = None,
     ) -> None:
         self.settings = settings
         self.bus = bus
         #: Amplitude do audio em reproducao, para animar a fala. Sem ele a face
         #: continua funcionando, com o movimento sintetico.
         self.envelope = envelope
+        #: RMS do microfone agora, para o olho reagir a quem fala enquanto ela
+        #: ouve. Opcional: sem ele a escuta so muda a expressao.
+        self.hearingLevel = hearingLevel
         self.events: queue.Queue[Event] = queue.Queue()
         self.running = False
+        # A linha de ajuda (teclas e FPS) nasce escondida: e para quem mexe no
+        # robo, e no robo exposto ela era texto tecnico em cima da cara. H mostra.
         self.showHint = showHint
 
         self.caption = ""
@@ -157,6 +164,8 @@ class FaceApp:
 
                 if self.envelope is not None:
                     self.animator.setSpeechLevel(self.envelope.level())
+                if self.hearingLevel is not None:
+                    self.animator.setHearingLevel(self.hearingLevel())
 
                 frame = self.animator.update(dt)
                 self.renderer.draw(

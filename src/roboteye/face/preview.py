@@ -84,11 +84,20 @@ def montarPaineis() -> list[Panel]:
             replace(thinking, topLid=0.09, offsetX=-115, offsetY=-78),
             replace(thinking, topLid=0.21, offsetX=-115, offsetY=-78),
         ),
+        replace(
+            panelFor(
+                "FALANDO (pico)",
+                Expression.SPEAKING,
+                replace(neutral, height=1.025, width=0.988, offsetY=-3),
+                replace(neutral, height=1.025, width=0.988, offsetY=-3),
+            ),
+            mouth=replace(mouthFor(Expression.SPEAKING), openness=0.42, width=0.48 * 0.8),
+        ),
         panelFor(
-            "FALANDO (pico)",
-            Expression.SPEAKING,
-            replace(neutral, height=1.055, width=0.972, offsetY=-6),
-            replace(neutral, height=1.055, width=0.972, offsetY=-6),
+            "OUVINDO",
+            Expression.LISTENING,
+            presetFor(Expression.LISTENING).moved(dy=14),
+            presetFor(Expression.LISTENING).moved(dy=-14),
         ),
         panelFor("TONTO (vortice)", Expression.DIZZY, dizzy, dizzy, swirl=1.0, swirlPhase=1.2),
         panelFor(
