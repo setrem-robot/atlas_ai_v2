@@ -81,6 +81,7 @@ class FakeLLMClient:
     def __init__(self, reply: str = "Hello there. How predictable.") -> None:
         self.reply = reply
         self.prompts: list[Sequence[ChatMessage]] = []
+        self.aquecidas: list[Sequence[ChatMessage]] = []
         self.closed = False
 
     def streamReply(self, messages: Sequence[ChatMessage]) -> Iterator[str]:
@@ -90,6 +91,9 @@ class FakeLLMClient:
 
     def isAvailable(self) -> bool:
         return True
+
+    def warmConversation(self, messages: Sequence[ChatMessage]) -> None:
+        self.aquecidas.append(list(messages))
 
     def close(self) -> None:
         self.closed = True

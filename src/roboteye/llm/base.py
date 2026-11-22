@@ -47,6 +47,15 @@ class LLMClient(Protocol):
         """
         ...
 
+    def warmConversation(self, messages: Sequence[ChatMessage]) -> None:
+        """Deixa a conversa ate aqui pronta no cache, para a proxima pergunta.
+
+        Chamado depois de cada resposta, com o historico ja contendo ela. Ao
+        contrario de `warmUp`, nao sonda nem carrega nada: so processa o prefixo.
+        Nunca levanta.
+        """
+        ...
+
     def close(self) -> None:
         """Libera conexoes. Deve ser idempotente."""
         ...

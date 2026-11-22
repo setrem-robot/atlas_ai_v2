@@ -233,3 +233,8 @@ class TestTetoDeNucleos:
 
     def testOTetoConfiguradoChegaAoModelo(self) -> None:
         assert self.opcoesEnviadas(numThread=3)["num_thread"] == 3
+
+    def testLoteDoPromptSoQuandoConfigurado(self) -> None:
+        # Lote pequeno é para o Pi; numa GPU deixaria o prompt longo lento.
+        assert "num_batch" not in self.opcoesEnviadas()
+        assert self.opcoesEnviadas(numBatch=8)["num_batch"] == 8

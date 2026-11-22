@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from datetime import date
 from collections.abc import Iterable
+from datetime import date
 
 from roboteye.llm.base import ChatMessage
 
-_DIAS = ("segunda-feira", "terca-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sabado", "domingo")
+_DIAS = ("segunda-feira", "terca-feira", "quarta-feira", "quinta-feira", "sexta-feira",
+         "sabado", "domingo")
 _MESES = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto",
           "setembro", "outubro", "novembro", "dezembro")
 
@@ -53,6 +54,17 @@ class ConversationMemory:
         sistema = ChatMessage(role="system", content=f"{self.system.content}\n\n{hojePorExtenso()}")
         with self.lock:
             return [sistema, *self.history]
+
+    def buildNextPrefix(self) -> list[ChatMessage]:
+        """O começo do prompt da próxima pergunta, antes de ela chegar.
+
+        Com o histórico cheio, a próxima pergunta empurra a mensagem mais antiga
+        para fora da janela. Aquecer o cache com `buildPrompt` daria um prefixo
+        que a pergunta seguinte não tem, e o modelo releria tudo depois do system.
+        """
+        prompt = self.buildPrompt()
+        cheio = self.history.maxlen is not None and len(prompt) - 1 >= self.history.maxlen
+        return [prompt[0], *prompt[2:]] if cheio else prompt
 
     def clear(self) -> None:
         with self.lock:

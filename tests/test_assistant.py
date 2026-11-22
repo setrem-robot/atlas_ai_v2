@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from roboteye.core.events import (
     AssistantReply,
     ErrorOccurred,
@@ -72,6 +74,22 @@ class TestAssistant:
         ultima = llm.prompts[-1][-1]
         assert ultima.role == "user"
         assert ultima.content == "qual é a resposta?"
+
+    def testConversaFicaAquecidaComARespostaNoFim(self, makeAssistant, makeLlm, recorder) -> None:
+        llm = makeLlm("Uma resposta suficientemente longa para o teste.")
+        assistant, _ = makeAssistant(llm)
+
+        assistant.submit("qual é a resposta?")
+
+        assert recorder.waitFor(SpeechFinished, timeout=10)
+        for _ in range(100):  # o aquecimento vem depois do turno, na mesma thread
+            if llm.aquecidas:
+                break
+            time.sleep(0.02)
+        ultima = llm.aquecidas[-1][-1]
+        assert ultima.role == "assistant"
+        assert ultima.content == "Uma resposta suficientemente longa para o teste."
+        assert not assistant.isBusy
 
     def testPromptDeSistemaVaiJunto(self, makeAssistant, makeLlm, recorder) -> None:
         llm = makeLlm("Uma resposta suficientemente longa para o teste.")
@@ -171,6 +189,16 @@ class TestLinguagemNeutra:
 
 
 class TestConversationMemory:
+    def testPrefixoAquecidoEOComecoDaProximaPergunta(self) -> None:
+        for trocas in range(6):  # vazia, enchendo e já descartando (janela de 4)
+            memory = ConversationMemory("sistema", maxMessages=4)
+            for i in range(trocas):
+                memory.addUser(f"pergunta {i}")
+                memory.addAssistant(f"resposta {i}")
+            prefixo = memory.buildNextPrefix()
+            memory.addUser("a próxima")
+            assert memory.buildPrompt()[: len(prefixo)] == prefixo, trocas
+
     def testPromptComecaComAMensagemDeSistema(self) -> None:
         memory = ConversationMemory("seja breve")
         memory.addUser("olá")

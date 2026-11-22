@@ -257,6 +257,15 @@ class LLMSettings:
     #: modelo que toma a maquina inteira faz a animacao engasgar bem no momento
     #: em que a pessoa esta esperando resposta.
     numThread: int = 0
+    #: Tamanho do lote em que o Ollama lê o prompt (0 = o padrão dele, 512).
+    #: Com o Gemma 3, o Ollama só reaproveita o prompt da pergunta anterior a
+    #: partir de um ponto salvo na leitura, e esse ponto fica no começo do último
+    #: lote: um prompt curto cabe num lote só e é relido inteiro a cada pergunta.
+    #: Medido no Pi com o prompt curto do modelo treinado (208 tokens, 2 núcleos):
+    #: 7,4 s até o primeiro texto em toda pergunta com o padrão; 0,5 s com 8.
+    #: A primeira leitura custa o mesmo. Numa GPU, lote pequeno deixa prompt
+    #: longo lento: por isso o padrão fica com o Ollama.
+    numBatch: int = 0
     #: Criatividade da resposta. 0,8 servia a modelos grandes; num modelo de 1B
     #: é o que faz ela inventar data, nome e número com toda a confiança.
     temperature: float = 0.8
@@ -306,6 +315,7 @@ class LLMSettings:
             probeInterval=getFloat("LLM_PROBE_INTERVAL", 10.0, minimum=0.0),
             numCtx=getInt("LLM_NUM_CTX", DEFAULT_NUM_CTX, minimum=256),
             numThread=getInt("LLM_NUM_THREAD", 0, minimum=0),
+            numBatch=getInt("LLM_NUM_BATCH", 0, minimum=0),
             temperature=getFloat("LLM_TEMPERATURE", 0.8, minimum=0.0),
             promptCurto=getBool("LLM_PROMPT_CURTO", False),
             keepAlive=getStr("LLM_KEEP_ALIVE", "5m"),

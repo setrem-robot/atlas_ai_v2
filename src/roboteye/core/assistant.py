@@ -188,14 +188,26 @@ class Assistant:
             message = self.latest(message)
 
             self.busy.set()
+            respondeu = False
             try:
                 self.handleTurn(message)
+                respondeu = True
             except LLMError as exc:
                 self.report(exc, source="llm")
             except Exception as exc:
                 self.report(exc, source="assistant")
             finally:
                 self.busy.clear()
+
+            # O Gemma 3 no Ollama só reaproveita o cache até o último checkpoint,
+            # e a resposta guardada (neutralizada, em frases) não é o texto que o
+            # modelo gerou: sem isto, cada pergunta relia o histórico inteiro
+            # (medido no Pi: de 4 a 8 s, crescendo a cada turno). Aquecido aqui,
+            # com a Atlas ainda falando, a próxima paga só a pergunta nova. Fora
+            # do `busy`, para não calar o "Oi?" de quem chama nesse meio-tempo;
+            # e só se ninguém já perguntou de novo, que aí é ela que aquece.
+            if respondeu and self.inbox.empty():
+                self.llm.warmConversation(self.memoryStore.buildNextPrefix())
 
         logger.debug("assistente encerrado")
 
