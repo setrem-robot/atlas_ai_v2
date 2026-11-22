@@ -138,7 +138,7 @@ salvarModelo() {
         && B=\$(cygpath -u \"\$(ollama show $m --modelfile | awk '/^FROM / { print \$2; exit }')\") \
         && cp \"\$B\" $m-q4_K_M.gguf \
         && gh release create $m $m-q4_K_M.gguf --repo setrem-robot/atlas_ai_v2 --target producao --latest \
-            --title 'IA: $m' --notes 'LoRA do Gemma 3 1B, q4_K_M, rodada $RODADA do orquestrar-treinos.sh. Prova no Pi: $NOTA_R/68 (antes: $NOTA/68 do $MELHOR_ANTES). Instalar com scripts/treino/instalar-no-pi.sh.'" \
+            --title 'IA: $m' --notes 'LoRA sobre o $TPL, q4_K_M, rodada $RODADA do orquestrar-treinos.sh. Prova no Pi: $NOTA_R/72 (antes: $NOTA/72 do $MELHOR_ANTES). Instalar com scripts/treino/instalar-no-pi.sh.'" \
         >> "$S/treino/treino.log" 2>&1 && log "github: release $m publicada" || log "github: aviso, a release $m falhou"
 }
 
