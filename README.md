@@ -70,11 +70,16 @@ lenta.
 e use o campo *Conversar*. Ela responde falando, e os olhos acompanham a voz. Não
 é preciso parar o robô nem entrar por SSH.
 
-**A inteligência é dupla.** Enquanto houver rede, quem responde é um modelo
-grande numa máquina de mesa (`qwen3:8b` numa placa de vídeo, ~1 s até começar a
-falar). Se essa máquina sumir — Wi-Fi caiu, PC desligou —, um modelo pequeno no
-próprio Pi (`gemma3:1b`) assume a conversa sem que ela pare. Quando a rede volta,
-o robô volta ao modelo grande sozinho. Veja [Quando o Wi-Fi cai](#quando-o-wi-fi-cai).
+**A inteligência roda no próprio Pi.** O robô usa o `atlas-qwen-r2`, um
+Qwen2.5 de 1,5 B treinado para ser a Atlas (64 de 72 na prova, ~2,5 s até
+começar a falar), servido pelo Ollama do Pi, sem depender de rede. Contas,
+xingamentos e frases repetidas são resolvidos no código, antes ou depois do
+modelo. Como foi treinado e medido: [TREINO-E-OTIMIZACAO.md](./TREINO-E-OTIMIZACAO.md).
+
+O código ainda aceita uma **inteligência dupla**: um modelo grande numa máquina
+da rede (por exemplo `qwen3:8b` numa placa de vídeo) e o modelo do Pi como
+reserva, que assume se a rede cair. Está desligado no robô
+(`ROBOTEYE_LLM_FALLBACK_HOST` vazio). Veja [Quando o Wi-Fi cai](#quando-o-wi-fi-cai).
 
 **A voz também tem reserva.** A voz padrão é online (Microsoft Edge, a mais
 natural em português do Brasil); sem internet, uma voz local em Piper assume, e

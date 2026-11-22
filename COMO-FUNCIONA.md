@@ -90,11 +90,12 @@ Alguém diz *“Atlas, quantos alunos tem a Setrem?”*. Isto é o que acontece:
 | 3 | `hearing/gatilho.py` | O texto começa com o nome dela? Então a pergunta é o resto. Dizer só *“Atlas!”* abre uma **janela de 8 segundos** em que a frase seguinte é aceita sem o nome — que é como as pessoas realmente falam. |
 | 4 | `app.py::escutar` | Publica `SpeechHeard` no barramento (para a tela de depuração ver até o que foi ignorado) e entrega a pergunta ao `Assistant`. |
 | 5 | `core/assistant.py` | **Interrompe a fala em curso** — quem fala por último é a pessoa —, guarda a pergunta no histórico e publica `ThinkingStarted`. A face muda de expressão. |
-| 6 | `llm/fallback.py` | Pergunta ao modelo da rede. Se ele sumiu, cai para o modelo local do próprio Pi, **sem esperar o tempo limite estourar** (ver [§5](#5-as-quatro-decisões-que-explicam-o-desenho)). |
-| 7 | `core/text.py::streamSentences` | A resposta chega token a token. Assim que uma **frase fecha**, ela já é entregue à voz — a Atlas começa a falar enquanto o modelo ainda escreve o resto. |
-| 8 | `speech/speaker.py` | Sintetiza e toca. Enquanto uma frase toca, **a próxima já está sendo sintetizada** numa thread paralela. |
-| 9 | `speech/envelope.py` | O mesmo PCM que vai para o alto-falante passa por um medidor de amplitude, um valor a cada 20 ms. |
-| 10 | `face/animator.py` | A face lê esse valor e move os olhos **junto com a voz de verdade**, e não com uma oscilação inventada. |
+| 6 | `core/braveza.py` · `core/contas.py` · `core/piadas.py` | Antes do modelo, em português: xingamento tem resposta firme (e o pedido de desculpa, perdão); conta falada (*“quanto é sete vezes oito”*) é calculada; piada tem resposta pronta. Se um deles responde, o modelo nem é chamado. |
+| 7 | `llm/ollama.py` | Pergunta ao modelo do próprio Pi (`atlas-qwen-r2`). Com um modelo de rede configurado, `llm/fallback.py` pergunta a ele primeiro e cai para o do Pi **sem esperar o tempo limite estourar** (ver [§5](#5-as-quatro-decisões-que-explicam-o-desenho)). |
+| 8 | `core/text.py::streamSentences` | A resposta chega token a token. Assim que uma **frase fecha**, ela já é entregue à voz — a Atlas começa a falar enquanto o modelo ainda escreve o resto. `pararNoLaco` corta a geração se o modelo entrar em laço, e frase repetida no mesmo turno não é falada de novo. |
+| 9 | `speech/speaker.py` | Sintetiza e toca. Enquanto uma frase toca, **a próxima já está sendo sintetizada** numa thread paralela. |
+| 10 | `speech/envelope.py` | O mesmo PCM que vai para o alto-falante passa por um medidor de amplitude, um valor a cada 20 ms. |
+| 11 | `face/animator.py` | A face lê esse valor e move os olhos **junto com a voz de verdade**, e não com uma oscilação inventada. |
 
 Uma pergunta digitada (no terminal ou na página do celular) entra direto no
 passo 5. É o mesmo caminho daí em diante.
@@ -129,7 +130,12 @@ Também é quem decide os **modos de execução**:
   nunca travar esperando o modelo. Também é onde moram `teach()` / `forget()`,
   que deixam a Atlas aprender fatos em tempo de execução.
 - **`text.py`** — o corte em frases (`streamSentences`), que é o que permite
-  falar antes de o modelo terminar.
+  falar antes de o modelo terminar, e o corte de laço (`pararNoLaco`,
+  `cortarLaco`): quatro palavras repetidas pela terceira vez encerram a geração.
+- **`braveza.py`, `contas.py`, `piadas.py`** — respostas sem modelo, mais rápidas
+  e certas do que o modelo de 1,5 B: ofensa, conta falada e piada.
+- **`humor.py`** — a expressão da face a partir do texto (palavras-chave, sem
+  modelo).
 - **`normalizePt.py` / `numbersPt.py`** — preparam o texto para a voz: “1.500”
   vira “mil e quinhentos”, “Dr.” vira “doutor”. Sem isso a Atlas leria os
   símbolos.
@@ -189,6 +195,8 @@ Três detalhes desse arquivo decidem se a escuta funciona ou irrita:
   a face.
 
 ### `face/` — o desenho
+
+![As expressões da face](docs/img/faces-atlas.png)
 
 - **`animator.py`** — **lógica pura, sem pygame.** Recebe o tempo decorrido e
   produz um `EyeFrame`. Seis camadas de vida, da mais lenta para a mais rápida:
