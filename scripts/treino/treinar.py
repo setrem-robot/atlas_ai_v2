@@ -143,8 +143,9 @@ def main(arquivo: str) -> int:
         eval_dataset=validacao,
         args=SFTConfig(
             dataset_text_field="text",
-            per_device_train_batch_size=8,
-            gradient_accumulation_steps=2,
+            # Lote efetivo 16 nos dois; o Qwen de 1,5B em lote 8 aperta os 8 GB da RTX 4060.
+            per_device_train_batch_size=4 if ESCOLHA == "qwen" else 8,
+            gradient_accumulation_steps=4 if ESCOLHA == "qwen" else 2,
             num_train_epochs=3,
             learning_rate=1e-4,
             warmup_ratio=0.03,
