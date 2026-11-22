@@ -46,3 +46,12 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Treino (scripts/treino, scripts/escuta-treino, scripts/orquestrar-treinos.sh):
+# logs e intermediários. Os dados do professor (scripts/treino/dados/) ficam
+# versionados: são horas de GPU. Modelos prontos vão como release no GitHub.
+unsloth_compiled_cache/
+scripts/*.log
+scripts/treino/*.log
+scripts/treino/atlas-treino.jsonl
+scripts/treino/Modelfile.*
