@@ -22,7 +22,7 @@ import pytest
 
 from roboteye.hearing.base import AvisaAoFecharFrase, HearingError
 from roboteye.hearing.microfone import BLOCO, TAXA, CapturaParou
-from roboteye.hearing.voskEars import SILENCIO_DE_PARTIDA_S, VoskEars
+from roboteye.hearing.voskEars import SILENCIO_DE_PARTIDA_S, VoskEars, limparTexto
 
 
 class ReconhecedorFalso:
@@ -65,6 +65,22 @@ class TestOFormatoQueOVoskLe:
         amostras = np.frombuffer(VoskEars.paraInt16(bloco), dtype=np.int16)
         assert list(amostras) == [32767, -32767]
         assert all(a > 0 for a in amostras[:1]), "o pico positivo virou negativo"
+
+
+class TestRuidoNaoViraPalavra:
+    def testTiraOUnkDoTexto(self) -> None:
+        assert limparTexto("[unk] que horas são [unk]") == "que horas são"
+        # O vosk-pt-grande do Pi escreve assim (visto no journal: ouvi '<UNK>').
+        assert limparTexto("<UNK> que horas são <unk>") == "que horas são"
+
+    def testSoRuidoNaoViraFrase(self) -> None:
+        """Uma frase que era só ruído não pode acordar o modelo de linguagem."""
+        ears = ouvido()
+        for _ in range(3):
+            ears.blocos.put(b"\x00" * BLOCO)
+        ears.blocos.put(None)
+
+        assert list(ears.reconhecer(ReconhecedorFalso(texto="[unk]", aCada=3))) == []
 
 
 class TestOAvisoDeFimDeFrase:

@@ -12,6 +12,7 @@
 # Uso:
 #   ./scripts/baixar-modelo-escuta.sh              Vosk pequeno, 52 MB (padrão)
 #   ./scripts/baixar-modelo-escuta.sh --grande     Vosk grande (1,6 GB)
+#   ./scripts/baixar-modelo-escuta.sh --atlas      vosk-pt-atlas, o do robô (300 MB)
 #   ./scripts/baixar-modelo-escuta.sh --whisper    Whisper "base"
 #   ./scripts/baixar-modelo-escuta.sh --tiny       Whisper "tiny", mais rápido
 #   ./scripts/baixar-modelo-escuta.sh --ambos      os dois, para trocar sem rede
@@ -35,6 +36,11 @@ TAMANHO="base"
 # cada pergunta, esperando entender.
 URL_PEQUENO="https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
 URL_GRANDE="https://alphacephei.com/vosk/models/vosk-model-pt-fb-v0.1.1-20220516_2113.zip"
+# O acústico do grande com o grafo refeito no PC (scripts/escuta-treino/):
+# léxico com SETREM/Ropke/Goetz e um LM que mistura o geral, legendas e o que
+# se diz à Atlas. No Pi acerta mais que o grande com um quinto da RAM; ver
+# TREINO-E-OTIMIZACAO.md. Usar com ROBOTEYE_HEARING_VOSK_MODEL=vosk-pt-atlas.
+URL_ATLAS="https://github.com/setrem-robot/atlas_ai_v2/releases/download/vosk-pt-atlas-v1/vosk-pt-atlas.zip"
 
 URL="${URL_PEQUENO}"
 FORCAR=false
@@ -45,12 +51,15 @@ fail() { echo "[erro] $*" >&2; exit 1; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --vosk)    USAR_VOSK=true; shift ;;
-        --grande)  URL="${URL_GRANDE}"; USAR_VOSK=true; shift ;;
+        # Cada um na sua pasta: o .env escolhe pelo nome, e o --grande antes
+        # baixava por cima do pequeno, em vosk-pt.
+        --grande)  URL="${URL_GRANDE}"; DESTINO="${ESCUTA_DIR}/vosk-pt-grande"; USAR_VOSK=true; shift ;;
+        --atlas)   URL="${URL_ATLAS}"; DESTINO="${ESCUTA_DIR}/vosk-pt-atlas"; USAR_VOSK=true; shift ;;
         --whisper) USAR_WHISPER=true; USAR_VOSK=false; shift ;;
         --tiny)    USAR_WHISPER=true; USAR_VOSK=false; TAMANHO="tiny"; shift ;;
         --ambos)   USAR_WHISPER=true; USAR_VOSK=true; shift ;;
         --forcar)  FORCAR=true; shift ;;
-        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
         *)         fail "opção desconhecida: $1 (use --help)" ;;
     esac
 done

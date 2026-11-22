@@ -1,0 +1,13 @@
+# Palavras que o modelo do FalaBrasil não conhece, com a pronúncia nos fones dele
+# (ver graph/phones.txt; "ts" vira "tS s", como em "fritz").
+# Uma linha por pronúncia: palavra, depois os fones. Variantes cobrem o jeito
+# como a região fala o nome, não só a grafia.
+setrem s e t r e~ j~
+setrem s E t r e~ j~
+ropke R O p k i
+ropke R O p i k i
+ropke R o p k i
+goetz g e tS s
+goetz g E tS s
+goetz g o e tS s
+goetz g E tS i s
