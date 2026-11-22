@@ -310,17 +310,37 @@ ESQUEMA_PARES = {
 }
 
 
+# Cada volta repete os pedidos com chave nova e pede perguntas menos óbvias.
+# Sem isso as tarefas acabam (as chaves já estão nos arquivos) e as rodadas do
+# orquestrador param de crescer; ele passa VOLTAS = rodada - 1.
+VOLTAS = max(1, int(os.environ.get("VOLTAS", "1")))
+
+
+def volta(v: int) -> tuple[str, str]:
+    """(sufixo da chave, frase extra do pedido) da volta v; a volta 0 é a original."""
+    if v == 0:
+        return "", ""
+    return (f"|v{v}", f"\nEsta é a volta {v + 1} deste tema: as perguntas mais óbvias já foram feitas. "
+                      "Prefira as que um aluno curioso ou um visitante faria, ditas de jeitos variados.")
+
+
+assert volta(0) == ("", "") and volta(2)[0] == "|v2"
+
+
 def tarefaAula() -> None:
     sistema = (f"Você escreve dados de treino para a Atlas. {ATLAS}\n\n{REGRAS}\n\n"
                + exemplos(dataset.AULA, quantos=14))
     trabalhos = []
-    for area, subtemas in AREAS.items():
-        for subtema in subtemas:
-            for e, enfoque in enumerate(ENFOQUES):
-                pedido = (f"Área: {area}. Subtema: {subtema}. Enfoque: {enfoque}.\n"
-                          "Escreva dez pares de pergunta e resposta novos, diferentes entre si e dos exemplos.")
-                trabalhos.append((f"{area}|{subtema}|{e}", lambda p=pedido, a=area, s=subtema: {
-                    "area": a, "subtema": s, **chamar(sistema, p, ESQUEMA_PARES)}))
+    for v in range(VOLTAS):
+        sufixo, extra = volta(v)
+        for area, subtemas in AREAS.items():
+            for subtema in subtemas:
+                for e, enfoque in enumerate(ENFOQUES):
+                    pedido = (f"Área: {area}. Subtema: {subtema}. Enfoque: {enfoque}.\n"
+                              "Escreva dez pares de pergunta e resposta novos, diferentes entre si e dos exemplos."
+                              + extra)
+                    trabalhos.append((f"{area}|{subtema}|{e}{sufixo}", lambda p=pedido, a=area, s=subtema: {
+                        "area": a, "subtema": s, **chamar(sistema, p, ESQUEMA_PARES)}))
     rodar("aula.jsonl", trabalhos)
 
 
@@ -329,9 +349,10 @@ def tarefaPapo() -> None:
                + exemplos(dataset.HUMOR, dataset.CONVERSA, dataset.IDENTIDADE, quantos=16))
     trabalhos = []
     for tema in PAPOS:
-        for rodada in range(3):
+        for rodada in range(3 * VOLTAS):
             pedido = (f"Tema da conversa: {tema}.\nEscreva oito pares de pergunta ou comentário de uma "
-                      "pessoa e a resposta da Atlas, diferentes entre si e dos que você escreveria primeiro.")
+                      "pessoa e a resposta da Atlas, diferentes entre si e dos que você escreveria primeiro."
+                      + volta(rodada // 3)[1])
             trabalhos.append((f"{tema}|{rodada}", lambda p=pedido, t=tema: {
                 "tema": t, **chamar(sistema, p, ESQUEMA_PARES, temperatura=0.9)}))
     rodar("papo.jsonl", trabalhos)
@@ -385,8 +406,9 @@ def tarefaSeguida() -> None:
                "'e qual a diferença pro outro', 'por quê', 'quero sim', 'e você'. A resposta usa o "
                "contexto sem repetir a anterior.")
     temas = [f"{area}: {s}" for area, subtemas in AREAS.items() for s in subtemas[::2]] + PAPOS[::2]
-    trabalhos = [(tema, lambda t=tema: {"tema": t, **chamar(
-        sistema, f"Tema: {t}.\nEscreva três conversas diferentes.", ESQUEMA_CONVERSA)}) for tema in temas]
+    trabalhos = [(tema + volta(v)[0], lambda t=tema, x=volta(v)[1]: {"tema": t, **chamar(
+        sistema, f"Tema: {t}.\nEscreva três conversas diferentes.{x}", ESQUEMA_CONVERSA)})
+        for v in range(VOLTAS) for tema in temas]
     rodar("seguida.jsonl", trabalhos)
 
 
