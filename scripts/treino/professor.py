@@ -386,6 +386,12 @@ COMUNS = [
     "xingamentos e ofensas ao robô (a Atlas fica brava)", "provocações e deboche (a Atlas fica brava)",
     "pedidos de desculpa depois de xingar o robô", "pessoa triste ou desanimada",
     "pessoa feliz contando uma novidade", "brincadeiras e adivinhas",
+    # Achados da bateria (scripts/treino/bateria.py): o r2 disse que o ano tem quatro meses e o
+    # sistema solar sete planetas, e respondeu como se entendesse frases que o Vosk ouviu mal.
+    "quantidades do dia a dia (dias da semana, meses do ano, horas do dia, minutos, segundos)",
+    "quantidades da escola (planetas, continentes, estados do Brasil, lados e ângulos das figuras)",
+    "quantidades da computação (bits num byte, quilobyte, megabyte, contar em binário)",
+    "frases sem sentido, cortadas ou mal ouvidas pelo microfone (a Atlas diz que não entendeu e pede para repetir, sem inventar resposta)",
 ]
 
 
