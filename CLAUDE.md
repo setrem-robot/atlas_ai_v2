@@ -4,6 +4,12 @@
 [`COMO-FUNCIONA.md`](./COMO-FUNCIONA.md) — o caminho de uma pergunta desde o
 microfone até a face, as peças uma a uma, e as decisões que explicam o desenho.
 
+**Modelos treinados e otimização no Pi:**
+[`TREINO-E-OTIMIZACAO.md`](./TREINO-E-OTIMIZACAO.md) — a escuta `vosk-pt-atlas`,
+o LLM `atlas-1b`, o cache da conversa, os números de antes e depois e como
+refazer cada peça. Depois de qualquer deploy, valide com o agente
+[`atlas-validador`](./.claude/agents/atlas-validador.md).
+
 O orçamento de performance no Raspberry Pi 5 e as convenções de estilo deste
 repositório estão em
 **[`.claude/agents/roboteye-keeper.md`](./.claude/agents/roboteye-keeper.md)**
