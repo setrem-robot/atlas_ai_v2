@@ -132,6 +132,21 @@ BATERIA: list[tuple[Caso, ...]] = [
         Caso("qual a capital do rio grande do sul", "porto alegre", tipo="memoria"),
         Caso("e a de santa catarina", "florianopolis", tipo="memoria"),
     ),
+    # pronome que aponta para o assunto da troca anterior
+    C(
+        Caso("o que é a setrem", "faculdade|ensino|escola|instituicao", tipo="memoria"),
+        Caso("e ela é legal", "setrem|curso|ensino|estud|professor", nao=tuple(NAO_SEI.split("|")), tipo="memoria"),
+        Caso("e onde ela fica", "tres de maio", tipo="memoria"),
+    ),
+    C(
+        Caso("o que é python", "linguagem|program", tipo="memoria"),
+        Caso("e ela é difícil de aprender", "python|facil|simples|inicia", tipo="memoria"),
+        Caso("me dá um exemplo de uso dela", "site|dado|automa|script|intelig|jogo", tipo="memoria"),
+    ),
+    C(
+        Caso("você conhece o raspberry pi", "computador|placa", tipo="memoria"),
+        Caso("e pra que ele serve", "projeto|robo|aprend|program|servidor|automa", tipo="memoria"),
+    ),
 ]
 
 
