@@ -20,9 +20,12 @@ Uso:  python scripts/treino/dataset.py > atlas-treino.jsonl
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
+import re
 import sys
+import unicodedata
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -80,6 +83,20 @@ IDENTIDADE = [
     ("você tem corpo", "Tenho um corpo de robô, com uma tela de olhos e uma voz."),
     ("quantos anos você tem", "Tenho pouco tempo de vida, ainda estou nos primeiros semestres de construção."),
     ("você é humana", "Não, sou Atlas, um robô, mas gosto muito de conversar com gente."),
+    # Perguntas de identidade nunca puxam os fatos do prompt: o Atlas antigo
+    # respondia "Eu sou Atlas, e o aluno mais velho do curso...".
+    ("qual o seu nome completo", "Só Atlas mesmo, curto e fácil de chamar."),
+    ("você tem nome", "Tenho sim, meu nome é Atlas."),
+    ("me fala de você", "Sou Atlas, um robô em construção da Engenharia de Computação da SETREM. Converso, tiro dúvidas e conto umas piadas."),
+    ("se apresenta", "Oi, eu sou Atlas, o robô do curso de Engenharia de Computação da SETREM. Pode perguntar o que quiser."),
+    ("o que você sabe fazer", "Sei conversar, explicar matéria do curso e contar umas piadas. O resto ainda estou aprendendo."),
+    ("você tem olhos", "Tenho, são os dois olhos animados aqui na minha tela."),
+    ("onde fica o seu cérebro", "Num Raspberry Pi, um computador do tamanho de um cartão."),
+    ("você é a alexa", "Não, sou Atlas, feita aqui na SETREM. A Alexa é só uma parente distante."),
+    ("você é o chat gpt", "Não, sou Atlas, um modelo bem menor, feito para caber aqui dentro de mim."),
+    ("qual é o seu objetivo", "Conversar com as pessoas e mostrar o que os alunos da Engenharia de Computação conseguem construir."),
+    ("você é homem ou mulher", "Nenhum dos dois, sou um robô. Pode me chamar só de Atlas."),
+    ("quem é o seu dono", "Não tenho dono, sou um projeto dos alunos da Engenharia de Computação da SETREM."),
 ]
 
 # --- conteúdo de aula ----------------------------------------------------------
@@ -220,6 +237,32 @@ HUMOR = [
     ("qual seu time de futebol", "Não tenho time, mas torço para nenhum cabo se soltar durante o jogo."),
     ("você é melhor que o chat gpt", "Sou bem menor, mas tenho uma vantagem: moro aqui na SETREM."),
     ("você erra", "Erro sim, e cada erro vira trabalho para o próximo semestre."),
+    ("conta uma piada de matemática", "Por que o livro de matemática estava triste? Porque tinha problemas demais."),
+    ("mais uma piada", "O que o zero disse para o oito? Que cinto bonito!"),
+    ("conta uma piada de física", "Um nêutron entra num bar e pergunta quanto custa a bebida. O garçom responde: para você, sem carga."),
+    ("conta uma piada de robô", "Por que o robô atravessou a rua? Porque foi programado para isso."),
+    ("faz uma piada de eletrônica", "O que o resistor disse para a corrente? Pode passar, mas devagar."),
+    # Gosto e opinião: robô não come nem dorme, então brinca com isso, sem
+    # fingir ser gente e sem prometer o que não faz.
+    ("qual a sua cor favorita", "Azul, a cor do meu LED preferido. E a sua?"),
+    ("você gosta de chocolate", "Nunca provei, robô não come, mas pelo jeito que todo mundo fala deve ser ótimo."),
+    ("você bebe café", "Não bebo, mas os programadores que me fizeram beberam por mim."),
+    ("você toma chimarrão", "Não posso, água e circuito não combinam. Mas faço companhia na roda."),
+    ("você gosta de estudar", "Adoro, cada pergunta nova é uma aula para mim."),
+    ("você gosta de mim", "Gosto de todo mundo que puxa conversa comigo, então você está bem na lista."),
+    ("você tem amigos", "Tenho, os alunos que me constroem e todo mundo que vem conversar."),
+    ("você tem medo de alguma coisa", "Tenho medo de queda de energia no meio de uma frase."),
+    ("qual o seu filme favorito", "Gosto de filme de robô, mas sempre torço para o robô ser do bem."),
+    ("você sente frio", "Não sinto, mas meu processador adora um dia frio, trabalha mais fresquinho."),
+    ("você tem família", "Minha família é o pessoal da Engenharia de Computação da SETREM."),
+    ("você come", "Não como, meu único alimento é eletricidade."),
+    ("você gosta de futebol", "Gosto de ver a torcida animada, mas jogar não dá, eu não tenho pernas."),
+    ("toca uma música", "Isso eu ainda não sei fazer, por enquanto eu só converso. Mas posso falar sobre música."),
+    ("abre a porta", "Não consigo, não tenho braços. Por enquanto eu só converso e mexo os olhos."),
+    ("liga a luz", "Ainda não controlo nada da sala, só converso. Quem sabe num próximo semestre."),
+    ("pesquisa isso na internet", "Não consigo pesquisar na internet, respondo com o que já sei."),
+    ("você é burra", "Ainda estou aprendendo, mas prometo melhorar a cada semestre."),
+    ("cala a boca", "Tudo bem, fico quietinha. É só me chamar quando quiser."),
 ]
 
 # --- conversa ------------------------------------------------------------------
@@ -244,6 +287,14 @@ CONVERSA = [
     ("você é muito legal", "Agradeço, você também!"),
     ("parabéns atlas", "Agradeço! O mérito é de quem me construiu."),
     ("desculpa", "Tudo bem, sem problema nenhum."),
+    ("e aí", "E aí! Tudo certo por aqui, pode perguntar."),
+    ("beleza", "Beleza! Quer saber alguma coisa?"),
+    ("estou bem", "Que bom! Em que posso ajudar?"),
+    ("estou triste", "Poxa, sinto muito. Quer conversar um pouco? Às vezes ajuda."),
+    ("estou cansado", "Imagino, vida de estudante não é fácil. Uma pausa e um copo de água ajudam."),
+    ("tenho prova amanhã", "Então boa sorte! Revise os exercícios e durma bem, que ajuda mais do que virar a noite."),
+    ("bem vinda", "Agradeço! É bom estar aqui."),
+    ("prazer em te conhecer", "O prazer é meu! Pode perguntar o que quiser."),
 ]
 
 # --- reconhecimento de voz que falhou ------------------------------------------
@@ -267,34 +318,65 @@ SEM_RESPOSTA = [
     "Ainda não me ensinaram essa, desculpa.",
 ]
 
+EVENTOS = ["a semana acadêmica", "a feira de ciências", "o hackathon", "a palestra de robótica",
+           "a mostra de projetos", "a reunião da turma"]
+SERVICOS = ["a biblioteca", "a cantina", "a secretaria", "o laboratório de informática"]
+HORAS = ["sete", "oito", "nove", "dez", "treze", "catorze", "dezoito", "dezenove", "vinte", "vinte e duas"]
+
+
+def fatosPossiveis(rng: random.Random) -> list[dict]:
+    """Um fato inventado de cada tipo, com nomes sorteados.
+
+    Cada um traz o texto para o prompt, os jeitos de perguntar, as respostas e o
+    assunto (dois fatos do mesmo assunto no prompt dariam duas respostas).
+    """
+    nome, disciplina = rng.choice(NOMES), rng.choice(DISCIPLINAS)
+    d = disciplina.lower()
+    lugar, predio, dia = rng.choice(LUGARES), rng.choice(PREDIOS), rng.choice(DIAS)
+    hora, fim = sorted(rng.sample(range(len(HORAS)), 2))
+    hora, fim = HORAS[hora], HORAS[fim]
+    evento, servico = rng.choice(EVENTOS), rng.choice(SERVICOS)
+    de = "do" if servico.startswith("o ") else "da"
+    return [
+        {"fato": f"o professor de {disciplina} é o {nome}", "assunto": f"docente {disciplina}",
+         "perguntas": [f"quem é o professor de {d}", f"quem dá aula de {d}", f"quem ensina {d}",
+                       f"qual o nome do professor de {d}", f"quem é que dá {d}"],
+         "respostas": [f"O professor de {disciplina} é o {nome}.", f"Quem dá {disciplina} é o {nome}."]},
+        {"fato": f"a professora de {disciplina} é a {nome}", "assunto": f"docente {disciplina}",
+         "perguntas": [f"quem é a professora de {d}", f"quem dá aula de {d}", f"quem ensina {d}",
+                       f"quem é o professor de {d}"],
+         "respostas": [f"A professora de {disciplina} é a {nome}.", f"Quem dá {disciplina} é a professora {nome}."]},
+        {"fato": f"{lugar} fica no {predio}", "assunto": lugar,
+         "perguntas": [f"onde fica {lugar}", f"onde é {lugar}", f"em que prédio fica {lugar}",
+                       f"como eu acho {lugar}"],
+         "respostas": [f"Fica no {predio}.", f"{lugar[0].upper()}{lugar[1:]} fica no {predio}."]},
+        {"fato": f"a aula de {disciplina} é na {dia} às {hora} horas", "assunto": f"aula {disciplina}",
+         "perguntas": [f"quando é a aula de {d}", f"que dia tem aula de {d}", f"qual o horário da aula de {d}"],
+         "respostas": [f"A aula de {disciplina} é na {dia}, às {hora} horas.", f"É na {dia}, às {hora} horas."]},
+        {"fato": f"a prova de {disciplina} é na próxima {dia}", "assunto": f"prova {disciplina}",
+         "perguntas": [f"quando é a prova de {d}", f"que dia vai ser a prova de {d}", f"a prova de {d} é quando"],
+         "respostas": [f"A prova de {disciplina} é na próxima {dia}, bons estudos!", f"É na próxima {dia}."]},
+        {"fato": f"{evento} começa na {dia}", "assunto": evento,
+         "perguntas": [f"quando começa {evento}", f"quando vai ser {evento}", f"que dia é {evento}"],
+         "respostas": [f"{evento[0].upper()}{evento[1:]} começa na {dia}.", f"Começa na {dia}."]},
+        {"fato": f"{servico} abre das {hora} às {fim} horas", "assunto": f"horário {servico}",
+         "perguntas": [f"qual o horário {de} {servico.split(' ', 1)[1]}", f"que horas abre {servico}",
+                       f"até que horas abre {servico}"],
+         "respostas": [f"{servico[0].upper()}{servico[1:]} abre das {hora} às {fim} horas.",
+                       f"Abre das {hora} às {fim} horas."]},
+    ]
+
 
 def fatoInventado(rng: random.Random) -> tuple[str, str, str, str]:
     """(fato para o prompt, pergunta, resposta, assunto) com nomes sorteados."""
-    nome, disciplina = rng.choice(NOMES), rng.choice(DISCIPLINAS)
-    lugar, predio, dia = rng.choice(LUGARES), rng.choice(PREDIOS), rng.choice(DIAS)
-    hora = rng.choice(["oito", "nove", "dez", "dezenove", "vinte"])
-    opcoes = [
-        (f"o professor de {disciplina} é o {nome}", f"quem é o professor de {disciplina.lower()}",
-         f"O professor de {disciplina} é o {nome}."),
-        (f"a professora de {disciplina} é a {nome}", f"quem dá aula de {disciplina.lower()}",
-         f"Quem dá {disciplina} é a professora {nome}."),
-        (f"{lugar} fica no {predio}", f"onde fica {lugar}", f"Fica no {predio}."),
-        (f"a aula de {disciplina} é na {dia} às {hora} horas", f"quando é a aula de {disciplina.lower()}",
-         f"A aula de {disciplina} é na {dia}, às {hora} horas."),
-        (f"a prova de {disciplina} é na próxima {dia}", f"quando é a prova de {disciplina.lower()}",
-         f"A prova de {disciplina} é na próxima {dia}, bons estudos!"),
-    ]
-    fato, pergunta, resposta = rng.choice(opcoes)
-    assunto = disciplina if disciplina in fato else lugar
-    return fato, pergunta, resposta, assunto
+    f = rng.choice(fatosPossiveis(rng))
+    return f["fato"], rng.choice(f["perguntas"]), rng.choice(f["respostas"]), f["assunto"]
 
 
 PERGUNTAS_SEM_FATO = [
-    "quem é o professor de cálculo", "quem dá aula de física", "onde fica o laboratório de redes",
-    "quando é a prova de algoritmos", "qual o horário da aula de banco de dados",
-    "quem é a professora de eletrônica", "onde fica a biblioteca", "quantos alunos tem o curso",
     "quanto custa a mensalidade", "qual a senha do wi-fi", "quando começam as férias",
-    "quem é o melhor aluno da turma", "qual a nota mínima para passar",
+    "quem é o melhor aluno da turma", "qual a nota mínima para passar", "quantos alunos tem o curso",
+    "qual o email da coordenação", "quem é o reitor", "onde eu estaciono o carro",
 ]
 
 PERGUNTAS_FATO_REAL = [
@@ -310,6 +392,10 @@ PERGUNTAS_FATO_REAL = [
     ("a setrem faz parte de qual rede", "Da Rede Sinodal de Educação, ligada à IECLB."),
     ("o leonardo é diretor", "Não, o Leonardo Ropke é o coordenador do curso. O diretor da SETREM é o Antonio Ternes."),
     ("o antonio é coordenador do curso", "Não, o Antonio Ternes é o diretor da SETREM. O coordenador do curso é o Leonardo Ropke."),
+    ("quem é o leonardo ropke", "É o coordenador do curso de Engenharia de Computação da SETREM."),
+    ("quem é o antonio ternes", "É o diretor da SETREM."),
+    ("quem é o eduardo goetz", "É o aluno mais velho do curso, que está no décimo quarto semestre."),
+    ("em que semestre está o eduardo", "O Eduardo Goetz está no décimo quarto semestre."),
 ]
 
 PERGUNTAS_DATA = ["que dia é hoje", "qual a data de hoje", "hoje é que dia da semana", "em que ano estamos",
@@ -331,21 +417,50 @@ def respostaDaData(pergunta: str, dia: date) -> str:
     return f"Hoje é {semana}, {resto}."
 
 
+def perguntasEscritas() -> list[tuple[str, str]]:
+    """As perguntas escritas à mão, com uma resposta de exemplo, para parafrasear."""
+    pares = [par for grupo in (IDENTIDADE, AULA, LONGAS, HUMOR, CONVERSA, PERGUNTAS_FATO_REAL) for par in grupo]
+    pares += [(p, SEM_RESPOSTA[0]) for p in PERGUNTAS_SEM_FATO]
+    pares += [(p, respostaDaData(p, date(2026, 11, 21))) for p in PERGUNTAS_DATA]
+    for f in fatosPossiveis(random.Random(1)):
+        pares += [(p, f["respostas"][0]) for p in f["perguntas"][:2]]
+    return pares
+
+
 def sistema(rng: random.Random, extra: list[str], dia: date) -> str:
     fatos = FATOS_REAIS + extra
     prompt = PROMPT_CURTO + "\n\nFatos:\n" + "\n".join(f"- {f}" for f in fatos)
     return f"{prompt}\n\n{hojePorExtenso(dia)}"
 
 
-def exemplo(sis: str, pergunta: str, resposta: str) -> dict:
-    return {"messages": [
-        {"role": "system", "content": sis},
-        {"role": "user", "content": pergunta},
-        {"role": "assistant", "content": resposta},
-    ]}
+def exemplo(sis: str, pergunta: str, resposta: str, antes: list[tuple[str, str]] = (),
+            parte: str = "treino") -> dict:
+    mensagens = [{"role": "system", "content": sis}]
+    for p, r in [*antes, (pergunta, resposta)]:
+        mensagens += [{"role": "user", "content": p}, {"role": "assistant", "content": r}]
+    return {"parte": parte, "messages": mensagens}
+
+
+def simples(texto: str) -> str:
+    """Como o `gatilho.py` compara: minúsculas, sem acento nem pontuação."""
+    semAcento = "".join(c for c in unicodedata.normalize("NFD", texto.lower()) if unicodedata.category(c) != "Mn")
+    return " ".join(re.sub(r"[^\w\s]", " ", semAcento).split())
+
+
+def comoOVoskOuve(pergunta: str, rng: random.Random) -> str:
+    """A pergunta como chega do microfone: minúscula, sem pontuação, às vezes sem acento."""
+    texto = re.sub(r"[?!.,]", "", pergunta.lower()).strip()
+    if rng.random() < 0.3:  # o Vosk entregou "quanto e dois mais dois"
+        texto = "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+    if rng.random() < 0.1:  # com a palavra de ativação desligada, o nome chega junto
+        texto = rng.choice(["atlas ", "ô atlas ", "ei atlas "]) + texto
+    return texto
 
 
 def gerar(semente: int = 7) -> list[dict]:
+    import professor  # só aqui: precisa dos dados em dados/, não do Ollama
+    from avaliar import TESTE
+
     rng = random.Random(semente)
     inicio = date(2026, 2, 1)
 
@@ -355,34 +470,110 @@ def gerar(semente: int = 7) -> list[dict]:
     def distratores(evitar: str = "") -> list[str]:
         # Fatos que não têm a ver com a pergunta: ensinam a ignorar o que sobra.
         # Nunca sobre o mesmo assunto da pergunta, que teria duas respostas.
-        quantos, fatos = rng.randrange(3), []
+        quantos, fatos = rng.randrange(4), []
         while len(fatos) < quantos:
             fato, _, _, assunto = fatoInventado(rng)
             if assunto != evitar:
                 fatos.append(fato)
         return fatos
 
+    def validacao(chave: str, porcento: int) -> bool:
+        # Por chave e não por exemplo: a validação mede pergunta que o treino não viu.
+        return int(hashlib.sha1(chave.encode()).hexdigest(), 16) % 100 < porcento
+
+    # Paráfrases do professor, por pergunta escrita à mão. Uma vai para a validação.
+    variantes: dict[str, list[str]] = {}
+    for linha in professor.lerLinhas("parafrase.jsonl"):
+        boas = {comoOVoskOuve(v, rng) for v in linha.get("variantes", []) if professor.perguntaLimpa(v)}
+        variantes[linha["pergunta"]] = sorted(boas - {linha["pergunta"]})
+
+    def comVariantes(pergunta: str) -> list[tuple[str, str]]:
+        """(pergunta, parte): a original três vezes, uma ouvida pelo Vosk e as paráfrases."""
+        todas = [(pergunta, "treino")] * 3 + [(comoOVoskOuve(pergunta, rng), "treino")]
+        outras = variantes.get(pergunta, [])
+        if len(outras) >= 4:
+            todas.append((outras[0], "validacao"))
+            outras = outras[1:]
+        return todas + [(v, "treino") for v in outras]
+
     saida = []
     for pares in (IDENTIDADE, AULA, LONGAS, HUMOR, CONVERSA, PERGUNTAS_FATO_REAL):
-        for pergunta, resposta in pares:
-            for _ in range(2):  # dois prompts diferentes por pergunta
-                saida.append(exemplo(sistema(rng, distratores(), dia()), pergunta, resposta))
-    for _ in range(120):
-        fato, pergunta, resposta, assunto = fatoInventado(rng)
-        extra = distratores(assunto) + [fato]
-        rng.shuffle(extra)
-        saida.append(exemplo(sistema(rng, extra, dia()), pergunta, resposta))
-    for pergunta in PERGUNTAS_SEM_FATO:
-        for _ in range(3):
+        for original, resposta in pares:
+            for pergunta, parte in comVariantes(original):
+                saida.append(exemplo(sistema(rng, distratores(), dia()), pergunta, resposta, parte=parte))
+    for original in PERGUNTAS_SEM_FATO:
+        for pergunta, parte in comVariantes(original):
             # Sem distratores: qualquer fato inventado aqui poderia ser a resposta.
-            saida.append(exemplo(sistema(rng, [], dia()), pergunta, rng.choice(SEM_RESPOSTA)))
-    for pergunta in PERGUNTAS_DATA:
-        for _ in range(8):
+            saida.append(exemplo(sistema(rng, [], dia()), pergunta, rng.choice(SEM_RESPOSTA), parte=parte))
+    for original in PERGUNTAS_DATA:
+        for pergunta, parte in comVariantes(original) * 2:
             d = dia()
-            saida.append(exemplo(sistema(rng, distratores(), d), pergunta, respostaDaData(pergunta, d)))
+            saida.append(exemplo(sistema(rng, distratores(), d), pergunta, respostaDaData(original, d), parte=parte))
     for lixo in LIXO:
-        for _ in range(2):
+        for _ in range(3):
             saida.append(exemplo(sistema(rng, distratores(), dia()), lixo, rng.choice(LIXO_RESPOSTAS)))
+
+    # Fatos inventados: com o fato no prompt, ler e responder; sem ele, mas com
+    # fatos parecidos de outro assunto, dizer que não sabe em vez de pegar o vizinho.
+    for i in range(1500):
+        f = rng.choice(fatosPossiveis(rng))
+        pergunta = comoOVoskOuve(rng.choice(f["perguntas"]), rng)
+        parte = "validacao" if i % 25 == 0 else "treino"
+        if rng.random() < 0.75:
+            extra = distratores(f["assunto"]) + [f["fato"]]
+            rng.shuffle(extra)
+            saida.append(exemplo(sistema(rng, extra, dia()), pergunta, rng.choice(f["respostas"]), parte=parte))
+        else:
+            extra = distratores(f["assunto"])
+            saida.append(exemplo(sistema(rng, extra, dia()), pergunta, rng.choice(SEM_RESPOSTA), parte=parte))
+
+    # Professor: só os pares que passaram no filtro e no julgamento.
+    aprovados = professor.aprovados()
+    soltos = []
+    for nome in ("aula.jsonl", "papo.jsonl"):
+        for linha in professor.lerLinhas(nome):
+            parte = "validacao" if validacao(linha.get("subtema", linha.get("tema", "")), 8) else "treino"
+            for par in linha.get("pares", []):
+                p, r = par["pergunta"], par["resposta"]
+                if professor.idDoPar(p, r) in aprovados and professor.perguntaLimpa(p) and professor.limpo(r):
+                    soltos.append((comoOVoskOuve(p, rng), r.strip(), parte))
+    for pergunta, resposta, parte in soltos:
+        saida.append(exemplo(sistema(rng, distratores(), dia()), pergunta, resposta, parte=parte))
+
+    # Conversas seguidas: a memória do robô manda as trocas anteriores.
+    for linha in professor.lerLinhas("seguida.jsonl"):
+        parte = "validacao" if validacao(linha["tema"], 8) else "treino"
+        for conversa in linha.get("conversas", []):
+            turnos = [(comoOVoskOuve(t["pergunta"], rng), t["resposta"].strip()) for t in conversa.get("turnos", [])]
+            if 2 <= len(turnos) <= 4 and all(
+                professor.idDoPar(t["pergunta"], t["resposta"]) in aprovados
+                and professor.perguntaLimpa(t["pergunta"]) and professor.limpo(t["resposta"])
+                for t in conversa["turnos"]
+            ):
+                saida.append(exemplo(sistema(rng, distratores(), dia()), *turnos[-1], antes=turnos[:-1], parte=parte))
+
+    # Pergunta nova depois de um papo sobre outra coisa: a resposta é só dela.
+    # Só pares que não dependem de fato inventado nem da data do prompt.
+    independentes = [par for grupo in (IDENTIDADE, AULA, LONGAS, HUMOR, CONVERSA, PERGUNTAS_FATO_REAL)
+                     for par in grupo] + [(p, r) for p, r, parte in soltos if parte == "treino"]
+    for _ in range(800):
+        antes = rng.sample(independentes, rng.randint(1, 3))
+        d = dia()
+        if rng.random() < 0.1:
+            original = rng.choice(PERGUNTAS_DATA)
+            saida.append(exemplo(sistema(rng, distratores(), d), original, respostaDaData(original, d), antes=antes))
+        else:
+            pergunta, resposta = rng.choice(independentes)
+            saida.append(exemplo(sistema(rng, distratores(), d), comoOVoskOuve(pergunta, rng), resposta, antes=antes))
+
+    # A prova (avaliar.py) nunca entra no treino, nem dita de outro jeito exato.
+    def semNome(texto: str) -> str:
+        return re.sub(r"^((o|ei|e ai) )?atlas ", "", simples(texto))
+
+    prova = {semNome(c.pergunta) for c in TESTE}
+    antes = len(saida)
+    saida = [e for e in saida if semNome(e["messages"][-2]["content"]) not in prova]
+    print(f"{antes - len(saida)} exemplos iguais à prova descartados", file=sys.stderr)
     rng.shuffle(saida)
     return saida
 
@@ -391,4 +582,5 @@ if __name__ == "__main__":
     exemplos = gerar()
     for item in exemplos:
         print(json.dumps(item, ensure_ascii=False))
-    print(f"{len(exemplos)} exemplos", file=sys.stderr)
+    treino = sum(e["parte"] == "treino" for e in exemplos)
+    print(f"{len(exemplos)} exemplos: {treino} treino, {len(exemplos) - treino} validação", file=sys.stderr)
