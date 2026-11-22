@@ -23,14 +23,16 @@ set -euo pipefail
 
 DESTINO="${1:-atlas@atlas.local}"
 NOME="${2:-atlas-1b}"
+TEMPLATE_DE="${TEMPLATE_DE:-gemma3:1b}"
 [[ -f atlas-1b/config.json ]] || { echo "[erro] não achei atlas-1b/; rode treinar.py antes" >&2; exit 1; }
 
-# Template e parâmetros do gemma3:1b, que é o formato em que o treino foi feito
+# Template e parâmetros do modelo base (TEMPLATE_DE: gemma3:1b ou qwen2.5:1.5b,
+# o ATLAS_BASE do treino), que é o formato em que o treino foi feito
 # (`comoOOllamaMonta` em treinar.py). Sem o template, o Ollama não sabe montar
 # a conversa; sem o stop, o modelo emenda a próxima pergunta.
 modelfile() {
     echo "FROM $1"
-    ollama show gemma3:1b --modelfile | awk '
+    ollama show "${TEMPLATE_DE}" --modelfile | awk '
         /^TEMPLATE/ { dentro = 1 }
         dentro { print; if (/"""$/ && !/^TEMPLATE """$/) dentro = 0; next }
         /^PARAMETER (stop|top_k|top_p)/ { print }
@@ -39,7 +41,7 @@ modelfile() {
 
 echo "importando e quantizando no Ollama do PC..."
 modelfile ./atlas-1b > Modelfile.pc
-grep -q '^TEMPLATE' Modelfile.pc || { echo "[erro] sem o gemma3:1b no Ollama do PC para copiar o template" >&2; exit 1; }
+grep -q '^TEMPLATE' Modelfile.pc || { echo "[erro] sem o ${TEMPLATE_DE} no Ollama do PC para copiar o template" >&2; exit 1; }
 ollama create "${NOME}" -f Modelfile.pc --quantize q4_K_M
 
 BLOB="$(ollama show "${NOME}" --modelfile | awk '/^FROM / { print $2; exit }')"
@@ -57,7 +59,7 @@ NOME="$1"
 ollama create "${NOME}" -f "Modelfile.${NOME}"
 # O Ollama copiou o GGUF para os blobs dele; o original só ocupa o cartão.
 rm -f "${NOME}-q4.gguf"
-ollama list | grep -E "${NOME}|gemma3:1b"
+ollama list | grep -E "${NOME}"
 EOF
 rm -f Modelfile.pc Modelfile.pi
 echo "pronto. Compare antes de trocar:"

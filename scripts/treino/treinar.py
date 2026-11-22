@@ -23,6 +23,7 @@ mesmo comando continua do último. Sai `atlas-1b/` em safetensors;
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -31,12 +32,24 @@ from unsloth.chat_templates import get_chat_template, train_on_responses_only
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 
-BASE = "unsloth/gemma-3-1b-it"
+#: ATLAS_BASE escolhe o modelo base: o Gemma 3 1B de sempre ou o Qwen2.5 1.5B,
+#: que vai bem melhor em português (média PT 65,6 contra 54,2) com quase a
+#: mesma velocidade no Pi. Cada um com o template que o Ollama dele monta, as
+#: marcas de onde começa a resposta e o modelo que empresta o template no Pi.
+BASES = {
+    "gemma": {"hf": "unsloth/gemma-3-1b-it", "chat": "gemma-3", "ollama": "gemma3:1b",
+              "usuario": "<start_of_turn>user\n", "modelo": "<start_of_turn>model\n", "fim": "<end_of_turn>\n"},
+    "qwen": {"hf": "unsloth/Qwen2.5-1.5B-Instruct", "chat": "qwen-2.5", "ollama": "qwen2.5:1.5b",
+             "usuario": "<|im_start|>user\n", "modelo": "<|im_start|>assistant\n", "fim": "<|im_end|>\n"},
+}
+ESCOLHA = os.environ.get("ATLAS_BASE", "gemma")
+B = BASES[ESCOLHA]
+BASE = B["hf"]
 SAIDA = "atlas-1b"
 CHECKPOINTS = "saida-treino"
 
 
-def comoOOllamaMonta(mensagens: list[dict]) -> str:
+def comoOOllamaMonta(mensagens: list[dict], base: str = ESCOLHA) -> str:
     """O texto que o template do gemma3 no Ollama gera para estas mensagens.
 
     O template de chat do Unsloth junta o sistema dentro da primeira pergunta; o
@@ -48,6 +61,8 @@ def comoOOllamaMonta(mensagens: list[dict]) -> str:
     <end_of_turn> vêm em seguida. As respostas anteriores (a memória da
     conversa) fecham o turno, como o Ollama faz.
     """
+    if base == "qwen":
+        return comoOOllamaMontaQwen(mensagens)
     texto = ""
     for i, m in enumerate(mensagens):
         if m["role"] in ("system", "user"):
@@ -59,11 +74,33 @@ def comoOOllamaMonta(mensagens: list[dict]) -> str:
     return texto + "<start_of_turn>model\n"
 
 
+def comoOOllamaMontaQwen(mensagens: list[dict]) -> str:
+    """O mesmo, para o template do qwen2.5 no Ollama (`ollama show qwen2.5:1.5b
+    --template`): o sistema vira um turno `system` próprio, e cada resposta
+    anterior fecha com <|im_end|>."""
+    texto = ""
+    for i, m in enumerate(mensagens):
+        if m["role"] == "system":
+            texto += f"<|im_start|>system\n{m['content']}<|im_end|>\n"
+        elif m["role"] == "user":
+            texto += f"<|im_start|>user\n{m['content']}<|im_end|>\n"
+        elif i == len(mensagens) - 1:
+            return texto + f"<|im_start|>assistant\n{m['content']}"
+        else:
+            texto += f"<|im_start|>assistant\n{m['content']}<|im_end|>\n"
+    return texto + "<|im_start|>assistant\n"
+
+
+assert comoOOllamaMontaQwen(
+    [{"role": "system", "content": "S"}, {"role": "user", "content": "U"}, {"role": "assistant", "content": "A"},
+     {"role": "user", "content": "V"}]
+) == ("<|im_start|>system\nS<|im_end|>\n<|im_start|>user\nU<|im_end|>\n<|im_start|>assistant\nA<|im_end|>\n"
+      "<|im_start|>user\nV<|im_end|>\n<|im_start|>assistant\n")
 assert comoOOllamaMonta(
-    [{"role": "system", "content": "S"}, {"role": "user", "content": "U"}, {"role": "assistant", "content": "A"}]
+    [{"role": "system", "content": "S"}, {"role": "user", "content": "U"}, {"role": "assistant", "content": "A"}], "gemma"
 ) == "<start_of_turn>user\nS<end_of_turn>\n<start_of_turn>user\nU<end_of_turn>\n<start_of_turn>model\nA"
 assert comoOOllamaMonta(
-    [{"role": "user", "content": "U"}, {"role": "assistant", "content": "A"}, {"role": "user", "content": "V"}]
+    [{"role": "user", "content": "U"}, {"role": "assistant", "content": "A"}, {"role": "user", "content": "V"}], "gemma"
 ) == ("<start_of_turn>user\nU<end_of_turn>\n<start_of_turn>model\nA<end_of_turn>\n"
       "<start_of_turn>user\nV<end_of_turn>\n<start_of_turn>model\n")
 
@@ -85,11 +122,11 @@ def main(arquivo: str) -> int:
         bias="none",
         random_state=7,
     )
-    tokenizer = get_chat_template(tokenizer, chat_template="gemma-3")
+    tokenizer = get_chat_template(tokenizer, chat_template=B["chat"])
 
     dados = load_dataset("json", data_files=arquivo, split="train")
     dados = dados.map(
-        lambda lote: {"text": [comoOOllamaMonta(m) + "<end_of_turn>\n" for m in lote["messages"]]},
+        lambda lote: {"text": [comoOOllamaMonta(m) + B["fim"] for m in lote["messages"]]},
         batched=True,
     )
     # A validação é separada pelo `dataset.py` por pergunta e por subtema, não
@@ -134,8 +171,8 @@ def main(arquivo: str) -> int:
     # reescrever o prompt e a pergunta.
     treino = train_on_responses_only(
         treino,
-        instruction_part="<start_of_turn>user\n",
-        response_part="<start_of_turn>model\n",
+        instruction_part=B["usuario"],
+        response_part=B["modelo"],
     )
     retomar = any(Path(CHECKPOINTS).glob("checkpoint-*"))
     treino.train(resume_from_checkpoint=retomar or None)
